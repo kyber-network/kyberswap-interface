@@ -14,6 +14,7 @@ import ksSettingApi from 'services/ksSetting'
 import kyberAISubscriptionApi from 'services/kyberAISubscription'
 import kyberDAO from 'services/kyberDAO'
 import limitOrderApi from 'services/limitOrder'
+import portfolioApi from 'services/portfolio'
 import priceAlertApi from 'services/priceAlert'
 import routeApi from 'services/route'
 import socialApi from 'services/social'
@@ -126,6 +127,7 @@ const store = configureStore({
     [blockServiceApi.reducerPath]: blockServiceApi.reducer,
     [blackjackApi.reducerPath]: blackjackApi.reducer,
     [knProtocolApi.reducerPath]: knProtocolApi.reducer,
+    [portfolioApi.reducerPath]: portfolioApi.reducer,
   },
   middleware: getDefaultMiddleware =>
     getDefaultMiddleware({ thunk: true, immutableCheck: false, serializableCheck: false })
@@ -150,6 +152,7 @@ const store = configureStore({
       .concat(tokenApi.middleware)
       .concat(blockServiceApi.middleware)
       .concat(blackjackApi.middleware)
+      .concat(portfolioApi.middleware)
       .concat(knProtocolApi.middleware),
   preloadedState,
 })
