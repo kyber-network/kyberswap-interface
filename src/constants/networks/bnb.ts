@@ -1,9 +1,9 @@
 import { ChainId } from '@kyberswap/ks-sdk-core'
 
 import BnbLogo from 'assets/images/bnb-logo.png'
+import bnbIcon from 'assets/networks/bnb.svg'
 import { EVMNetworkInfo } from 'constants/networks/type'
 
-const EMPTY = ''
 const NOT_SUPPORT = null
 
 const bnbInfo: EVMNetworkInfo = {
@@ -14,14 +14,13 @@ const bnbInfo: EVMNetworkInfo = {
   poolFarmRoute: 'bsc',
   aggregatorRoute: 'bsc',
   name: 'BNB Chain',
-  icon: 'https://storage.googleapis.com/ks-setting-a3aa20b7/a44a3dbc-9150-4278-8354-7b5953f9a1ab.svg',
-  iconDark: NOT_SUPPORT,
+  icon: bnbIcon,
   iconSelected: NOT_SUPPORT,
-  iconDarkSelected: NOT_SUPPORT,
+
   defaultBlockSubgraph: 'https://api.thegraph.com/subgraphs/name/dynamic-amm/ethereum-blocks-bsc',
   etherscanUrl: 'https://bscscan.com',
   etherscanName: 'BscScan',
-  bridgeURL: EMPTY,
+  bridgeURL: 'https://www.bnbchain.org/en/bridge',
   nativeToken: {
     symbol: 'BNB',
     name: 'BNB',
@@ -68,10 +67,7 @@ const bnbInfo: EVMNetworkInfo = {
     farmv2Quoter: '0x6AFeb9EDd6Cf44fA8E89b1eee28284e6dD7705C8',
     farmV2S: ['0x3D6AfE2fB73fFEd2E3dD00c501A174554e147a43', '0xf2BcDf38baA52F6b0C1Db5B025DfFf01Ae1d6dBd'],
   },
-  limitOrder: {
-    development: '0x26279604204aa9D3B530bcd8514fc4276bf0962C',
-    production: '0x227B0c196eA8db17A665EA6824D972A64202E936',
-  },
+  limitOrder: '*',
   averageBlockTimeInSeconds: 3,
   coingeckoNetworkId: 'binance-smart-chain',
   coingeckoNativeTokenId: 'binancecoin',

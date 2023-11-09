@@ -12,6 +12,7 @@ import LocalLoader from 'components/LocalLoader'
 import Pagination from 'components/Pagination'
 import { Input as PaginationInput } from 'components/Pagination/PaginationInputOnMobile'
 import ShareModal from 'components/ShareModal'
+import { SORT_DIRECTION } from 'constants/index'
 import { useActiveWeb3React } from 'hooks'
 import { useStableCoins } from 'hooks/Tokens'
 import { SelectPairInstructionWrapper } from 'pages/Pools/styleds'
@@ -19,7 +20,6 @@ import { ApplicationModal } from 'state/application/actions'
 import { useModalOpen, useOpenModal } from 'state/application/hooks'
 import { FarmUpdater, useElasticFarms } from 'state/farms/elastic/hooks'
 import { useElasticFarmsV2 } from 'state/farms/elasticv2/hooks'
-import ElasticFarmV2Updater from 'state/farms/elasticv2/updater'
 import { Field } from 'state/mint/proamm/type'
 import { useTopPoolAddresses, useUserProMMPositions } from 'state/prommPools/hooks'
 import useGetElasticPools from 'state/prommPools/useGetElasticPools'
@@ -108,11 +108,6 @@ enum SORT_FIELD {
   VOLUME = 'volume',
   FEE = 'fee',
   MY_LIQUIDITY = 'my_liquidity',
-}
-
-enum SORT_DIRECTION {
-  ASC = 'asc',
-  DESC = 'desc',
 }
 
 export default function ProAmmPoolList({
@@ -345,7 +340,7 @@ export default function ProAmmPoolList({
             )}
 
             <InfoHelper
-              text={t`Average estimated return based on yearly trading fees from the pool & additional bonus rewards if you participate in the farm`}
+              text={t`Average estimated return based on yearly trading fees from the pool & additional bonus rewards if you participate in the farm.`}
             />
           </ClickableText>
         </Flex>
@@ -472,7 +467,6 @@ export default function ProAmmPoolList({
         title={sharedPoolId ? t`Share this pool with your friends!` : t`Share this list of pools with your friends`}
       />
       <FarmUpdater interval={false} />
-      <ElasticFarmV2Updater interval={false} />
     </PageWrapper>
   )
 }

@@ -3,7 +3,7 @@ import { TransactionResponse } from '@ethersproject/providers'
 import { useCallback } from 'react'
 
 import { useSwapFormContext } from 'components/SwapForm/SwapFormContext'
-import { ZERO_ADDRESS_SOLANA } from 'constants/index'
+import { ETHER_ADDRESS } from 'constants/index'
 import { useActiveWeb3React, useWeb3React } from 'hooks/index'
 import useENS from 'hooks/useENS'
 import { useTransactionAdder } from 'state/transactions/hooks'
@@ -13,11 +13,12 @@ import { ChargeFeeBy } from 'types/route'
 import { isAddress, shortenAddress } from 'utils'
 import { formatCurrencyAmount } from 'utils/formatCurrencyAmount'
 import { sendEVMTransaction } from 'utils/sendTransaction'
+import { ErrorName } from 'utils/sentry'
 
 // returns a function that will execute a swap, if the parameters are all valid
 // and the user has approved the slippage adjusted input amount for the trade
 const useSwapCallbackV3 = (isPermitSwap?: boolean) => {
-  const { account, chainId, isEVM } = useActiveWeb3React()
+  const { account, chainId, isEVM, walletKey } = useActiveWeb3React()
   const { library } = useWeb3React()
 
   const { isSaveGas, recipient: recipientAddressOrName, routeSummary } = useSwapFormContext()
@@ -38,8 +39,8 @@ const useSwapCallbackV3 = (isPermitSwap?: boolean) => {
 
     const inputSymbol = inputAmount.currency.symbol
     const outputSymbol = outputAmount.currency.symbol
-    const inputAddress = inputAmount.currency.isNative ? ZERO_ADDRESS_SOLANA : inputAmount.currency.address
-    const outputAddress = outputAmount.currency.isNative ? ZERO_ADDRESS_SOLANA : outputAmount.currency.address
+    const inputAddress = inputAmount.currency.isNative ? ETHER_ADDRESS : inputAmount.currency.address
+    const outputAddress = outputAmount.currency.isNative ? ETHER_ADDRESS : outputAmount.currency.address
     const inputAmountStr = formatCurrencyAmount(inputAmount, 6)
     const outputAmountStr = formatCurrencyAmount(outputAmount, 6)
 
@@ -118,18 +119,23 @@ const useSwapCallbackV3 = (isPermitSwap?: boolean) => {
         throw new Error('Missing dependencies')
       }
       const value = BigNumber.from(inputAmount.currency.isNative ? inputAmount.quotient.toString() : 0)
-      const response = await sendEVMTransaction(
+
+      const response = await sendEVMTransaction({
         account,
         library,
-        routerAddress,
-        encodedSwapData,
+        contractAddress: routerAddress,
+        encodedData: encodedSwapData,
         value,
-        handleSwapResponse,
-      )
+        sentryInfo: {
+          name: ErrorName.SwapError,
+          wallet: walletKey,
+        },
+      })
       if (response?.hash === undefined) throw new Error('sendTransaction returned undefined.')
+      handleSwapResponse(response)
       return response?.hash
     },
-    [account, handleSwapResponse, inputAmount, library],
+    [account, handleSwapResponse, inputAmount, library, walletKey],
   )
 
   if (isEVM) {

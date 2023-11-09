@@ -8,6 +8,7 @@ import styled from 'styled-components'
 
 import { Shield } from 'components/Icons'
 import SlippageSetting from 'components/SwapForm/SlippageSetting'
+import { APP_PATHS } from 'constants/index'
 import { useActiveWeb3React } from 'hooks'
 import useMixpanel, { MIXPANEL_TYPE } from 'hooks/useMixpanel'
 import useTheme from 'hooks/useTheme'
@@ -49,15 +50,14 @@ export default function SlippageSettingGroup({
     setShowMevModal(false)
   }, [])
 
+  const isPartnerSwap = window.location.pathname.startsWith(APP_PATHS.PARTNER_SWAP)
   const rightButton =
-    chainId === ChainId.MAINNET && walletEVM.isConnected ? (
+    chainId === ChainId.MAINNET && walletEVM.isConnected && !isPartnerSwap ? (
       <PriceAlertButton onClick={addMevProtectionHandler}>
         <Shield size={14} color={theme.subText} />
-        {upToXXSmall ? null : (
-          <Text color={theme.subText} style={{ whiteSpace: 'nowrap' }}>
-            <Trans>Add MEV Protection</Trans>
-          </Text>
-        )}
+        <Text color={theme.subText} style={{ whiteSpace: 'nowrap' }}>
+          {upToXXSmall ? <Trans>MEV Protection</Trans> : <Trans>Add MEV Protection</Trans>}
+        </Text>
       </PriceAlertButton>
     ) : null
 

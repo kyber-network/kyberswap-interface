@@ -1,7 +1,7 @@
 import { ChainId, Token } from '@kyberswap/ks-sdk-core'
 import { useCallback, useMemo } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
-import { useGetParticipantInfoQuery } from 'services/kyberAISubscription'
+import { useGetParticipantInfoQuery, useLazyGetParticipantInfoQuery } from 'services/kyberAISubscription'
 
 import { SUGGESTED_BASES } from 'constants/bases'
 import { TERM_FILES_PATH } from 'constants/index'
@@ -41,9 +41,9 @@ import {
   toggleMyEarningChart,
   toggleTopTrendingTokens,
   toggleTradeRoutes,
+  toggleUseAggregatorForZap,
   updateAcceptedTermVersion,
   updateTokenAnalysisSettings,
-  updateUserDarkMode,
   updateUserDeadline,
   updateUserDegenMode,
   updateUserLocale,
@@ -82,24 +82,6 @@ function deserializeToken(serializedToken: SerializedToken): Token {
         serializedToken.symbol,
         serializedToken.name,
       )
-}
-
-export function useIsDarkMode(): boolean {
-  const userDarkMode = useSelector<AppState, boolean | null>(state => state.user.userDarkMode)
-  const matchesDarkMode = useSelector<AppState, boolean>(state => state.user.matchesDarkMode)
-
-  return typeof userDarkMode !== 'boolean' ? matchesDarkMode : userDarkMode
-}
-
-export function useDarkModeManager(): [boolean, () => void] {
-  const dispatch = useDispatch<AppDispatch>()
-  const darkMode = useIsDarkMode()
-
-  const toggleSetDarkMode = useCallback(() => {
-    dispatch(updateUserDarkMode({ userDarkMode: !darkMode }))
-  }, [darkMode, dispatch])
-
-  return [darkMode, toggleSetDarkMode]
 }
 
 export function useUserLocale(): SupportedLocale | null {
@@ -148,6 +130,19 @@ export function useDegenModeManager(): [boolean, () => void] {
   }, [degenMode, dispatch, isStablePairSwap])
 
   return [degenMode, toggleSetDegenMode]
+}
+
+export function useAggregatorForZapSetting(): [boolean, () => void] {
+  const dispatch = useDispatch<AppDispatch>()
+  const isUseAggregatorForZap = useSelector<AppState, AppState['user']['useAggregatorForZap']>(
+    state => state.user.useAggregatorForZap,
+  )
+
+  const toggle = useCallback(() => {
+    dispatch(toggleUseAggregatorForZap())
+  }, [dispatch])
+
+  return [isUseAggregatorForZap === undefined ? true : isUseAggregatorForZap, toggle]
 }
 
 export function useUserSlippageTolerance(): [number, (slippage: number) => void] {
@@ -264,11 +259,10 @@ export function useToV2LiquidityTokens(
       result.map((result, index) => {
         return {
           tokens: tokenCouples[index],
-          liquidityTokens: result?.result?.[0]
-            ? result.result[0].map(
-                (address: string) => new Token(tokenCouples[index][0].chainId, address, 18, 'DMM-LP', 'DMM LP'),
-              )
-            : [],
+          liquidityTokens:
+            result?.result?.[0]?.map(
+              (address: string) => new Token(tokenCouples[index][0].chainId, address, 18, 'DMM-LP', 'DMM LP'),
+            ) ?? [],
         }
       }),
     [tokenCouples, result],
@@ -379,7 +373,9 @@ export function useToggleTopTrendingTokens(): () => void {
   return useCallback(() => dispatch(toggleTopTrendingTokens()), [dispatch])
 }
 
-export const useUserFavoriteTokens = (chainId: ChainId) => {
+export const useUserFavoriteTokens = (customChain?: ChainId) => {
+  const { chainId: currentChain } = useActiveWeb3React()
+  const chainId = customChain || currentChain
   const dispatch = useDispatch<AppDispatch>()
   const { favoriteTokensByChainIdv2: favoriteTokensByChainId } = useSelector((state: AppState) => state.user)
   const { commonTokens } = useKyberSwapConfig(chainId)
@@ -497,30 +493,35 @@ const participantDefault = {
 }
 export const useGetParticipantKyberAIInfo = (): ParticipantInfo => {
   const { userInfo } = useSessionInfo()
-  const { data: data = participantDefault, isError } = useGetParticipantInfoQuery(undefined, {
+  const { currentData } = useGetParticipantInfoQuery(undefined, {
     skip: !userInfo,
   })
-  return isError ? participantDefault : data
+  return currentData || participantDefault
 }
 
 export const useIsWhiteListKyberAI = () => {
   const { isLogin, pendingAuthentication, userInfo } = useSessionInfo()
   const {
-    data: rawData,
+    currentData: rawData,
     isFetching,
     isError,
-    refetch,
   } = useGetParticipantInfoQuery(undefined, {
-    skip: !userInfo,
+    skip: !userInfo || userInfo?.data?.hasAccessToKyberAI,
   })
 
-  const { account } = useActiveWeb3React()
+  const [getParticipantInfoQuery] = useLazyGetParticipantInfoQuery()
+  // why not use refetch of useGetParticipantInfoQuery: loop api issues, idk.
+  const refetch = useCallback(() => {
+    userInfo && getParticipantInfoQuery()
+  }, [getParticipantInfoQuery, userInfo])
+
   const [connectingWallet] = useIsConnectingWallet()
 
   const isLoading = isFetching || pendingAuthentication
   const loadingDebounced = useDebounce(isLoading, 500) || connectingWallet
 
-  const participantInfo = isError || loadingDebounced || !account ? participantDefault : rawData
+  const participantInfo = isError || loadingDebounced ? participantDefault : rawData
+
   return {
     loading: loadingDebounced,
     isWhiteList:

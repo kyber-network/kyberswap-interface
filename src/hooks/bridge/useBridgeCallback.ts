@@ -49,8 +49,11 @@ function useSendTxToKsSettingCallback() {
       srcAmount: string,
       dstAmount: string,
     ) => {
-      const body = {
-        walletAddress: account,
+
+      const url = `${KS_SETTING_API}/v1/multichain-transfers-abc`
+      const data = {
+        userAddress: account,
+
         srcChainId: srcChainId.toString(),
         dstChainId: dstChainId.toString(),
         srcTxHash,
@@ -64,7 +67,9 @@ function useSendTxToKsSettingCallback() {
       try {
         await saveTxs(body).unwrap()
       } catch (err) {
+
         captureExceptionCrossChain(body, err, 'PostBridge')
+
       }
     },
     [account, saveTxs],

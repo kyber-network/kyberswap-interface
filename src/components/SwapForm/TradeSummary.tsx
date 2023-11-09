@@ -1,6 +1,6 @@
 import { Trans } from '@lingui/macro'
 import React, { useEffect, useState } from 'react'
-import { NavLink } from 'react-router-dom'
+import { NavLink, useSearchParams } from 'react-router-dom'
 import { Text } from 'rebass'
 import styled from 'styled-components'
 
@@ -11,7 +11,7 @@ import Divider from 'components/Divider'
 import { RowBetween, RowFixed } from 'components/Row'
 import { useSwapFormContext } from 'components/SwapForm/SwapFormContext'
 import { MouseoverTooltip, TextDashed } from 'components/Tooltip'
-import { APP_PATHS, BIPS_BASE, CHAINS_SUPPORT_FEE_CONFIGS } from 'constants/index'
+import { APP_PATHS, BIPS_BASE } from 'constants/index'
 import { useActiveWeb3React } from 'hooks'
 import { isSupportKyberDao, useGasRefundTier } from 'hooks/kyberdao'
 import useMixpanel, { MIXPANEL_TYPE } from 'hooks/useMixpanel'
@@ -20,6 +20,7 @@ import { ExternalLink, TYPE } from 'theme'
 import { DetailedRouteSummary } from 'types/route'
 import { formattedNum } from 'utils'
 import { minimumAmountAfterSlippage } from 'utils/currencyAmount'
+import { formatDisplayNumber } from 'utils/numbers'
 import { checkPriceImpact, formatPriceImpact } from 'utils/prices'
 
 const IconWrapper = styled.div<{ $flip: boolean }>`
@@ -64,22 +65,18 @@ const Wrapper = styled.div.attrs<WrapperProps>(props => ({
   }
 `
 
-const formatPercent = (v: number) => {
-  const formatter = Intl.NumberFormat('en-US', {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 2,
-    style: 'percent',
-  })
-
-  return formatter.format(v)
-}
-
 type TooltipTextOfSwapFeeProps = {
   feeBips: string | undefined
   feeAmountText: string
 }
 export const TooltipTextOfSwapFee: React.FC<TooltipTextOfSwapFeeProps> = ({ feeBips, feeAmountText }) => {
-  const feePercent = formatPercent(Number(feeBips) / Number(BIPS_BASE.toString()))
+  const [searchParams] = useSearchParams()
+  const clientId = searchParams.get('clientId')
+
+  const feePercent = formatDisplayNumber(Number(feeBips) / Number(BIPS_BASE.toString()), {
+    style: 'percent',
+    fractionDigits: 2,
+  })
   const hereLink = (
     <ExternalLink href="https://docs.kyberswap.com/kyberswap-solutions/kyberswap-interface/user-guides/instantly-swap-at-superior-rates#swap-fees-supporting-transactions-on-low-trading-volume-chains">
       <b>
@@ -92,6 +89,10 @@ export const TooltipTextOfSwapFee: React.FC<TooltipTextOfSwapFeeProps> = ({ feeB
     return <Trans>Read more about the fees {hereLink}</Trans>
   }
 
+  if (clientId) {
+    return <Trans>Swap fees charged by {clientId}.</Trans>
+  }
+
   return (
     <Trans>
       A {feePercent} fee ({feeAmountText}) will incur on this swap. The Est. Output amount you see above is inclusive of
@@ -101,19 +102,18 @@ export const TooltipTextOfSwapFee: React.FC<TooltipTextOfSwapFeeProps> = ({ feeB
 }
 
 const SwapFee: React.FC = () => {
-  const { chainId } = useActiveWeb3React()
   const theme = useTheme()
   const { routeSummary } = useSwapFormContext()
-
-  if (!CHAINS_SUPPORT_FEE_CONFIGS.includes(chainId)) {
-    return null
-  }
 
   const {
     formattedAmount: feeAmount = '',
     formattedAmountUsd: feeAmountUsd = '',
     currency = undefined,
   } = routeSummary?.fee || {}
+
+  if (!feeAmount) {
+    return null
+  }
 
   const feeAmountWithSymbol = feeAmount && currency?.symbol ? `${feeAmount} ${currency.symbol}` : ''
 
@@ -186,6 +186,7 @@ const TradeSummary: React.FC<Props> = ({ routeSummary, slippage }) => {
     }
   }, [hasTrade])
 
+  const isPartnerSwap = window.location.pathname.includes(APP_PATHS.PARTNER_SWAP)
   return (
     <Wrapper $visible={alreadyVisible} $disabled={!hasTrade}>
       <AutoColumn>
@@ -204,7 +205,7 @@ const TradeSummary: React.FC<Props> = ({ routeSummary, slippage }) => {
               <TextDashed fontSize={12} fontWeight={400} color={theme.subText}>
                 <MouseoverTooltip
                   width="200px"
-                  text={<Trans>You will receive at least this amount or your transaction will revert</Trans>}
+                  text={<Trans>You will receive at least this amount or your transaction will revert.</Trans>}
                   placement="right"
                 >
                   <Trans>Minimum Received</Trans>
@@ -221,7 +222,7 @@ const TradeSummary: React.FC<Props> = ({ routeSummary, slippage }) => {
           <RowBetween>
             <RowFixed>
               <TextDashed fontSize={12} fontWeight={400} color={theme.subText}>
-                <MouseoverTooltip text={<Trans>Estimated network fee for your transaction</Trans>} placement="right">
+                <MouseoverTooltip text={<Trans>Estimated network fee for your transaction.</Trans>} placement="right">
                   <Trans>Est. Gas Fee</Trans>
                 </MouseoverTooltip>
               </TextDashed>
@@ -266,7 +267,7 @@ const TradeSummary: React.FC<Props> = ({ routeSummary, slippage }) => {
             </TYPE.black>
           </RowBetween>
 
-          {isSupportKyberDao(chainId) && (
+          {!isPartnerSwap && isSupportKyberDao(chainId) && (
             <RowBetween>
               <RowFixed>
                 <TextDashed fontSize={12} fontWeight={400} color={theme.subText}>

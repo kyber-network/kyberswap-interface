@@ -15,7 +15,6 @@ import { TutorialIds } from 'components/Tutorial/TutorialSwap/constant'
 import GasPriceTrackerPanel from 'components/swapv2/GasPriceTrackerPanel'
 import LimitOrder from 'components/swapv2/LimitOrder'
 import ListLimitOrder from 'components/swapv2/LimitOrder/ListOrder'
-import { ListOrderHandle } from 'components/swapv2/LimitOrder/type'
 import LiquiditySourcesPanel from 'components/swapv2/LiquiditySourcesPanel'
 import PairSuggestion, { PairSuggestionHandle } from 'components/swapv2/PairSuggestion'
 import SettingsPanel from 'components/swapv2/SwapSettingsPanel'
@@ -73,6 +72,9 @@ export enum TAB {
   CROSS_CHAIN = 'cross_chain',
 }
 
+export const isSettingTab = (tab: TAB) =>
+  [TAB.INFO, TAB.SETTINGS, TAB.GAS_PRICE_TRACKER, TAB.LIQUIDITY_SOURCES].includes(tab)
+
 export const AppBodyWrapped = styled(BodyWrapper)`
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04);
   padding: 16px;
@@ -112,7 +114,6 @@ export default function Swap() {
   const { pathname } = useLocation()
 
   const refSuggestPair = useRef<PairSuggestionHandle>(null)
-  const refListLimitOrder = useRef<ListOrderHandle>(null)
 
   const [showingPairSuggestionImport, setShowingPairSuggestionImport] = useState<boolean>(false) // show modal import when click pair suggestion
 
@@ -134,12 +135,6 @@ export default function Swap() {
   useEffect(() => {
     setActiveTab(getDefaultTab())
   }, [getDefaultTab])
-
-  const refreshListOrder = useCallback(() => {
-    if (isLimitPage) {
-      refListLimitOrder.current?.refreshListOrder()
-    }
-  }, [isLimitPage])
 
   useDefaultsFromURLSearch()
 
@@ -205,6 +200,7 @@ export default function Swap() {
   const tradeRouteComposition = useMemo(() => {
     return getTradeComposition(chainId, routeSummary?.parsedAmountIn, undefined, routeSummary?.route, defaultTokens)
   }, [chainId, defaultTokens, routeSummary])
+  const swapActionsRef = useRef(null)
 
   return (
     <>
@@ -218,7 +214,7 @@ export default function Swap() {
         <Banner />
         <Container>
           <SwapFormWrapper isShowTutorial={isShowTutorial}>
-            <Header activeTab={activeTab} setActiveTab={setActiveTab} />
+            <Header activeTab={activeTab} setActiveTab={setActiveTab} swapActionsRef={swapActionsRef} />
 
             {(isLimitPage || isSwapPage) && !TYPE_AND_SWAP_NOT_SUPPORTED_CHAINS.includes(chainId) && (
               <PairSuggestion
@@ -231,7 +227,7 @@ export default function Swap() {
             <AppBodyWrapped
               data-highlight={shouldHighlightSwapBox}
               id={TutorialIds.SWAP_FORM}
-              style={activeTab === TAB.INFO ? { padding: 0 } : undefined}
+              style={[TAB.INFO, TAB.LIMIT].includes(activeTab) ? { padding: 0 } : undefined}
             >
               {isSwapPage && (
                 <PopulatedSwapForm
@@ -251,6 +247,7 @@ export default function Swap() {
                   onBack={onBackToSwapTab}
                   onClickLiquiditySources={() => setActiveTab(TAB.LIQUIDITY_SOURCES)}
                   onClickGasPriceTracker={() => setActiveTab(TAB.GAS_PRICE_TRACKER)}
+                  swapActionsRef={swapActionsRef}
                 />
               )}
               {activeTab === TAB.GAS_PRICE_TRACKER && (
@@ -263,7 +260,6 @@ export default function Swap() {
                 <LimitOrder
                   isSelectCurrencyManual={isSelectCurrencyManually}
                   setIsSelectCurrencyManual={setIsSelectCurrencyManually}
-                  refreshListOrder={refreshListOrder}
                 />
               )}
               {isCrossChainPage && <CrossChain visible={activeTab === TAB.CROSS_CHAIN} />}
@@ -334,7 +330,7 @@ export default function Swap() {
                 </Flex>
               </RoutesWrapper>
             )}
-            {isLimitPage && <ListLimitOrder ref={refListLimitOrder} />}
+            {isLimitPage && <ListLimitOrder />}
             {isCrossChainPage && <CrossChainTransfersHistory />}
           </InfoComponents>
         </Container>

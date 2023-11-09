@@ -2,8 +2,8 @@ import { ChainId } from '@kyberswap/ks-sdk-core'
 import { useEffect, useState } from 'react'
 
 import { GLOBAL_DATA, GLOBAL_DATA_ELASTIC } from 'apollo/queries'
-import { EVM_MAINNET_NETWORKS, isEVM } from 'constants/networks'
-import { ELASTIC_NOT_SUPPORTED, VERSION } from 'constants/v2'
+import { ELASTIC_NOT_SUPPORTED, EVM_MAINNET_NETWORKS, isEVM } from 'constants/networks'
+import { VERSION } from 'constants/v2'
 import useAggregatorAPR from 'hooks/useAggregatorAPR'
 import useAggregatorVolume from 'hooks/useAggregatorVolume'
 import { useAllKyberswapConfig } from 'hooks/useKyberSwapConfig'
@@ -52,7 +52,6 @@ export function useGlobalData() {
         .toString()
     }
     const getResultByChainIds = async (chainIds: readonly ChainId[]) => {
-      // todo namgold: add aggregator API for solana
       const elasticChains = chainIds.filter(id => isEVM(id)).filter(id => !ELASTIC_NOT_SUPPORTED[id])
 
       const elasticPromises = elasticChains.map(chain =>

@@ -4,23 +4,20 @@ import { Box, Flex } from 'rebass'
 import { useTheme } from 'styled-components'
 
 import QuestionHelper from 'components/QuestionHelper'
-import { NETWORKS_INFO, SUPPORTED_NETWORKS } from 'constants/networks'
-import { useIsDarkMode } from 'state/user/hooks'
-import { includes } from 'utils/array'
+import { SUPPORTED_NETWORKS } from 'constants/networks'
+import { NETWORKS_INFO } from 'hooks/useChainsConfig'
 
 type Props = {
   fromChainID: number
   toChainID: number
 }
 const RouteCell: React.FC<Props> = ({ fromChainID, toChainID }) => {
-  const isDark = useIsDarkMode()
   const theme = useTheme()
 
   const renderChainIcon = (chainId: number) => {
-    if (includes(SUPPORTED_NETWORKS, chainId)) {
+    if (SUPPORTED_NETWORKS.includes(chainId)) {
       const chainInfo = NETWORKS_INFO[chainId]
-      const src = isDark && chainInfo.iconDark ? chainInfo.iconDark : chainInfo.icon
-      return <img src={src} alt={chainInfo.name} style={{ width: '18px' }} />
+      return <img src={chainInfo.icon} alt={chainInfo.name} style={{ width: '18px' }} />
     }
 
     return (

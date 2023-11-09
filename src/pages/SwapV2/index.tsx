@@ -416,6 +416,7 @@ export default function Swap() {
   const tradeRouteComposition = useMemo(() => {
     return getTradeComposition(chainId, trade?.inputAmount, trade?.tokens, trade?.swaps, defaultTokens)
   }, [chainId, defaultTokens, trade])
+  const swapActionsRef = useRef(null)
 
   return (
     <>
@@ -429,7 +430,7 @@ export default function Swap() {
         <Banner />
         <Container>
           <SwapFormWrapper isShowTutorial={isShowTutorial}>
-            <Header activeTab={activeTab} setActiveTab={setActiveTab} />
+            <Header activeTab={activeTab} setActiveTab={setActiveTab} swapActionsRef={swapActionsRef} />
 
             <AppBodyWrapped data-highlight={shouldHighlightSwapBox} id={TutorialIds.SWAP_FORM}>
               {activeTab === TAB.SWAP && (
@@ -540,7 +541,7 @@ export default function Swap() {
                     <BottomGrouping>
                       {!account ? (
                         <ButtonLight onClick={toggleWalletModal}>
-                          <Trans>Connect Wallet</Trans>
+                          <Trans>Connect</Trans>
                         </ButtonLight>
                       ) : showWrap ? (
                         <ButtonPrimary disabled={Boolean(wrapInputError)} onClick={onWrap}>
@@ -557,7 +558,7 @@ export default function Swap() {
                             text={
                               <Trans>
                                 There was an issue while trying to find a price for these tokens. Please try again.
-                                Otherwise, you may select some other tokens to swap
+                                Otherwise, you may select some other tokens to swap.
                               </Trans>
                             }
                           >
@@ -701,7 +702,7 @@ export default function Swap() {
                                     ) : (
                                       <Trans>
                                         There was an issue while trying to find a price for these tokens. Please try
-                                        again. Otherwise, you may select some other tokens to swap
+                                        again. Otherwise, you may select some other tokens to swap.
                                       </Trans>
                                     )
                                   }
@@ -735,6 +736,7 @@ export default function Swap() {
               {activeTab === TAB.INFO && <TokenInfoTab currencies={currencies} onBack={onBackToSwapTab} />}
               {activeTab === TAB.SETTINGS && (
                 <SettingsPanel
+                  swapActionsRef={swapActionsRef}
                   isSwapPage
                   onBack={onBackToSwapTab}
                   onClickLiquiditySources={() => setActiveTab(TAB.LIQUIDITY_SOURCES)}

@@ -11,11 +11,11 @@ import {
   useLazyGetKyberswapConfigurationQuery,
 } from 'services/ksSetting'
 
-import { AGGREGATOR_API } from 'constants/env'
 import { NETWORKS_INFO, SUPPORTED_NETWORKS, isEVM, isSolana } from 'constants/networks'
 import ethereumInfo from 'constants/networks/ethereum'
 import solanaInfo from 'constants/networks/solana'
 import { AppJsonRpcProvider } from 'constants/providers'
+import { ChainStateMap } from 'hooks/useChainsConfig'
 import { AppState } from 'state'
 import { createClient } from 'utils/client'
 
@@ -36,8 +36,8 @@ const parseResponse = (
 
   return {
     rpc,
-    prochart: data?.prochart || false,
     isEnableBlockService: data?.isEnableBlockService || false,
+    isEnableKNProtocol: data?.isEnableKNProtocol || false,
     blockClient: isEVM(defaultChainId)
       ? createClient(data?.blockSubgraph || NETWORKS_INFO[defaultChainId].defaultBlockSubgraph)
       : createClient(ethereumInfo.defaultBlockSubgraph),
@@ -58,21 +58,23 @@ type KyberswapGlobalConfig = {
   aggregatorDomain: string
   aggregatorAPI: string
   isEnableAuthenAggregator: boolean
+  chainStates: ChainStateMap
 }
 
 const parseGlobalResponse = (
   responseData: KyberswapGlobalConfigurationResponse | undefined,
   chainId: ChainId,
 ): KyberswapGlobalConfig => {
-  const data = responseData?.data?.config
-  const aggregatorDomain = data?.aggregator ?? AGGREGATOR_API
-  const isEnableAuthenAggregator = !!data?.isEnableAuthenAggregator
   return {
+
+    chainStates: data?.chainStates || ({} as ChainStateMap),
     aggregatorDomain,
     aggregatorAPI: `${aggregatorDomain}/${NETWORKS_INFO[chainId].aggregatorRoute}/route/encode`,
     isEnableAuthenAggregator,
+
   }
 }
+
 export const useLazyKyberswapConfig = (): ((customChainId?: ChainId) => Promise<KyberSwapConfig>) => {
   const storeChainId = useSelector<AppState, ChainId>(state => state.user.chainId) || ChainId.MAINNET // read directly from store instead of useActiveWeb3React to prevent circular loop
   const [getKyberswapConfiguration] = useLazyGetKyberswapConfigurationQuery()

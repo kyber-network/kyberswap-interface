@@ -70,10 +70,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v2
 
-      - name: Set up Node.js 18.15.0
+      - name: Set up Node.js
         uses: actions/setup-node@v1
         with:
-          node-version: 18.15.0
+          node-version: 20.9.0
           registry-url: 'https://npm.pkg.github.com'
           scope: '@kybernetwork'
 
@@ -114,7 +114,9 @@ jobs:
           VITE_TAG: ${{ needs.prepare.outputs.image_tag }}
           CURRENT_BRANCH: ${{ needs.prepare.outputs.current_branch }}
           NODE_OPTIONS: '--max_old_space_size=4096'
-        run: yarn build
+
+        run: yarn build-dev
+
 
       - name: Docker build and push
         uses: docker/build-push-action@v2
@@ -144,10 +146,10 @@ jobs:
       - name: Check out Git repository
         uses: actions/checkout@v2
 
-      - name: Set up Node.js 18.15.0
+      - name: Set up Node.js
         uses: actions/setup-node@v1
         with:
-          node-version: 18.15.0
+          node-version: 20.9.0
           registry-url: 'https://npm.pkg.github.com'
           scope: '@kybernetwork'
 

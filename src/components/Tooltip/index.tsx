@@ -1,9 +1,10 @@
 import { ReactNode, useCallback, useRef, useState } from 'react'
 import { isMobile } from 'react-device-detect'
-import { Flex, Text } from 'rebass'
+import { Text } from 'rebass'
 import styled from 'styled-components'
 
 import Popover, { PopoverProps } from 'components/Popover'
+import Row from 'components/Row'
 
 const TooltipContainer = styled.div<{ width?: string; maxWidth?: string; size?: number }>`
   width: ${({ width }) => width || '228px'};
@@ -34,9 +35,20 @@ interface TooltipProps extends Omit<PopoverProps, 'content'> {
   onMouseEnter?: React.MouseEventHandler<HTMLDivElement>
   onMouseLeave?: React.MouseEventHandler<HTMLDivElement>
   children?: React.ReactNode
+  dataTestId?: string
 }
 
-export default function Tooltip({ text, width, maxWidth, size, onMouseEnter, onMouseLeave, ...rest }: TooltipProps) {
+export default function Tooltip({
+  text,
+  width,
+  maxWidth,
+  size,
+  onMouseEnter,
+  onMouseLeave,
+  show,
+  dataTestId,
+  ...rest
+}: TooltipProps) {
   return (
     <Popover
       content={
@@ -47,11 +59,13 @@ export default function Tooltip({ text, width, maxWidth, size, onMouseEnter, onM
             size={size}
             onMouseEnter={onMouseEnter}
             onMouseLeave={onMouseLeave}
+            data-testid={dataTestId}
           >
             {text}
           </TooltipContainer>
         ) : null
       }
+      show={!!text && show}
       {...rest}
     />
   )
@@ -87,9 +101,9 @@ export function MouseoverTooltip({ children, disableTooltip, delay, ...rest }: O
   if (disableTooltip) return <>{children}</>
   return (
     <Tooltip {...rest} show={show} onMouseEnter={open} onMouseLeave={close}>
-      <Flex onMouseOver={open} onMouseLeave={close} alignItems="center">
+      <Row onMouseOver={open} onMouseLeave={close}>
         {children}
-      </Flex>
+      </Row>
     </Tooltip>
   )
 }

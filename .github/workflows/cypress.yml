@@ -48,11 +48,11 @@ jobs:
             REF_BRANCH=${REF/refs\/tags\//}
             BRANCH=$REF_BRANCH
           fi
-          echo "::set-output name=value::$BRANCH"
+          echo "value=$BRANCH" >> $GITHUB_OUTPUT
 
       - name: Extract GitHub HEAD SHA
         id: head_sha
-        run: echo "::set-output name=value::$(git rev-parse HEAD)"
+        run: echo "value=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
 
       - name: Get Docker image tag
         id: get_tag
@@ -60,7 +60,7 @@ jobs:
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           short_sha="$(echo $HEAD_SHA | head -c7)"
-          echo "::set-output name=image_tag::adpr-$short_sha"
+          echo "image_tag=adpr-$short_sha" >> $GITHUB_OUTPUT
 
   cypress-test:
     runs-on: ubuntu-latest
@@ -70,10 +70,10 @@ jobs:
       - name: Check out Git repository
         uses: actions/checkout@v3
 
-      - name: Set up Node.js 18.15.0
+      - name: Set up Node.js
         uses: actions/setup-node@v3
         with:
-          node-version: 18.15.0
+          node-version: 20.9.0
           registry-url: 'https://npm.pkg.github.com'
           scope: '@kybernetwork'
 
@@ -84,42 +84,48 @@ jobs:
 
       - name: Install linux deps
         run: |
-            sudo apt-get install --no-install-recommends -y \
-            fluxbox \
-            xvfb
-  
+          sudo apt-get install --no-install-recommends -y \
+          fluxbox \
+          xvfb
+
       - name: Yarn Build
         env:
           CI: false
           VITE_TAG: ${{ needs.prepare.outputs.image_tag }}
           CURRENT_BRANCH: ${{ needs.prepare.outputs.current_branch }}
           NODE_OPTIONS: '--max_old_space_size=4096'
-        run: yarn build-adpr
-      
+        run: yarn build-dev
+
       - name: Install cypress
-        run: yarn cypress install --force  
-        
+        run: yarn cypress install --force
+
       - name: Run xvfb and fluxbox
         run: |
           Xvfb :0 -screen 0 1024x768x24 -listen tcp -ac &
           fluxbox &
         env:
-          DISPLAY: :0.0  
+          DISPLAY: :0.0
+
+      - name: Create env file
+        run: |
+          touch .env
+          echo ENV=${ENV} > .env
+          echo CYPRESS_BASE_URL='http://127.0.0.1:4173/' > .env
 
       - name: Run Cypress Test
         run: |+
           #!/bin/bash
           yarn preview &
-          yarn test-e2e -e grepTags=smoke,NETWORK=Ethereum
+          yarn test-e2e -c baseUrl='http://127.0.0.1:4173/' -e grepTags=smoke,NETWORK=Ethereum
         env:
-            DISPLAY: :0.0
-      
-      - name: Archive e2e artifacts 
+          DISPLAY: :0.0
+
+      - name: Archive e2e artifacts
         uses: actions/upload-artifact@3cea5372237819ed00197afe530f5a7ea3e805c8
         if: always()
         with:
-            name: e2e-artifacts
-            path: |
-              cypress/videos
-              cypress/screenshots
-        continue-on-error: true    
+          name: e2e-artifacts
+          path: |
+            cypress/videos
+            cypress/screenshots
+        continue-on-error: true

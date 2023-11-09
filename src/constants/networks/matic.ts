@@ -1,8 +1,8 @@
 import { ChainId } from '@kyberswap/ks-sdk-core'
 
+import polygonIcon from 'assets/networks/polygon.svg'
 import { EVMNetworkInfo } from 'constants/networks/type'
 
-const EMPTY = ''
 const NOT_SUPPORT = null
 
 const maticInfo: EVMNetworkInfo = {
@@ -13,18 +13,17 @@ const maticInfo: EVMNetworkInfo = {
   poolFarmRoute: 'polygon',
   aggregatorRoute: 'polygon',
   name: 'Polygon PoS',
-  icon: 'https://storage.googleapis.com/ks-setting-a3aa20b7/78dfb4fb-089b-431d-8725-b5de2cea0bfc.svg',
-  iconDark: NOT_SUPPORT,
+  icon: polygonIcon,
   iconSelected: NOT_SUPPORT,
-  iconDarkSelected: NOT_SUPPORT,
+
   defaultBlockSubgraph: 'https://api.thegraph.com/subgraphs/name/dynamic-amm/ethereum-blocks-polygon',
   etherscanUrl: 'https://polygonscan.com',
   etherscanName: 'Polygonscan',
-  bridgeURL: EMPTY,
+  bridgeURL: 'https://wallet.polygon.technology/',
   nativeToken: {
     symbol: 'MATIC',
     name: 'Polygon',
-    logo: 'https://storage.googleapis.com/ks-setting-a3aa20b7/78dfb4fb-089b-431d-8725-b5de2cea0bfc.svg',
+    logo: 'https://storage.googleapis.com/ks-setting-1d682dca/10d6d017-945d-470d-87eb-6a6f89ce8b7e.png',
     decimal: 18,
     minForGas: 10 ** 17,
   },
@@ -65,12 +64,22 @@ const maticInfo: EVMNetworkInfo = {
     routers: '0xF9c2b5746c946EF883ab2660BbbB1f10A5bdeAb4',
     farms: ['0x7D5ba536ab244aAA1EA42aB88428847F25E3E676'],
     farmv2Quoter: '0x6AFeb9EDd6Cf44fA8E89b1eee28284e6dD7705C8',
-    farmV2S: ['0x00EF722ff484c671bbeb1bEFb211d9f29C553583'],
+
+    farmV2S: [
+      '0xA70a1Ad0F91c52c79e177c5A18a7C9E1C4360e0e',
+      '0x3D6AfE2fB73fFEd2E3dD00c501A174554e147a43',
+      '0xf2BcDf38baA52F6b0C1Db5B025DfFf01Ae1d6dBd',
+    ],
+    zap: {
+      router: '0x30C5322E4e08AD500c348007f92f120ab4E2b79e',
+      validator: '0xf0096e5B4AAfeEA1DF557264091569ba125c1172',
+      executor: '0x4f097F7074D52952006a0763312724929Ff95Cf0',
+      helper: '0x4E8419EFa0b0A149Dad77b689D37AF17f762f20A',
+    },
+    'farmV2.1S': [],
+
   },
-  limitOrder: {
-    development: '0x3C2E9227A6d3779e5b469E425CAa7067b40Ff124',
-    production: '0x227B0c196eA8db17A665EA6824D972A64202E936',
-  },
+  limitOrder: '*',
   averageBlockTimeInSeconds: 2.6,
   coingeckoNetworkId: 'polygon-pos',
   coingeckoNativeTokenId: 'matic-network',

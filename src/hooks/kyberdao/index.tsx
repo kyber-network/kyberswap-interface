@@ -20,7 +20,6 @@ import DaoABI from 'constants/abis/kyberdao/dao.json'
 import MigrateABI from 'constants/abis/kyberdao/migrate.json'
 import RewardDistributorABI from 'constants/abis/kyberdao/reward_distributor.json'
 import StakingABI from 'constants/abis/kyberdao/staking.json'
-import { didUserReject } from 'constants/connectors/utils'
 import { REWARD_SERVICE_API } from 'constants/env'
 import { CONTRACT_NOT_FOUND_MSG } from 'constants/messages'
 import { NETWORKS_INFO, SUPPORTED_NETWORKS, isEVM } from 'constants/networks'
@@ -28,7 +27,7 @@ import ethereumInfo from 'constants/networks/ethereum'
 import { EVMNetworkInfo } from 'constants/networks/type'
 import { KNC } from 'constants/tokens'
 import { useActiveWeb3React, useWeb3React } from 'hooks'
-import { useContract, useContractForReading, useTokenContractForReading } from 'hooks/useContract'
+import { useReadingContract, useSigningContract, useTokenReadingContract } from 'hooks/useContract'
 import useTokenBalance from 'hooks/useTokenBalance'
 import { KNCUtilityTabs } from 'pages/KyberDAO/KNCUtility/type'
 import { useNotify } from 'state/application/hooks'
@@ -40,6 +39,7 @@ import { aggregateValue } from 'utils/array'
 import { friendlyError } from 'utils/errorMessage'
 import { formatUnitsToFixed } from 'utils/formatBalance'
 import { sendEVMTransaction } from 'utils/sendTransaction'
+import { ErrorName } from 'utils/sentry'
 
 import {
   EligibleTxsInfo,
@@ -64,8 +64,8 @@ export function useKyberDAOInfo() {
 export function useKyberDaoStakeActions() {
   const addTransactionWithType = useTransactionAdder()
   const kyberDaoInfo = useKyberDAOInfo()
-  const stakingContract = useContract(kyberDaoInfo?.staking, StakingABI)
-  const migrateContract = useContract(kyberDaoInfo?.KNCAddress, MigrateABI)
+  const stakingContract = useSigningContract(kyberDaoInfo?.staking, StakingABI)
+  const migrateContract = useSigningContract(kyberDaoInfo?.KNCAddress, MigrateABI)
 
   const stake = useCallback(
     async (amount: BigNumber, votingPower: string) => {
@@ -89,11 +89,7 @@ export function useKyberDaoStakeActions() {
         })
         return tx.hash
       } catch (error) {
-        if (didUserReject(error)) {
-          throw new Error('Transaction rejected.')
-        } else {
-          throw error
-        }
+        throw error
       }
     },
     [addTransactionWithType, stakingContract, kyberDaoInfo],
@@ -120,11 +116,7 @@ export function useKyberDaoStakeActions() {
         })
         return tx.hash
       } catch (error) {
-        if (didUserReject(error)) {
-          throw new Error('Transaction rejected.')
-        } else {
-          throw error
-        }
+        throw error
       }
     },
     [addTransactionWithType, stakingContract, kyberDaoInfo?.KNCAddress],
@@ -155,11 +147,7 @@ export function useKyberDaoStakeActions() {
         })
         return tx.hash
       } catch (error) {
-        if (didUserReject(error)) {
-          throw new Error('Transaction rejected.')
-        } else {
-          throw error
-        }
+        throw error
       }
     },
     [addTransactionWithType, migrateContract, kyberDaoInfo],
@@ -181,11 +169,7 @@ export function useKyberDaoStakeActions() {
         })
         return tx.hash
       } catch (error) {
-        if (didUserReject(error)) {
-          throw new Error('Transaction rejected.')
-        } else {
-          throw error
-        }
+        throw error
       }
     },
     [addTransactionWithType, stakingContract],
@@ -208,11 +192,7 @@ export function useKyberDaoStakeActions() {
         })
         return tx.hash
       } catch (error) {
-        if (didUserReject(error)) {
-          throw new Error('Transaction rejected.')
-        } else {
-          throw error
-        }
+        throw error
       }
     },
     [addTransactionWithType, stakingContract],
@@ -225,7 +205,8 @@ export function useClaimVotingRewards() {
   const { account } = useActiveWeb3React()
   const { userRewards, remainingCumulativeAmount } = useVotingInfo()
   const kyberDaoInfo = useKyberDAOInfo()
-  const rewardDistributorContract = useContract(kyberDaoInfo?.rewardsDistributor, RewardDistributorABI)
+  const rewardDistributorSigningContract = useSigningContract(kyberDaoInfo?.rewardsDistributor, RewardDistributorABI)
+  const rewardDistributorReadingContract = useReadingContract(kyberDaoInfo?.rewardsDistributor, RewardDistributorABI)
   const addTransactionWithType = useTransactionAdder()
 
   const claimVotingRewards = useCallback(async () => {
@@ -236,11 +217,11 @@ export function useClaimVotingRewards() {
     const merkleProof = proof
     const formatAmount = formatUnitsToFixed(remainingCumulativeAmount)
 
-    if (!rewardDistributorContract) {
+    if (!rewardDistributorSigningContract || !rewardDistributorReadingContract) {
       throw new Error(CONTRACT_NOT_FOUND_MSG)
     }
     try {
-      const isValidClaim = await rewardDistributorContract.isValidClaim(
+      const isValidClaim = await rewardDistributorReadingContract.isValidClaim(
         cycle,
         index,
         address,
@@ -249,7 +230,7 @@ export function useClaimVotingRewards() {
         merkleProof,
       )
       if (!isValidClaim) throw new Error(t`Invalid claim`)
-      const estimateGas = await rewardDistributorContract.estimateGas.claim(
+      const estimateGas = await rewardDistributorSigningContract.estimateGas.claim(
         cycle,
         index,
         address,
@@ -257,9 +238,17 @@ export function useClaimVotingRewards() {
         cumulativeAmounts,
         merkleProof,
       )
-      const tx = await rewardDistributorContract.claim(cycle, index, address, tokens, cumulativeAmounts, merkleProof, {
-        gasLimit: calculateGasMargin(estimateGas),
-      })
+      const tx = await rewardDistributorSigningContract.claim(
+        cycle,
+        index,
+        address,
+        tokens,
+        cumulativeAmounts,
+        merkleProof,
+        {
+          gasLimit: calculateGasMargin(estimateGas),
+        },
+      )
       addTransactionWithType({
         hash: tx.hash,
         type: TRANSACTION_TYPE.KYBERDAO_CLAIM,
@@ -272,17 +261,14 @@ export function useClaimVotingRewards() {
       })
       return tx.hash as string
     } catch (error) {
-      if (didUserReject(error)) {
-        throw new Error('Transaction rejected.')
-      } else {
-        throw error
-      }
+      throw error
     }
   }, [
     userRewards,
     account,
     remainingCumulativeAmount,
-    rewardDistributorContract,
+    rewardDistributorSigningContract,
+    rewardDistributorReadingContract,
     addTransactionWithType,
     kyberDaoInfo?.rewardsDistributor,
     kyberDaoInfo?.KNCAddress,
@@ -292,7 +278,7 @@ export function useClaimVotingRewards() {
 
 export const useVotingActions = () => {
   const kyberDaoInfo = useKyberDAOInfo()
-  const daoContract = useContract(kyberDaoInfo?.dao, DaoABI)
+  const daoContract = useSigningContract(kyberDaoInfo?.dao, DaoABI)
   const addTransactionWithType = useTransactionAdder()
 
   const vote = useCallback(
@@ -312,11 +298,7 @@ export const useVotingActions = () => {
         })
         return tx.hash
       } catch (error) {
-        if (didUserReject(error)) {
-          throw new Error('Transaction rejected.')
-        } else {
-          throw error
-        }
+        throw error
       }
     },
     [daoContract, addTransactionWithType, kyberDaoInfo?.dao],
@@ -333,8 +315,8 @@ const fetcher = (url: string) => {
 export function useStakingInfo() {
   const { account } = useActiveWeb3React()
   const kyberDaoInfo = useKyberDAOInfo()
-  const stakingContract = useContract(kyberDaoInfo?.staking, StakingABI)
-  const kncContract = useTokenContractForReading(kyberDaoInfo?.KNCAddress, ChainId.MAINNET)
+  const stakingContract = useReadingContract(kyberDaoInfo?.staking, StakingABI)
+  const kncContract = useTokenReadingContract(kyberDaoInfo?.KNCAddress, ChainId.MAINNET)
   const stakedBalance = useSingleCallResult(stakingContract, 'getLatestStakeBalance', [account ?? undefined])
   const delegatedAddress = useSingleCallResult(stakingContract, 'getLatestRepresentative', [account ?? undefined])
   const KNCBalance = useTokenBalance(kyberDaoInfo?.KNCAddress || '')
@@ -368,7 +350,7 @@ export function useStakingInfo() {
 export function useVotingInfo() {
   const { account } = useActiveWeb3React()
   const kyberDaoInfo = useKyberDAOInfo()
-  const rewardsDistributorContract = useContractForReading(
+  const rewardsDistributorContract = useReadingContract(
     kyberDaoInfo?.rewardsDistributor,
     RewardDistributorABI,
     ChainId.MAINNET,
@@ -523,6 +505,7 @@ export function useVotingInfo() {
     rewardStats: {
       knc: rewardStats ? +rewardStats.pending?.totalAmountInKNC + +rewardStats.liquidated?.totalAmountInKNC : 0,
       usd: rewardStats ? +rewardStats.pending?.totalAmountInUSD + +rewardStats.liquidated?.totalAmountInUSD : 0,
+      apr: rewardStats ? +rewardStats.apr : 0,
     },
   }
   return result
@@ -619,7 +602,7 @@ export function useGasRefundInfo({ rewardStatus = KNCUtilityTabs.Available }: { 
 }
 
 export function useClaimGasRefundRewards() {
-  const { account, chainId } = useActiveWeb3React()
+  const { account, chainId, walletKey } = useActiveWeb3React()
   const { library } = useWeb3React()
   const addTransactionWithType = useTransactionAdder()
   const { claimableReward } = useGasRefundInfo({})
@@ -654,7 +637,17 @@ export function useClaimGasRefundRewards() {
     const rewardContractAddress = response.data.data.ContractAddress
     const encodedData = response.data.data.EncodedData
     try {
-      const tx = await sendEVMTransaction(account, library, rewardContractAddress, encodedData, BigNumber.from(0))
+      const tx = await sendEVMTransaction({
+        account,
+        library,
+        contractAddress: rewardContractAddress,
+        encodedData,
+        value: BigNumber.from(0),
+        sentryInfo: {
+          name: ErrorName.GasRefundClaimError,
+          wallet: walletKey,
+        },
+      })
       if (!tx) throw new Error()
       addTransactionWithType({
         hash: tx.hash,
@@ -678,7 +671,7 @@ export function useClaimGasRefundRewards() {
       })
       throw error
     }
-  }, [account, addTransactionWithType, chainId, claimableReward, library, notify, refetch])
+  }, [account, addTransactionWithType, chainId, claimableReward, library, notify, refetch, walletKey])
   return claimGasRefundRewards
 }
 

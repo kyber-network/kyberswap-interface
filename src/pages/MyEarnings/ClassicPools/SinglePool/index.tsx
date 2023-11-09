@@ -18,7 +18,7 @@ import { MoneyBag } from 'components/Icons'
 import { MouseoverTooltip, TextDashed } from 'components/Tooltip'
 import { APRTooltipContent } from 'components/YieldPools/FarmingPoolAPRCell'
 import { APP_PATHS, DMM_ANALYTICS_URL, SUBGRAPH_AMP_MULTIPLIER } from 'constants/index'
-import { NETWORKS_INFO } from 'constants/networks'
+import { NETWORKS_INFO } from 'hooks/useChainsConfig'
 import useTheme from 'hooks/useTheme'
 import Position from 'pages/MyEarnings/ClassicPools/SinglePool/Position'
 import { StatItem } from 'pages/MyEarnings/ElasticPools/SinglePool'
@@ -31,7 +31,7 @@ import { TokenAddressMap } from 'state/lists/reducer'
 import { WrappedTokenInfo } from 'state/lists/wrappedTokenInfo'
 import { isAddress, shortenAddress } from 'utils'
 import { currencyId } from 'utils/currencyId'
-import { formatDollarAmount } from 'utils/numbers'
+import { formatDisplayNumber } from 'utils/numbers'
 import { getTokenSymbolWithHardcode } from 'utils/tokenInfo'
 import { unwrappedToken } from 'utils/wrappedCurrency'
 
@@ -126,9 +126,13 @@ const SinglePool: React.FC<Props> = ({ poolEarning, chainId }) => {
   )
   const myLiquidityBalance =
     poolEarning.liquidityTokenBalanceIncludingStake !== '0' && poolEarning.pool.totalSupply !== '0'
-      ? formatDollarAmount(
+      ? formatDisplayNumber(
           (+poolEarning.liquidityTokenBalanceIncludingStake * +poolEarning.pool.reserveUSD) /
             +poolEarning.pool.totalSupply,
+          {
+            style: 'currency',
+            significantDigits: 4,
+          },
         )
       : '--'
 
@@ -262,12 +266,18 @@ const SinglePool: React.FC<Props> = ({ poolEarning, chainId }) => {
           </Flex>
 
           <MobileStat mobileView={mobileView}>
-            <StatItem label="TVL" value={formatDollarAmount(+poolEarning.pool.reserveUSD)} />
+            <StatItem
+              label="TVL"
+              value={formatDisplayNumber(poolEarning.pool.reserveUSD, {
+                style: 'currency',
+                significantDigits: 4,
+              })}
+            />
 
             <StatItem
               label={
                 <MouseoverTooltip
-                  text={t`Average estimated return based on yearly trading fees from the pool & additional bonus rewards if you participate in the farm`}
+                  text={t`Average estimated return based on yearly trading fees from the pool & additional bonus rewards if you participate in the farm.`}
                 >
                   <TextDashed>APR</TextDashed>
                 </MouseoverTooltip>
@@ -275,7 +285,10 @@ const SinglePool: React.FC<Props> = ({ poolEarning, chainId }) => {
               value={
                 <Flex alignItems="center">
                   <Text as="span" marginRight="4px" color={theme.apr}>
-                    {(+poolEarning.pool.apr).toFixed(2)}%
+                    {formatDisplayNumber((+poolEarning.pool.apr + +poolEarning.pool.farmApr) / 100, {
+                      style: 'percent',
+                      fractionDigits: 2,
+                    })}
                   </Text>
 
                   <MouseoverTooltip
@@ -296,16 +309,26 @@ const SinglePool: React.FC<Props> = ({ poolEarning, chainId }) => {
             />
             <StatItem
               label={t`Volume (24h)`}
-              value={formatDollarAmount(
+              value={formatDisplayNumber(
                 Number(poolEarning.pool.volumeUsd) - Number(poolEarning.pool.volumeUsdOneDayAgo),
+                {
+                  style: 'currency',
+                  significantDigits: 4,
+                },
               )}
             />
             <StatItem
               label={t`Fees (24h)`}
-              value={formatDollarAmount(Number(poolEarning.pool.feeUSD) - Number(poolEarning.pool.feesUsdOneDayAgo))}
+              value={formatDisplayNumber(Number(poolEarning.pool.feeUSD) - Number(poolEarning.pool.feesUsdOneDayAgo), {
+                style: 'currency',
+                significantDigits: 4,
+              })}
             />
             <StatItem label={t`My Liquidity`} value={myLiquidityBalance} />
-            <StatItem label={t`My Earnings`} value={formatDollarAmount(poolEarningToday)} />
+            <StatItem
+              label={t`My Earnings`}
+              value={formatDisplayNumber(poolEarningToday, { style: 'currency', significantDigits: 4 })}
+            />
           </MobileStat>
 
           <Flex justifyContent="flex-end" alignItems="center" sx={{ gap: '0.75rem' }}>
@@ -451,15 +474,23 @@ const SinglePool: React.FC<Props> = ({ poolEarning, chainId }) => {
           </Flex>
 
           <div>
-            <Text>{formatDollarAmount(ampLiquidity)}</Text>
+            <Text>
+              {formatDisplayNumber(ampLiquidity, {
+                style: 'currency',
+                significantDigits: 7,
+              })}
+            </Text>
             <Text color={theme.subText} fontSize={12} marginTop="4px">
-              {formatDollarAmount(+poolEarning.pool.reserveUSD)}
+              {formatDisplayNumber(poolEarning.pool.reserveUSD, { style: 'currency', significantDigits: 7 })}
             </Text>
           </div>
 
           <Flex alignItems="center">
             <Text as="span" marginRight="4px" color={theme.apr}>
-              {(+poolEarning.pool.apr + +poolEarning.pool.farmApr).toFixed(2)}%
+              {formatDisplayNumber((+poolEarning.pool.apr + +poolEarning.pool.farmApr) / 100, {
+                style: 'percent',
+                fractionDigits: 2,
+              })}
             </Text>
 
             <MouseoverTooltip
@@ -474,11 +505,19 @@ const SinglePool: React.FC<Props> = ({ poolEarning, chainId }) => {
           </Flex>
 
           <Text>
-            {formatDollarAmount(Number(poolEarning.pool.volumeUsd) - Number(poolEarning.pool.volumeUsdOneDayAgo))}
+            {formatDisplayNumber(Number(poolEarning.pool.volumeUsd) - Number(poolEarning.pool.volumeUsdOneDayAgo), {
+              style: 'currency',
+              significantDigits: 4,
+            })}
           </Text>
-          <Text>{formatDollarAmount(Number(poolEarning.pool.feeUSD) - Number(poolEarning.pool.feesUsdOneDayAgo))}</Text>
+          <Text>
+            {formatDisplayNumber(Number(poolEarning.pool.feeUSD) - Number(poolEarning.pool.feesUsdOneDayAgo), {
+              style: 'currency',
+              significantDigits: 4,
+            })}
+          </Text>
           <Text>{myLiquidityBalance}</Text>
-          <Text>{formatDollarAmount(poolEarningToday)}</Text>
+          <Text>{formatDisplayNumber(poolEarningToday, { style: 'currency', significantDigits: 4 })}</Text>
 
           <Flex sx={{ gap: '8px' }} justifyContent="flex-end">
             <ButtonIcon

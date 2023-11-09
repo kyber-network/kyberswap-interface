@@ -1,6 +1,6 @@
 import { ChainId } from '@kyberswap/ks-sdk-core'
 
-import FTM from 'assets/networks/fantom-network.png'
+import fantomIcon from 'assets/networks/fantom.svg'
 import { EVMNetworkInfo } from 'constants/networks/type'
 
 const EMPTY = ''
@@ -15,10 +15,9 @@ const fantomInfo: EVMNetworkInfo = {
   poolFarmRoute: 'fantom',
   aggregatorRoute: 'fantom',
   name: 'Fantom',
-  icon: FTM,
-  iconDark: NOT_SUPPORT,
+  icon: fantomIcon,
   iconSelected: NOT_SUPPORT,
-  iconDarkSelected: NOT_SUPPORT,
+
   defaultBlockSubgraph: 'https://api.thegraph.com/subgraphs/name/kybernetwork/fantom-blocks',
   etherscanUrl: 'https://ftmscan.com',
   etherscanName: 'Ftmscan',
@@ -26,7 +25,7 @@ const fantomInfo: EVMNetworkInfo = {
   nativeToken: {
     symbol: 'FTM',
     name: 'FTM',
-    logo: FTM,
+    logo: 'https://storage.googleapis.com/ks-setting-1d682dca/2cd8adf9-b4b0-41f7-b83d-4a13b4e9ca6f1699420090962.png',
     decimal: 18,
     minForGas: 10 ** 16,
   },
@@ -60,10 +59,7 @@ const fantomInfo: EVMNetworkInfo = {
     routers: '0xF9c2b5746c946EF883ab2660BbbB1f10A5bdeAb4',
     farms: [],
   },
-  limitOrder: {
-    development: '0x15a7e4A0BD7B96ada9db1219fA62c521bDCd8F81',
-    production: '0x227B0c196eA8db17A665EA6824D972A64202E936',
-  },
+  limitOrder: '*',
   averageBlockTimeInSeconds: 1,
   coingeckoNetworkId: 'fantom',
   coingeckoNativeTokenId: 'fantom',

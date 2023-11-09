@@ -16,9 +16,9 @@ const bnbTestnetInfo: EVMNetworkInfo = {
   aggregatorRoute: 'bsc',
   name: 'BNB Testnet',
   icon: 'https://storage.googleapis.com/ks-setting-a3aa20b7/a44a3dbc-9150-4278-8354-7b5953f9a1ab.svg',
-  iconDark: NOT_SUPPORT,
+
   iconSelected: NOT_SUPPORT,
-  iconDarkSelected: NOT_SUPPORT,
+
   defaultBlockSubgraph: 'https://api.thegraph.com/subgraphs/name/ducquangkstn/ethereum-blocks-bsctestnet',
   etherscanUrl: 'https://testnet.bscscan.com',
   etherscanName: 'BscScan',
@@ -65,10 +65,7 @@ const bnbTestnetInfo: EVMNetworkInfo = {
     routers: '0x785b8893342dfEf9B5D565f67be971b859d34a15',
     farms: [],
   },
-  limitOrder: {
-    development: NOT_SUPPORT,
-    production: NOT_SUPPORT,
-  },
+  limitOrder: NOT_SUPPORT,
   averageBlockTimeInSeconds: 3,
   coingeckoNetworkId: 'binance-smart-chain',
   coingeckoNativeTokenId: 'binancecoin',

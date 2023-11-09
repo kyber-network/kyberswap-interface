@@ -5,7 +5,8 @@ import { BuildRouteData } from 'services/route/types/buildRoute'
 
 import { BIPS_BASE, RESERVE_USD_DECIMALS } from 'constants/index'
 import { ChargeFeeBy, DetailedRouteSummary } from 'types/route'
-import { formattedNum } from 'utils/index'
+
+import { formatDisplayNumber } from './numbers'
 
 export const calculateFeeFromBuildData = (
   routeSummary: DetailedRouteSummary | undefined,
@@ -35,12 +36,16 @@ export const calculateFeeFromBuildData = (
     JSBI.exponentiate(JSBI.BigInt(10), JSBI.BigInt(RESERVE_USD_DECIMALS)),
   ).divide(BIPS_BASE)
 
-  const fee = currencyAmountToTakeFee.multiply(feeAmountFraction).toSignificant(RESERVE_USD_DECIMALS)
+  const fee = routeSummary.extraFee.isInBps
+    ? currencyAmountToTakeFee.multiply(feeAmountFraction).toSignificant(RESERVE_USD_DECIMALS)
+    : CurrencyAmount.fromRawAmount(currencyAmountToTakeFee.currency, routeSummary.extraFee.feeAmount)
+
   const feeUsd = buildData.feeUsd
 
   return {
-    feeAmount: formattedNum(fee, false),
-    feeAmountUsd: feeUsd && feeUsd !== '0' ? formattedNum(feeUsd, true, 4) : '',
+    feeAmount: formatDisplayNumber(fee, { significantDigits: 10 }),
+    feeAmountUsd:
+      feeUsd && feeUsd !== '0' ? formatDisplayNumber(feeUsd, { style: 'currency', significantDigits: 10 }) : '',
     currency: currencyAmountToTakeFee.currency,
   }
 }

@@ -1,4 +1,5 @@
 import { BigNumber } from '@ethersproject/bignumber'
+import { ChainId } from '@kyberswap/ks-sdk-core'
 import { ParsedTransactionWithMeta } from '@solana/web3.js'
 import { findReplacementTx } from 'find-replacement-tx'
 import { useEffect, useMemo } from 'react'
@@ -13,7 +14,6 @@ import { useSetClaimingCampaignRewardId } from 'state/campaigns/hooks'
 import { AppDispatch, AppState } from 'state/index'
 import { revokePermit } from 'state/user/actions'
 import { findTx } from 'utils'
-import { includes } from 'utils/array'
 
 import { checkedTransaction, finalizeTransaction, removeTx, replaceTx } from './actions'
 import { SerializableTransactionReceipt, TRANSACTION_TYPE, TransactionDetails } from './type'
@@ -47,7 +47,7 @@ export default function Updater(): null {
 
   const lastBlockNumber = useBlockNumber()
   const dispatch = useDispatch<AppDispatch>()
-  const transactionsState = useSelector<AppState, AppState['transactions'][number]>(
+  const transactionsState = useSelector<AppState, AppState['transactions'][ChainId]>(
     state => state.transactions[chainId],
   )
 
@@ -134,7 +134,7 @@ export default function Updater(): null {
                     blockHash: receipt.blockHash,
                     status: receipt.status,
                   },
-                  needCheckSubgraph: includes(NEED_CHECK_SUBGRAPH_TRANSACTION_TYPES, transaction.type),
+                  needCheckSubgraph: NEED_CHECK_SUBGRAPH_TRANSACTION_TYPES.includes(transaction.type),
                 }),
               )
 

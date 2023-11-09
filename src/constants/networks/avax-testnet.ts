@@ -15,9 +15,9 @@ const avaxTestnetInfo: EVMNetworkInfo = {
   poolFarmRoute: EMPTY,
   name: 'Avalanche Testnet',
   icon: 'https://storage.googleapis.com/ks-setting-a3aa20b7/31645e2e-9c40-4fdf-9ddf-50d24e5399e4.svg',
-  iconDark: NOT_SUPPORT,
+
   iconSelected: NOT_SUPPORT,
-  iconDarkSelected: NOT_SUPPORT,
+
   defaultBlockSubgraph: 'https://api.thegraph.com/subgraphs/name/ducquangkstn/ethereum-block-fuji',
   etherscanUrl: 'https://testnet.snowtrace.io',
   etherscanName: 'Snowtrace',
@@ -59,10 +59,7 @@ const avaxTestnetInfo: EVMNetworkInfo = {
     routers: '0xd74134d330FB567abD08675b57dD588a7447b5Ac',
     farms: [],
   },
-  limitOrder: {
-    production: NOT_SUPPORT,
-    development: NOT_SUPPORT,
-  },
+  limitOrder: NOT_SUPPORT,
   averageBlockTimeInSeconds: 1.85,
   coingeckoNetworkId: 'avalanche',
   coingeckoNativeTokenId: 'avalanche-2',

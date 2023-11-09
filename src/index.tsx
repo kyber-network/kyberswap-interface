@@ -1,10 +1,11 @@
-import { datadogRum } from '@datadog/browser-rum'
 import * as Sentry from '@sentry/react'
+import { captureException } from '@sentry/react'
 import { BrowserTracing } from '@sentry/tracing'
 import { Web3ReactHooks, Web3ReactProvider } from '@web3-react/core'
 import { Connector } from '@web3-react/types'
 import AOS from 'aos'
 import 'aos/dist/aos.css'
+import axios from 'axios'
 import dayjs from 'dayjs'
 import duration from 'dayjs/plugin/duration'
 import relativeTime from 'dayjs/plugin/relativeTime'
@@ -20,10 +21,15 @@ import { BrowserRouter } from 'react-router-dom'
 import 'swiper/swiper-bundle.min.css'
 import 'swiper/swiper.min.css'
 
+
+import { KS_SETTING_API } from 'constants/env'
+import CampaignsUpdater from 'state/campaigns/updater'
+
 import SolanaWalletContext from 'components/SolanaWalletContext'
 import { ENV_LEVEL, GTM_ID, MIXPANEL_PROJECT_TOKEN, SENTRY_DNS, TAG } from 'constants/env'
 import { ENV_TYPE } from 'constants/type'
 import { connections } from 'constants/wallets'
+
 
 import SEO from './components/SEO'
 import { sentryRequestId } from './constants'
@@ -48,28 +54,13 @@ mixpanel.init(MIXPANEL_PROJECT_TOKEN, {
 })
 
 if (ENV_LEVEL > ENV_TYPE.LOCAL) {
-  datadogRum.init({
-    applicationId: '5bd0c243-6141-4bab-be21-5dac9b9efa9f',
-    clientToken: 'pub9163f29b2cdb31314b89ae232af37d5a',
-    site: 'datadoghq.eu',
-    service: 'kyberswap-interface',
-
-    version: TAG,
-    sampleRate: ENV_LEVEL === ENV_TYPE.PROD ? 10 : 100,
-    sessionReplaySampleRate: 100,
-    trackInteractions: true,
-    trackResources: true,
-    trackLongTasks: true,
-    defaultPrivacyLevel: 'mask-user-input',
-  })
-  datadogRum.startSessionReplayRecording()
-
   Sentry.init({
     dsn: SENTRY_DNS,
     environment: 'production',
     ignoreErrors: ['AbortError'],
     integrations: [new BrowserTracing()],
     tracesSampleRate: 0.1,
+    normalizeDepth: 5,
   })
   Sentry.configureScope(scope => {
     scope.setTag('request_id', sentryRequestId)

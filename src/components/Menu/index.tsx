@@ -1,25 +1,17 @@
 import { Trans, t } from '@lingui/macro'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { isMobile } from 'react-device-detect'
-import {
-  Award,
-  BookOpen,
-  ChevronDown,
-  Edit,
-  FileText,
-  HelpCircle,
-  Info,
-  MessageCircle,
-  PieChart,
-  Share2,
-} from 'react-feather'
+
+import { Award, BookOpen, ChevronDown, Edit, FileText, HelpCircle, Info, MessageCircle, PieChart } from 'react-feather'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
+
 import { useMedia } from 'react-use'
 import { Text } from 'rebass'
 import styled, { css } from 'styled-components'
 
 import { ReactComponent as MenuIcon } from 'assets/svg/all_icon.svg'
 import { ReactComponent as BlogIcon } from 'assets/svg/blog.svg'
+import { ReactComponent as BridgeIcon } from 'assets/svg/bridge_icon.svg'
 import { ReactComponent as LightIcon } from 'assets/svg/light.svg'
 import { ReactComponent as RoadMapIcon } from 'assets/svg/roadmap.svg'
 import { ButtonEmpty, ButtonPrimary } from 'components/Button'
@@ -33,7 +25,6 @@ import Loader from 'components/Loader'
 import MenuFlyout from 'components/MenuFlyout'
 import Row, { AutoRow } from 'components/Row'
 import Toggle from 'components/Toggle'
-import ThemeToggle from 'components/Toggle/ThemeToggle'
 import { TutorialIds } from 'components/Tutorial/TutorialSwap/constant'
 import { ENV_LEVEL, TAG } from 'constants/env'
 import { AGGREGATOR_ANALYTICS_URL, APP_PATHS, DMM_ANALYTICS_URL, TERM_FILES_PATH } from 'constants/index'
@@ -50,13 +41,7 @@ import { PROFILE_MANAGE_ROUTES } from 'pages/NotificationCenter/const'
 import { ApplicationModal } from 'state/application/actions'
 import { useModalOpen, useToggleModal } from 'state/application/hooks'
 import { useTutorialSwapGuide } from 'state/tutorial/hooks'
-import {
-  useDarkModeManager,
-  useHolidayMode,
-  useIsWhiteListKyberAI,
-  useKyberAIWidget,
-  useUserLocale,
-} from 'state/user/hooks'
+import { useHolidayMode, useIsWhiteListKyberAI, useKyberAIWidget, useUserLocale } from 'state/user/hooks'
 import { ExternalLink } from 'theme'
 import { isChristmasTime } from 'utils'
 
@@ -228,7 +213,6 @@ export default function Menu() {
 
   const open = useModalOpen(ApplicationModal.MENU)
   const toggle = useToggleModal(ApplicationModal.MENU)
-  const [darkMode, toggleSetDarkMode] = useDarkModeManager()
   const [holidayMode, toggleHolidayMode] = useHolidayMode()
   const [kyberAIWidgetActive, toggleKyberAIWidget] = useKyberAIWidget()
   const { isWhiteList } = useIsWhiteListKyberAI()
@@ -332,7 +316,7 @@ export default function Menu() {
             {bridgeLink && (
               <MenuItem>
                 <ExternalLink href={bridgeLink}>
-                  <Share2 />
+                  <BridgeIcon />
                   <Trans>Bridge Assets</Trans>
                 </ExternalLink>
               </MenuItem>
@@ -371,6 +355,7 @@ export default function Menu() {
                 ]}
               />
             </KyberAIWrapper>
+
 
             {showCampaign && (
               <MenuItem>
@@ -436,7 +421,7 @@ export default function Menu() {
                   title={t`About`}
                   link={'/about'}
                   options={[
-                    { link: '/about/kyberswap', label: 'Kyberswap' },
+                    { link: '/about/kyberswap', label: 'KyberSwap' },
                     { link: '/about/knc', label: 'KNC' },
                   ]}
                 />
@@ -584,15 +569,7 @@ export default function Menu() {
                 <Toggle isActive={kyberAIWidgetActive} toggle={noop} backgroundColor={theme.buttonBlack} />
               </NavLinkBetween>
             )}
-            <NavLinkBetween
-              onClick={() => {
-                toggleSetDarkMode()
-                handlePreferenceClickMixpanel('Dark Mode')
-              }}
-            >
-              <Trans>Dark Mode</Trans>
-              <ThemeToggle id="toggle-dark-mode-button" isDarkMode={darkMode} toggle={noop} />
-            </NavLinkBetween>
+
             <NavLinkBetween
               onClick={() => {
                 navigate(`${APP_PATHS.PROFILE_MANAGE}${PROFILE_MANAGE_ROUTES.PREFERENCE}`)

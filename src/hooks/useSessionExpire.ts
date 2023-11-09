@@ -8,6 +8,7 @@ import { APP_PATHS } from 'constants/index'
 import useLogin from 'hooks/useLogin'
 import { ConfirmModalState } from 'state/application/reducer'
 import { useSignedAccountInfo } from 'state/profile/hooks'
+import { isEmailValid } from 'utils/string'
 
 export default function useSessionExpiredGlobal() {
   const { pathname } = useLocation()
@@ -25,7 +26,10 @@ export default function useSessionExpiredGlobal() {
         title: t`Session Expired`,
         confirmText: t`Sign-in`,
         cancelText: t`Cancel`,
-        onConfirm: () => redirectSignIn(accountId || signedAccount),
+        onConfirm: () => {
+          const account = accountId || signedAccount
+          redirectSignIn(account, isEmailValid(account) ? LoginMethod.EMAIL : undefined)
+        },
         onCancel: () => {
           signInAnonymous(KyberOauth2.getConnectedAnonymousAccounts()[0])
         },
@@ -37,7 +41,9 @@ export default function useSessionExpiredGlobal() {
       if (isKyberAIPage && accountId === signedAccount) {
         delete data.cancelText
       }
-      showConfirm(data)
+
+      const isIAMPages = [APP_PATHS.IAM_CONSENT, APP_PATHS.IAM_LOGIN, APP_PATHS.IAM_LOGOUT].includes(pathname)
+      if (!isIAMPages) showConfirm(data)
     }
     KyberOauth2.on(KyberOauth2Event.SESSION_EXPIRED, listener)
     return () => KyberOauth2.off(KyberOauth2Event.SESSION_EXPIRED, listener)
@@ -52,7 +58,7 @@ export default function useSessionExpiredGlobal() {
         const accountSignHasChanged = signedMethod !== newLoginMethod || signedAccount !== newSignedAccount
         if (document.visibilityState === 'visible' && accountSignHasChanged) {
           // sync account in multi window tab
-          signIn(newSignedAccount, newLoginMethod === LoginMethod.ANONYMOUS)
+          signIn({ account: newSignedAccount, loginMethod: newLoginMethod })
         }
       } catch (error) {}
     }

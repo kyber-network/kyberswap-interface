@@ -79,7 +79,7 @@ export default function MigrateModal({
 
   const handleMigrate = () => {
     setError('')
-    switchToEthereum().then(() => {
+    switchToEthereum(t`Migrate`).then(() => {
       try {
         setPendingText(t`Migrating ${value} KNCL to KNC`)
         setShowConfirm(true)
@@ -166,7 +166,7 @@ export default function MigrateModal({
               </>
             ) : (
               <ButtonLight onClick={toggleWalletModal}>
-                <Trans>Connect Wallet</Trans>
+                <Trans>Connect</Trans>
               </ButtonLight>
             )}
           </Row>

@@ -1,10 +1,9 @@
 import { ChainId } from '@kyberswap/ks-sdk-core'
 
 import EthereumLogo from 'assets/images/ethereum-logo.png'
-import OPTIMISM from 'assets/networks/optimism-network.svg'
+import optimismIcon from 'assets/networks/optimism.svg'
 import { EVMNetworkInfo } from 'constants/networks/type'
 
-const EMPTY = ''
 const EMPTY_ARRAY: any[] = []
 const NOT_SUPPORT = null
 
@@ -16,14 +15,13 @@ const optimismInfo: EVMNetworkInfo = {
   poolFarmRoute: 'optimism',
   aggregatorRoute: 'optimism',
   name: 'Optimism',
-  icon: OPTIMISM,
-  iconDark: NOT_SUPPORT,
+  icon: optimismIcon,
   iconSelected: NOT_SUPPORT,
-  iconDarkSelected: NOT_SUPPORT,
+
   defaultBlockSubgraph: 'https://api.thegraph.com/subgraphs/name/ianlapham/uni-testing-subgraph',
   etherscanUrl: 'https://optimistic.etherscan.io',
   etherscanName: 'Optimistic Ethereum Explorer',
-  bridgeURL: EMPTY,
+  bridgeURL: 'https://app.optimism.io/bridge/deposit',
   nativeToken: {
     symbol: 'ETH',
     name: 'ETH',
@@ -62,11 +60,14 @@ const optimismInfo: EVMNetworkInfo = {
       '0x3D6AfE2fB73fFEd2E3dD00c501A174554e147a43',
       '0xf2BcDf38baA52F6b0C1Db5B025DfFf01Ae1d6dBd',
     ],
+    zap: {
+      router: '0x30C5322E4e08AD500c348007f92f120ab4E2b79e',
+      validator: '0xf0096e5B4AAfeEA1DF557264091569ba125c1172',
+      executor: '0x4f097F7074D52952006a0763312724929Ff95Cf0',
+      helper: '0x4E8419EFa0b0A149Dad77b689D37AF17f762f20A',
+    },
   },
-  limitOrder: {
-    development: '0xAF800D3EB207BAFBadE540554DF8bDCe561166f8',
-    production: '0x227B0c196eA8db17A665EA6824D972A64202E936',
-  },
+  limitOrder: '*',
   averageBlockTimeInSeconds: 120,
   coingeckoNetworkId: 'optimistic-ethereum',
   coingeckoNativeTokenId: 'ethereum',

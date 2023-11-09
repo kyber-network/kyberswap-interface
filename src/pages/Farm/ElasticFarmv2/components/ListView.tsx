@@ -23,9 +23,11 @@ import { MouseoverTooltip, MouseoverTooltipDesktopOnly } from 'components/Toolti
 import TransactionConfirmationModal, { TransactionErrorContent } from 'components/TransactionConfirmationModal'
 import { ButtonColorScheme, MinimalActionButton } from 'components/YieldPools/ElasticFarmGroup/buttons'
 import { FeeTag } from 'components/YieldPools/ElasticFarmGroup/styleds'
+import { PartnerFarmTag } from 'components/YieldPools/PartnerFarmTag'
 import { ElasticFarmV2TableRow } from 'components/YieldPools/styleds'
 import { APP_PATHS, ELASTIC_BASE_FEE_UNIT } from 'constants/index'
 import { useActiveWeb3React } from 'hooks'
+import { useAllTokens } from 'hooks/Tokens'
 import useTheme from 'hooks/useTheme'
 import { useShareFarmAddress } from 'state/farms/classic/hooks'
 import { useFarmV2Action, useUserFarmV2Info } from 'state/farms/elasticv2/hooks'
@@ -72,8 +74,10 @@ export const ListView = ({
   let amountToken1 = CurrencyAmount.fromRawAmount(farm.token1.wrapped, 0)
 
   stakedPos.forEach(item => {
-    amountToken0 = amountToken0.add(item.position.amount0)
-    amountToken1 = amountToken1.add(item.position.amount1)
+    if (item.position.amount0?.currency.equals(amountToken0.currency))
+      amountToken0 = amountToken0.add(item.position.amount0)
+    if (item.position.amount1?.currency.equals(amountToken1.currency))
+      amountToken1 = amountToken1.add(item.position.amount1)
   })
 
   const canUnstake = stakedPos.length > 0
@@ -83,7 +87,10 @@ export const ListView = ({
   const userTotalRewards = farm.totalRewards.map((item, index) => {
     return stakedPos
       .map(item => item.unclaimedRewards[index])
-      .reduce((total, cur) => total.add(cur), CurrencyAmount.fromRawAmount(item.currency, 0))
+      .reduce(
+        (total, cur) => (cur?.currency?.equals(total.currency) ? total.add(cur) : total),
+        CurrencyAmount.fromRawAmount(item.currency, 0),
+      )
   })
 
   const myDepositUSD = stakedPos.reduce((total, item) => item.stakedUsdValue + total, 0)
@@ -107,6 +114,8 @@ export const ListView = ({
   const [txHash, setTxHash] = useState('')
   const [errorMessage, setErrorMessage] = useState('')
   const [attemptingTxn, setAttemptingTxn] = useState(false)
+
+  const allTokens = useAllTokens()
 
   const handleDismiss = () => {
     setTxHash('')
@@ -167,8 +176,21 @@ export const ListView = ({
             }}
           >
             <Text fontSize={14} fontWeight={500}>
-              {getTokenSymbolWithHardcode(chainId, farm.token0.wrapped.address, farm.token0.symbol)} -{' '}
-              {getTokenSymbolWithHardcode(chainId, farm.token1.wrapped.address, farm.token1.symbol)}
+              {getTokenSymbolWithHardcode(
+                chainId,
+                farm.token0.wrapped.address,
+                farm.token0.isNative
+                  ? farm.token0.symbol
+                  : allTokens[farm.token0.address]?.symbol || farm.token0.symbol,
+              )}{' '}
+              -{' '}
+              {getTokenSymbolWithHardcode(
+                chainId,
+                farm.token1.wrapped.address,
+                farm.token1.isNative
+                  ? farm.token1.symbol
+                  : allTokens[farm.token1.address]?.symbol || farm.token1.symbol,
+              )}
             </Text>
           </Link>
 
@@ -191,6 +213,7 @@ export const ListView = ({
           >
             <Share2 size="14px" color={theme.subText} />
           </Flex>
+          <PartnerFarmTag farmPoolAddress={farm.poolAddress} />
         </Flex>
 
         <Flex sx={{ gap: '8px' }} alignItems="center">
@@ -211,7 +234,7 @@ export const ListView = ({
                     alignItems="center"
                     minWidth="fit-content"
                     sx={{ gap: '2px' }}
-                    color={range.isRemoved ? theme.warning : theme.subText}
+                    color={range.isRemoved ? theme.disableText : theme.primary}
                     fontSize={12}
                     fontWeight="500"
                   >
@@ -222,7 +245,6 @@ export const ListView = ({
                     <Text minWidth="max-content">
                       {convertTickToPrice(farm.token0, farm.token1, range.tickUpper, farm.pool.fee)}
                     </Text>
-
                     {index !== farm.ranges.length - 1 && (
                       <Text paddingLeft="6px" color={theme.subText}>
                         |
@@ -270,7 +292,7 @@ export const ListView = ({
           </Text>
         </Text>
 
-        <div>
+        <div style={{ width: 'fit-content' }}>
           <MouseoverTooltip
             width="fit-content"
             text={
@@ -295,7 +317,7 @@ export const ListView = ({
                       whiteSpace: upToSmall ? 'wrap' : 'nowrap',
                     }}
                   >
-                    <Trans>Estimated return from trading fees if you participate in the pool</Trans>
+                    <Trans>Estimated return from trading fees if you participate in the pool.</Trans>
                   </Text>
                 </Flex>
 

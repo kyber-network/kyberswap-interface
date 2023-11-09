@@ -92,20 +92,6 @@ export const config: {
     positionManagerContract: '0x2B1c7b41f6A8F2b2bc45C3233a5d5FB3cD6dC9A8',
     tickReaderContract: '0x165c68077ac06c83800d19200e6E2B08D02dE75D',
   },
-
-  [ChainId.VELAS]: {
-    subgraphUrl: 'https://velas-graph.kyberengineering.io/subgraphs/name/kybernetwork/kyberswap-elastic-velas-legacy',
-    farmContract: '',
-    positionManagerContract: '0x2B1c7b41f6A8F2b2bc45C3233a5d5FB3cD6dC9A8',
-    tickReaderContract: '0x165c68077ac06c83800d19200e6E2B08D02dE75D',
-  },
-
-  [ChainId.OASIS]: {
-    subgraphUrl: 'https://oasis-graph.kyberengineering.io/subgraphs/name/kybernetwork/kyberswap-elastic-oasis-legacy',
-    farmContract: '',
-    positionManagerContract: '0x2B1c7b41f6A8F2b2bc45C3233a5d5FB3cD6dC9A8',
-    tickReaderContract: '0x165c68077ac06c83800d19200e6E2B08D02dE75D',
-  },
 }
 
 const query = (user: string) => `
@@ -376,8 +362,8 @@ export const useRemoveLiquidityLegacy = (
   const { library } = useWeb3React()
 
   const { token0, token1, position, usd } = parsePosition(item, chainId, tokenPrices)
-  const feeValue0 = CurrencyAmount.fromRawAmount(unwrappedToken(token0), feeRewards[item.id][0])
-  const feeValue1 = CurrencyAmount.fromRawAmount(unwrappedToken(token1), feeRewards[item.id][1])
+  const feeValue0 = CurrencyAmount.fromRawAmount(unwrappedToken(token0), feeRewards[item.id]?.[0] || '0')
+  const feeValue1 = CurrencyAmount.fromRawAmount(unwrappedToken(token1), feeRewards[item.id]?.[1] || '0')
 
   const [allowedSlippage] = useUserSlippageTolerance()
   const deadline = useTransactionDeadline()

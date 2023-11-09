@@ -1,10 +1,42 @@
 export interface IKyberScoreChart {
   tag: string
   price: number
-  kyber_score: number
-  created_at: number
+  kyberScore: number
+  createdAt: number
 }
+
 export interface ITokenOverview {
+  assetId: number
+  address: string
+  symbol: string
+  logo: string
+  decimals: number
+  chain: string
+  description: string
+  webs: string[]
+  communities: string[]
+  tags: string[]
+  atl: number
+  ath: number
+  '24hVolume': number
+  price: number
+  price24hChangePercent: number
+  '24hLow': number
+  '24hHigh': number
+  '1yLow': number
+  '1yHigh': number
+  circulatingSupply: number
+  marketCap: number
+  numberOfHolders: number
+  kyberScore: {
+    score: number
+    label: string
+    ks3d: Array<{ tag: string; price: number; kyber_score: number; created_at: number }>
+  }
+}
+
+export interface IAssetOverview {
+  addresses: { chain: string; address: string }[]
   tags: string[]
   name: string
   symbol: string
@@ -13,7 +45,6 @@ export interface ITokenOverview {
   description: string
   webs: string[]
   communities: string[]
-  address: string
   price: number
   price24hChangePercent: number
   '24hLow': number
@@ -31,29 +62,35 @@ export interface ITokenOverview {
     label: string
     ks3d: Array<IKyberScoreChart>
   }
-  isWatched: boolean
+  cmcId: string
+  cgkId: string
 }
 
 export interface ITokenList {
   symbol: string
   name: string
-  SourceTokenID: string
-  tokens: Array<{ address: string; logo: string; chain: string }>
+  assetId: string
+  addresses: Array<{ address: string; chain: string }>
+  logo: string
   price: number
-  percent_change_24h: number
-  volume_24h: number
-  '7daysprice': Array<{ value: number; timestamp: number }>
-  kyber_score: number
-  ks_3d?: Array<IKyberScoreChart>
-  kyber_tag: string
-  market_cap: number
-  isWatched: boolean
-  cex_inflow_3days: number
-  cex_outflow_3days: number
-  cex_inflow_24h: number
-  cex_outflow_24h: number
-  cex_netflow_3days: number
-  discovered_on?: number
+  priceChange24H: number
+  volume24H: number
+  weekPrices: Array<{ value: number; timestamp: number }>
+  fundingRate: number
+  fundingRateExtra: {
+    symbol: string
+    symbolLogo: string
+    uMarginList: { exchangeLogo: string; exchangeName: string; rate: number }[]
+  }
+  kyberScore: number
+  kyberScore3D?: Array<IKyberScoreChart>
+  kyberScoreDelta: number
+  prevKyberScore: number
+  kyberScoreTag: string
+  marketCap: number
+  cexNetflow24H: number
+  cexNetflow3D: number
+  discoveredOn?: number
 }
 
 export interface INumberOfTrades {
@@ -103,11 +140,10 @@ export interface IFundingRate {
 }
 
 export interface ITokenSearchResult {
-  address: string
   name: string
   symbol: string
   logo: string
-  chain: string
+  assetId: string
   price: number
   priceChange24h: number
   kyberScore?: {
@@ -115,6 +151,17 @@ export interface ITokenSearchResult {
     label: string
   }
 }
+
+export interface ICustomWatchlists {
+  id: number
+  name: string
+  assetNumber: number
+  assetIds: number[] | null
+  identityId?: string
+  updatedAt?: string
+  createdAt?: string
+}
+
 export interface IPagination {
   page: number
   pageSize: number
@@ -164,9 +211,9 @@ export interface ISRLevel {
 }
 
 export enum DiscoverTokenTab {
-  OnChainAnalysis = 'On-Chain Analysis',
   TechnicalAnalysis = 'Technical Analysis',
-  // News = 'News',
+  OnChainAnalysis = 'On-Chain Analysis',
+  LiquidityAnalysis = 'Liquidity Analysis',
 }
 
 export enum ChartTab {
@@ -179,6 +226,7 @@ export enum KyberAITimeframe {
   ONE_HOUR = '1h',
   FOUR_HOURS = '4h',
   ONE_DAY = '1d',
+  THREE_DAY = '3d',
   FOUR_DAY = '4d',
   ONE_WEEK = '7d',
   ONE_MONTH = '1m',
@@ -202,14 +250,25 @@ export type ParticipantInfo = {
 }
 
 export enum KyberAIListType {
-  ALL = 'ALL',
-  MYWATCHLIST = 'MY_WATCHLIST',
-  BULLISH = 'BULLISH',
-  BEARISH = 'BEARISH',
-  TRENDING = 'TRENDING',
-  TOP_CEX_INFLOW = 'TOP_CEX_INFLOW',
-  TOP_CEX_OUTFLOW = 'TOP_CEX_OUTFLOW',
-  TOP_TRADED = 'TOP_TRADED',
-  // TOP_SOCIAL = 'TOP_SOCIAL',
-  TRENDING_SOON = 'TRENDINGSOON',
+  ALL = 'all',
+  MYWATCHLIST = 'my_watchlist',
+  BULLISH = 'bullish',
+  BEARISH = 'bearish',
+  TRENDING = 'trending',
+  TOP_CEX_INFLOW = 'top_cex_inflow',
+  TOP_CEX_OUTFLOW = 'top_cex_outflow',
+  TOP_TRADED = 'top_traded',
+  TRENDING_SOON = 'trendingsoon',
+  FUNDING_RATE = 'funding_rate',
+  KYBERSWAP_DELTA = 'kyber_score_delta',
+}
+
+export type QueryTokenParams = {
+  type?: KyberAIListType
+  chain?: string
+  page?: number
+  pageSize?: number
+  watchlist?: string
+  keywords?: string
+  sort?: string
 }

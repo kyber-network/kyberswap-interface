@@ -1,6 +1,6 @@
 import { Trans, t } from '@lingui/macro'
 import { rgba } from 'polished'
-import React, { useRef, useState } from 'react'
+import React, { RefObject, useRef, useState } from 'react'
 import { ChevronLeft } from 'react-feather'
 import { Box, Flex, Text } from 'rebass'
 import styled from 'styled-components'
@@ -10,6 +10,7 @@ import { RowBetween, RowFixed } from 'components/Row'
 import Toggle from 'components/Toggle'
 import { MouseoverTooltip, TextDashed } from 'components/Tooltip'
 import { TutorialIds } from 'components/Tutorial/TutorialSwap/constant'
+import { APP_PATHS } from 'constants/index'
 import useMixpanel, { MIXPANEL_TYPE } from 'hooks/useMixpanel'
 import { useOnClickOutside } from 'hooks/useOnClickOutside'
 import useTheme from 'hooks/useTheme'
@@ -36,6 +37,7 @@ type Props = {
   isLimitOrder?: boolean
   isSwapPage?: boolean
   isCrossChainPage?: boolean
+  swapActionsRef: RefObject<HTMLDivElement>
 }
 
 const BackText = styled.span`
@@ -52,6 +54,7 @@ const SettingsPanel: React.FC<Props> = ({
   onBack,
   onClickLiquiditySources,
   onClickGasPriceTracker,
+  swapActionsRef,
 }) => {
   const theme = useTheme()
 
@@ -83,7 +86,9 @@ const SettingsPanel: React.FC<Props> = ({
   const [showConfirmation, setShowConfirmation] = useState(false)
 
   const containerRef = useRef<HTMLDivElement>(null)
-  useOnClickOutside(containerRef, () => !showConfirmation && onBack())
+  useOnClickOutside([containerRef, swapActionsRef], () => !showConfirmation && onBack())
+
+  const isPartnerSwap = window.location.pathname.includes(APP_PATHS.PARTNER_SWAP)
 
   return (
     <Box width="100%" className={className} id={TutorialIds.TRADING_SETTING_CONTENT} ref={containerRef}>
@@ -136,32 +141,36 @@ const SettingsPanel: React.FC<Props> = ({
               <Trans>Display Settings</Trans>
             </Text>
             <AutoColumn gap="md">
-              <RowBetween>
-                <RowFixed>
-                  <TextDashed fontSize={12} fontWeight={400} color={theme.subText} underlineColor={theme.border}>
-                    <MouseoverTooltip text={<Trans>Turn on to display KyberAI banner</Trans>} placement="right">
-                      <Trans>KyberAI Banner</Trans>
-                    </MouseoverTooltip>
-                  </TextDashed>
-                </RowFixed>
-                <Toggle isActive={isShowKyberAIBanner} toggle={toggleKyberAIBanner} />
-              </RowBetween>
-              <RowBetween>
-                <RowFixed>
-                  <TextDashed fontSize={12} fontWeight={400} color={theme.subText} underlineColor={theme.border}>
-                    <MouseoverTooltip text={<Trans>Turn on to display live chart</Trans>} placement="right">
-                      <Trans>Live Chart</Trans>
-                    </MouseoverTooltip>
-                  </TextDashed>
-                </RowFixed>
-                <Toggle isActive={isShowLiveChart} toggle={handleToggleLiveChart} />
-              </RowBetween>
+              {!isPartnerSwap && (
+                <RowBetween>
+                  <RowFixed>
+                    <TextDashed fontSize={12} fontWeight={400} color={theme.subText} underlineColor={theme.border}>
+                      <MouseoverTooltip text={<Trans>Turn on to display KyberAI banner.</Trans>} placement="right">
+                        <Trans>KyberAI Banner</Trans>
+                      </MouseoverTooltip>
+                    </TextDashed>
+                  </RowFixed>
+                  <Toggle isActive={isShowKyberAIBanner} toggle={toggleKyberAIBanner} />
+                </RowBetween>
+              )}
+              {!isPartnerSwap && (
+                <RowBetween>
+                  <RowFixed>
+                    <TextDashed fontSize={12} fontWeight={400} color={theme.subText} underlineColor={theme.border}>
+                      <MouseoverTooltip text={<Trans>Turn on to display live chart.</Trans>} placement="right">
+                        <Trans>Live Chart</Trans>
+                      </MouseoverTooltip>
+                    </TextDashed>
+                  </RowFixed>
+                  <Toggle isActive={isShowLiveChart} toggle={handleToggleLiveChart} />
+                </RowBetween>
+              )}
               {(isSwapPage || isCrossChainPage) && (
                 <>
                   <RowBetween>
                     <RowFixed>
                       <TextDashed fontSize={12} fontWeight={400} color={theme.subText} underlineColor={theme.border}>
-                        <MouseoverTooltip text={<Trans>Turn on to display trade route</Trans>} placement="right">
+                        <MouseoverTooltip text={<Trans>Turn on to display trade route.</Trans>} placement="right">
                           <Trans>Trade Route</Trans>
                         </MouseoverTooltip>
                       </TextDashed>

@@ -1,8 +1,8 @@
 import { ChainId } from '@kyberswap/ks-sdk-core'
 
+import avalancheIcon from 'assets/networks/avalanche.svg'
 import { EVMNetworkInfo } from 'constants/networks/type'
 
-const EMPTY = ''
 const NOT_SUPPORT = null
 
 const avaxInfo: EVMNetworkInfo = {
@@ -13,18 +13,17 @@ const avaxInfo: EVMNetworkInfo = {
   poolFarmRoute: 'avalanche',
   aggregatorRoute: 'avalanche',
   name: 'Avalanche',
-  icon: 'https://storage.googleapis.com/ks-setting-a3aa20b7/31645e2e-9c40-4fdf-9ddf-50d24e5399e4.svg',
-  iconDark: NOT_SUPPORT,
+  icon: avalancheIcon,
   iconSelected: NOT_SUPPORT,
-  iconDarkSelected: NOT_SUPPORT,
+
   defaultBlockSubgraph: 'https://api.thegraph.com/subgraphs/name/ducquangkstn/avalache-blocks',
   etherscanUrl: 'https://snowtrace.io',
   etherscanName: 'Snowtrace',
-  bridgeURL: EMPTY,
+  bridgeURL: 'https://core.app/bridge',
   nativeToken: {
     symbol: 'AVAX',
     name: 'AVAX',
-    logo: 'https://storage.googleapis.com/ks-setting-a3aa20b7/31645e2e-9c40-4fdf-9ddf-50d24e5399e4.svg',
+    logo: 'https://storage.googleapis.com/ks-setting-1d682dca/e72081b5-cb5f-4fb6-b771-ac189bdfd7c81699420213175.png',
     decimal: 18,
     minForGas: 10 ** 16,
   },
@@ -75,11 +74,14 @@ const avaxInfo: EVMNetworkInfo = {
       '0x3d6afe2fb73ffed2e3dd00c501a174554e147a43',
       '0xf2BcDf38baA52F6b0C1Db5B025DfFf01Ae1d6dBd',
     ],
+    zap: {
+      router: '0x30C5322E4e08AD500c348007f92f120ab4E2b79e',
+      validator: '0xf0096e5B4AAfeEA1DF557264091569ba125c1172',
+      executor: '0x4f097F7074D52952006a0763312724929Ff95Cf0',
+      helper: '0x4E8419EFa0b0A149Dad77b689D37AF17f762f20A',
+    },
   },
-  limitOrder: {
-    development: '0x1877Ec0770901cc6886FDA7E7525a78c2Ed4e975',
-    production: '0x227B0c196eA8db17A665EA6824D972A64202E936',
-  },
+  limitOrder: '*',
   averageBlockTimeInSeconds: 1.85,
   coingeckoNetworkId: 'avalanche',
   coingeckoNativeTokenId: 'avalanche-2',
