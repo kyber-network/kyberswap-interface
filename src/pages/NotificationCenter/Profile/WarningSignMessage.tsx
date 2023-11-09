@@ -27,7 +27,7 @@ const WarningWrapper = styled.div`
     padding: 12px 14px;
   `}
 `
-const DOC_URL = 'https://docs.kyberswap.com/kyberswap-solutions/kyberswap-interface/profiles/profile-customization'
+const DOC_URL = 'https://docs.kyberswap.com/kyberswap-solutions/kyberswap-interface/profiles'
 const WarningSignMessage = () => {
   const { signIn } = useLogin()
   const { pendingAuthentication } = useSessionInfo()
@@ -63,7 +63,7 @@ const WarningSignMessage = () => {
             <Trans>Read More</Trans>
           </ButtonOutlined>
         )}
-        <ButtonPrimary width={btnWidth} height={'30px'} fontSize={'14px'} onClick={() => signIn(account)}>
+        <ButtonPrimary width={btnWidth} height={'30px'} fontSize={'14px'} onClick={() => signIn({ account })}>
           <Trans>Sign-in</Trans>
         </ButtonPrimary>
       </Row>

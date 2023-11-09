@@ -2,7 +2,7 @@ import { Trans } from '@lingui/macro'
 import { ReactNode, useCallback, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Text } from 'rebass'
-import styled, { css } from 'styled-components'
+import styled, { CSSProperties, css } from 'styled-components'
 
 import NotificationIcon from 'components/Icons/NotificationIcon'
 import { APP_PATHS } from 'constants/index'
@@ -30,7 +30,7 @@ const SubscribeBtn = styled(ButtonPrimary)<{
 }>`
   overflow: hidden;
   width: fit-content;
-  height: 36px;
+  height: 32px;
   padding: 8px 12px;
   background: ${({ bgColor }) => bgColor};
   color: ${({ theme, isDisabled }) => (isDisabled ? theme.border : theme.textReverse)};
@@ -38,7 +38,9 @@ const SubscribeBtn = styled(ButtonPrimary)<{
     background: ${({ bgColor }) => bgColor};
   }
   ${({ iconOnly, bgColor }) => iconOnly && cssSubscribeBtnSmall(bgColor)};
-  ${({ theme, bgColor }) => theme.mediaWidth.upToExtraSmall`
+  ${({ theme, bgColor, iconOnly }) =>
+    iconOnly !== false &&
+    theme.mediaWidth.upToExtraSmall`
    ${cssSubscribeBtnSmall(bgColor)}
   `}
 `
@@ -48,22 +50,26 @@ const ButtonText = styled(Text)<{ iconOnly?: boolean }>`
   font-weight: 500;
   margin-left: 6px !important;
   ${({ iconOnly }) => iconOnly && `display: none`};
-  ${({ theme }) => theme.mediaWidth.upToExtraSmall`
+  ${({ theme, iconOnly }) =>
+    iconOnly !== false &&
+    theme.mediaWidth.upToExtraSmall`
     display: none;
   `}
 `
 export default function SubscribeNotificationButton({
   subscribeTooltip,
-  iconOnly = false,
+  iconOnly,
   trackingEvent,
   onClick,
   topicId,
+  style,
 }: {
   subscribeTooltip?: ReactNode
   iconOnly?: boolean
   trackingEvent?: MIXPANEL_TYPE
   onClick?: () => void
   topicId?: string
+  style?: CSSProperties
 }) {
   const theme = useTheme()
 
@@ -93,7 +99,7 @@ export default function SubscribeNotificationButton({
 
   return (
     <MouseoverTooltipDesktopOnly text={subscribeTooltip} width="400px">
-      <SubscribeBtn bgColor={theme.primary} onClick={onClickBtn} iconOnly={iconOnly}>
+      <SubscribeBtn bgColor={theme.primary} onClick={onClickBtn} iconOnly={iconOnly} style={style}>
         <NotificationIcon size={16} />
         <ButtonText iconOnly={iconOnly}>
           {hasSubscribe ? <Trans>Unsubscribe</Trans> : <Trans>Subscribe</Trans>}

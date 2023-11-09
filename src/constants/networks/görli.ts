@@ -1,8 +1,8 @@
 import { ChainId } from '@kyberswap/ks-sdk-core'
 
 import EthereumLogo from 'assets/images/ethereum-logo.png'
-import Mainnet from 'assets/networks/mainnet-network.svg'
-import { KS_SETTING_API } from 'constants/env'
+import ethereumIcon from 'assets/networks/ethereum.svg'
+import { EnvKeys } from 'constants/env'
 import { EVMNetworkInfo } from 'constants/networks/type'
 
 const EMPTY = ''
@@ -17,14 +17,12 @@ const görliInfo: EVMNetworkInfo = {
   poolFarmRoute: EMPTY,
   aggregatorRoute: EMPTY,
   name: 'Görli',
-  icon: Mainnet,
-  iconDark: NOT_SUPPORT,
+  icon: ethereumIcon,
   iconSelected: NOT_SUPPORT,
-  iconDarkSelected: NOT_SUPPORT,
+
   defaultBlockSubgraph: 'https://api.thegraph.com/subgraphs/name/dramacrypto/goerli-blocks',
   etherscanUrl: 'https://goerli.etherscan.io',
   etherscanName: 'Goerli Explorer',
-  tokenListUrl: `${KS_SETTING_API}/v1/tokens?chainIds=${ChainId.GÖRLI}&isWhitelisted=${true}`,
   bridgeURL: EMPTY,
   nativeToken: {
     symbol: 'gETH',
@@ -60,9 +58,9 @@ const görliInfo: EVMNetworkInfo = {
     routers: '0x45a5B8Cf524EC574b40e80274F0F3856A679C5c4',
     farms: [],
     farmv2Quoter: '0x1e9C12303855433052A31815Dc28C146aF3e9C1F',
-    farmV2Contract: '0xdd463A7a71122D0248f3Fa1eF975202bAEe74B46',
+    farmV2S: ['0xdd463A7a71122D0248f3Fa1eF975202bAEe74B46'],
   },
-  limitOrder: { development: '0x43E49489dD38dbFF4Aef0d7FC34026aBEF0e1134', production: NOT_SUPPORT },
+  limitOrder: [EnvKeys.DEV],
   averageBlockTimeInSeconds: 13.13,
   coingeckoNetworkId: 'ethereum',
   coingeckoNativeTokenId: 'ethereum',

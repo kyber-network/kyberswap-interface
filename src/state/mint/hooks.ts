@@ -300,7 +300,7 @@ export function useDerivedZapInInfo(
   }
 
   const userInCurrencyAmount = useMemo(() => {
-    return tryParseAmount(typedValue, currencies[independentField], true)
+    return tryParseAmount(typedValue, currencies[independentField])
   }, [currencies, independentField, typedValue])
 
   const userIn = useMemo(() => {

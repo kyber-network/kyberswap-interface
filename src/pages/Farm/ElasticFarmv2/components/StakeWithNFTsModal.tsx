@@ -211,10 +211,12 @@ const StakeWithNFTsModal = ({
   isOpen,
   onDismiss,
   farm,
+  farmAddress,
 }: {
   farm: ElasticFarmV2
   isOpen: boolean
   onDismiss: () => void
+  farmAddress: string
 }) => {
   const [activeRange, setActiveRange] = useState(farm.ranges.filter(item => !item.isRemoved)[0])
 
@@ -252,7 +254,7 @@ const StakeWithNFTsModal = ({
     })
     mixpanel.track('ElasticFarmV2 - StakeModal - NFT Clicked', { nftId: tokenId })
   }, [])
-  const { deposit } = useFarmV2Action()
+  const { deposit } = useFarmV2Action(farmAddress)
 
   const [showConfirmModal, setShowConfirmModal] = useState(false)
   const [txHash, setTxHash] = useState('')
@@ -299,7 +301,9 @@ const StakeWithNFTsModal = ({
 
   const addliquidityElasticPool = `/${networkInfo.route}${APP_PATHS.ELASTIC_CREATE_POOL}/${
     farm.token0.isNative ? farm.token0.symbol : farm.token0.address
-  }/${farm.token1.isNative ? farm.token1.symbol : farm.token1.address}/${farm.pool.fee}?farmRange=${activeRange.index}`
+  }/${farm.token1.isNative ? farm.token1.symbol : farm.token1.address}/${farm.pool.fee}?farmRange=${
+    activeRange.index
+  }&fId=${farm.fId}`
 
   const upToMedium = useMedia(`(max-width: ${MEDIA_WIDTHS.upToMedium}px)`)
 

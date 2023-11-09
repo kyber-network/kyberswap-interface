@@ -1,4 +1,5 @@
 import { ChainId, ChainType, getChainType } from '@kyberswap/ks-sdk-core'
+import { t } from '@lingui/macro'
 
 import { SolanaNetworkInfo } from 'constants/networks/type'
 
@@ -7,6 +8,7 @@ import {
   aurora,
   avax,
   avaxTestnet,
+  base,
   bnb,
   bnbTestnet,
   bttc,
@@ -14,14 +16,14 @@ import {
   ethereum,
   fantom,
   görli,
-  lineaTestnet,
+  linea,
   matic,
   mumbai,
-  oasis,
   optimism,
+  scroll,
   solana,
   solanaDevnet,
-  velas,
+  zkEvm,
   zksync,
 } from './networks/index'
 import { EVMNetworkInfo } from './networks/type'
@@ -31,7 +33,7 @@ type SOLANA_NETWORK = ChainId.SOLANA | ChainId.SOLANA_DEVNET
 type NETWORKS_INFO_CONFIG_TYPE = { [chainId in EVM_NETWORK]: EVMNetworkInfo } & {
   [chainId in SOLANA_NETWORK]: SolanaNetworkInfo
 }
-export const NETWORKS_INFO_CONFIG: NETWORKS_INFO_CONFIG_TYPE = {
+const NETWORKS_INFO_CONFIG: NETWORKS_INFO_CONFIG_TYPE = {
   [ChainId.MAINNET]: ethereum,
   [ChainId.GÖRLI]: görli,
   [ChainId.MATIC]: matic,
@@ -44,12 +46,13 @@ export const NETWORKS_INFO_CONFIG: NETWORKS_INFO_CONFIG_TYPE = {
   [ChainId.CRONOS]: cronos,
   [ChainId.ARBITRUM]: arbitrum,
   [ChainId.BTTC]: bttc,
-  [ChainId.VELAS]: velas,
   [ChainId.AURORA]: aurora,
-  [ChainId.OASIS]: oasis,
   [ChainId.OPTIMISM]: optimism,
   [ChainId.ZKSYNC]: zksync,
-  [ChainId.LINEA_TESTNET]: lineaTestnet,
+  [ChainId.LINEA]: linea,
+  [ChainId.ZKEVM]: zkEvm,
+  [ChainId.BASE]: base,
+  [ChainId.SCROLL]: scroll,
   [ChainId.SOLANA]: solana,
   [ChainId.SOLANA_DEVNET]: solanaDevnet,
 } as const
@@ -63,25 +66,27 @@ export const NETWORKS_INFO = new Proxy(NETWORKS_INFO_CONFIG, {
   },
 })
 
-export const SUPPORTED_NETWORKS = Object.keys(NETWORKS_INFO).map(Number) as ChainId[]
+// temporary disable Solana
+// todo: either enable back or completely remove Solana from codebase
+export const SUPPORTED_NETWORKS = Object.keys(NETWORKS_INFO).map(Number).filter(isEVM)
 
 export const MAINNET_NETWORKS = [
   ChainId.MAINNET,
-  ChainId.BSCMAINNET,
-  ChainId.MATIC,
-  ChainId.AVAXMAINNET,
   ChainId.ARBITRUM,
   ChainId.OPTIMISM,
-  ChainId.SOLANA,
-  ChainId.BTTC,
-  ChainId.OASIS,
-  ChainId.FANTOM,
-  ChainId.CRONOS,
-  ChainId.VELAS,
-  ChainId.AURORA,
+  ChainId.LINEA,
+  ChainId.MATIC,
+  ChainId.ZKEVM,
   ChainId.ZKSYNC,
-  // TODO(viet-nv): update when integrating LINEA MAINNET
-  ChainId.LINEA_TESTNET,
+  ChainId.BASE,
+  ChainId.SCROLL,
+  ChainId.BSCMAINNET,
+  ChainId.AVAXMAINNET,
+  // ChainId.SOLANA,
+  ChainId.FANTOM,
+  ChainId.BTTC,
+  ChainId.CRONOS,
+  ChainId.AURORA,
 ] as const
 
 export const EVM_NETWORKS = SUPPORTED_NETWORKS.filter(chainId => getChainType(chainId) === ChainType.EVM) as Exclude<
@@ -128,30 +133,11 @@ export function isSupportedChainId(chainId?: number): chainId is ChainId {
 }
 
 export const FAUCET_NETWORKS = [ChainId.BTTC]
-export const CHAINS_SUPPORT_NEW_POOL_FARM_API: readonly ChainId[] = [
-  ChainId.MAINNET,
-  // ChainId.MUMBAI,
-  // ChainId.MATIC,
-  // ChainId.BSCTESTNET,
-  ChainId.BSCMAINNET,
-  // ChainId.AVAXTESTNET,
-  ChainId.AVAXMAINNET,
-  ChainId.FANTOM,
-  ChainId.CRONOS,
-  ChainId.BTTC,
-  ChainId.ARBITRUM,
-  ChainId.AURORA,
-  // ChainId.VELAS,
-  // ChainId.OASIS,
-  ChainId.OPTIMISM,
-]
 
 // Fee options instead of dynamic fee
 export const STATIC_FEE_OPTIONS: { [chainId: number]: number[] | undefined } = {
   [ChainId.ARBITRUM]: [8, 10, 50, 300, 500, 1000],
   [ChainId.AURORA]: [8, 10, 50, 300, 500, 1000],
-  [ChainId.VELAS]: [8, 10, 50, 300, 500, 1000],
-  [ChainId.OASIS]: [8, 10, 50, 300, 500, 1000],
   [ChainId.MAINNET]: [8, 10, 50, 300, 500, 1000],
   [ChainId.MATIC]: [8, 10, 50, 300, 500, 1000],
   [ChainId.AVAXMAINNET]: [8, 10, 50, 300, 500, 1000],
@@ -162,31 +148,26 @@ export const STATIC_FEE_OPTIONS: { [chainId: number]: number[] | undefined } = {
   [ChainId.OPTIMISM]: [8, 10, 50, 300, 500, 1000],
   [ChainId.GÖRLI]: [8, 10, 50, 300, 500, 1000],
   [ChainId.ZKSYNC]: [8, 10, 50, 300, 500, 1000],
-  [ChainId.LINEA_TESTNET]: [8, 10, 50, 300, 500, 1000],
+  [ChainId.LINEA]: [8, 10, 50, 300, 500, 1000],
+  [ChainId.ZKEVM]: [8, 10, 50, 300, 500, 1000],
+  [ChainId.BASE]: [8, 10, 50, 300, 500, 1000],
+  [ChainId.SCROLL]: [8, 10, 50, 300, 500, 1000],
 }
 
 export const ONLY_STATIC_FEE_CHAINS = [
   ChainId.ARBITRUM,
   ChainId.AURORA,
-  ChainId.VELAS,
-  ChainId.OASIS,
   ChainId.OPTIMISM,
   ChainId.GÖRLI,
   ChainId.ZKSYNC,
-  ChainId.LINEA_TESTNET,
+  ChainId.LINEA,
+  ChainId.ZKEVM,
+  ChainId.BASE,
+  ChainId.SCROLL,
 ]
 
 // hardcode for unavailable subgraph
 export const ONLY_DYNAMIC_FEE_CHAINS: ChainId[] = []
-
-// Keys are present_on_chains' value.
-export const TRENDING_SOON_SUPPORTED_NETWORKS: { [p: string]: ChainId } = {
-  eth: ChainId.MAINNET,
-  bsc: ChainId.BSCMAINNET,
-  polygon: ChainId.MATIC,
-  avax: ChainId.AVAXMAINNET,
-  fantom: ChainId.FANTOM,
-}
 
 export const CLAIM_REWARDS_DATA_URL: { [chainId: number]: string } = {
   [ChainId.AVAXMAINNET]:
@@ -201,5 +182,39 @@ export const DEFAULT_REWARDS: { [key: string]: string[] } = {
   [ChainId.MAINNET]: ['0x9F52c8ecbEe10e00D9faaAc5Ee9Ba0fF6550F511'],
 }
 
-// by pass invalid price impact/unable to calculate price impact/price impact too large
-export const CHAINS_BYPASS_PRICE_IMPACT = [ChainId.LINEA_TESTNET]
+export const SUPPORTED_NETWORKS_FOR_MY_EARNINGS = [
+  ChainId.MAINNET,
+  ChainId.ARBITRUM,
+  ChainId.OPTIMISM,
+  ChainId.MATIC,
+  ChainId.LINEA,
+  ChainId.BASE,
+  ChainId.ZKSYNC,
+  ChainId.SCROLL,
+  ChainId.BSCMAINNET,
+  ChainId.AVAXMAINNET,
+  ChainId.FANTOM,
+  ChainId.CRONOS,
+  ChainId.BTTC,
+  ChainId.AURORA,
+]
+export const COMING_SOON_NETWORKS_FOR_MY_EARNINGS: ChainId[] = []
+export const COMING_SOON_NETWORKS_FOR_MY_EARNINGS_LEGACY: ChainId[] = []
+export const COMING_SOON_NETWORKS_FOR_MY_EARNINGS_CLASSIC: ChainId[] = [ChainId.CRONOS, ChainId.AURORA]
+export const BLOCTO_SUPPORTED_NETWORKS: ChainId[] = [
+  ChainId.MAINNET,
+  ChainId.ARBITRUM,
+  ChainId.OPTIMISM,
+  ChainId.MATIC,
+  ChainId.BSCMAINNET,
+  ChainId.AVAXMAINNET,
+]
+
+export const ELASTIC_NOT_SUPPORTED: { [key: string]: string } = {
+  [ChainId.AURORA]: t`Elastic is not supported on Aurora. Please switch to other chains`,
+  [ChainId.ZKSYNC]: t`Elastic will be available soon`,
+}
+
+export const CLASSIC_NOT_SUPPORTED: { [key: string]: string } = {
+  [ChainId.BASE]: t`Classic is not supported on Base. Please switch to other chains`,
+}

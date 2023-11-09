@@ -29,6 +29,8 @@ export type TransactionExtraInfo2Token = {
   chainIdIn?: ChainId
   chainIdOut?: ChainId
   nftId?: string
+  zapAmountIn?: string
+  zapSymbolIn?: string
 }
 
 export type TransactionExtraInfoHarvestFarm = {
@@ -132,6 +134,7 @@ export enum TRANSACTION_TYPE {
   CLASSIC_REMOVE_LIQUIDITY = 'Classic Remove Liquidity',
   ELASTIC_REMOVE_LIQUIDITY = 'Elastic Remove Liquidity',
   ELASTIC_INCREASE_LIQUIDITY = 'Elastic Increase Liquidity',
+  ELASTIC_ZAP_IN_LIQUIDITY = 'Elastic Zap-in Liquidity',
   ELASTIC_COLLECT_FEE = 'Elastic Collect Fee',
 
   STAKE = 'Stake Into Farm',
@@ -151,6 +154,7 @@ export enum TRANSACTION_TYPE {
   KYBERDAO_MIGRATE = 'KyberDAO Migrate',
   KYBERDAO_VOTE = 'KyberDAO Vote',
   KYBERDAO_CLAIM = 'KyberDAO Claim Voting Reward',
+  KYBERDAO_CLAIM_GAS_REFUND = 'Gas Refund',
 
   CANCEL_LIMIT_ORDER = 'Cancel Limit Order',
   TRANSFER_TOKEN = 'Send',
@@ -172,6 +176,7 @@ export const GROUP_TRANSACTION_BY_TYPE = {
     TRANSACTION_TYPE.CLASSIC_REMOVE_LIQUIDITY,
     TRANSACTION_TYPE.ELASTIC_REMOVE_LIQUIDITY,
     TRANSACTION_TYPE.ELASTIC_INCREASE_LIQUIDITY,
+    TRANSACTION_TYPE.ELASTIC_ZAP_IN_LIQUIDITY,
     TRANSACTION_TYPE.ELASTIC_DEPOSIT_LIQUIDITY,
     TRANSACTION_TYPE.ELASTIC_WITHDRAW_LIQUIDITY,
     TRANSACTION_TYPE.STAKE,
@@ -188,6 +193,7 @@ export const GROUP_TRANSACTION_BY_TYPE = {
     TRANSACTION_TYPE.KYBERDAO_MIGRATE,
     TRANSACTION_TYPE.KYBERDAO_VOTE,
     TRANSACTION_TYPE.KYBERDAO_CLAIM,
+    TRANSACTION_TYPE.KYBERDAO_CLAIM_GAS_REFUND,
   ],
   OTHER: [
     // to make sure you don't forgot

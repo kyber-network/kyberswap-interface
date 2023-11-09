@@ -1,11 +1,9 @@
 import { ChainId } from '@kyberswap/ks-sdk-core'
 
 import EthereumLogo from 'assets/images/ethereum-logo.png'
-import OPTIMISM from 'assets/networks/optimism-network.svg'
-import { KS_SETTING_API } from 'constants/env'
+import optimismIcon from 'assets/networks/optimism.svg'
 import { EVMNetworkInfo } from 'constants/networks/type'
 
-const EMPTY = ''
 const EMPTY_ARRAY: any[] = []
 const NOT_SUPPORT = null
 
@@ -17,15 +15,13 @@ const optimismInfo: EVMNetworkInfo = {
   poolFarmRoute: 'optimism',
   aggregatorRoute: 'optimism',
   name: 'Optimism',
-  icon: OPTIMISM,
-  iconDark: NOT_SUPPORT,
+  icon: optimismIcon,
   iconSelected: NOT_SUPPORT,
-  iconDarkSelected: NOT_SUPPORT,
+
   defaultBlockSubgraph: 'https://api.thegraph.com/subgraphs/name/ianlapham/uni-testing-subgraph',
   etherscanUrl: 'https://optimistic.etherscan.io',
   etherscanName: 'Optimistic Ethereum Explorer',
-  tokenListUrl: `${KS_SETTING_API}/v1/tokens?chainIds=${ChainId.OPTIMISM}&isWhitelisted=${true}`,
-  bridgeURL: EMPTY,
+  bridgeURL: 'https://app.optimism.io/bridge/deposit',
   nativeToken: {
     symbol: 'ETH',
     name: 'ETH',
@@ -59,12 +55,19 @@ const optimismInfo: EVMNetworkInfo = {
     routers: '0xF9c2b5746c946EF883ab2660BbbB1f10A5bdeAb4',
     farms: ['0x7D5ba536ab244aAA1EA42aB88428847F25E3E676'],
     farmv2Quoter: '0x6AFeb9EDd6Cf44fA8E89b1eee28284e6dD7705C8',
-    farmV2Contract: '0xA70a1Ad0F91c52c79e177c5A18a7C9E1C4360e0e',
+    farmV2S: [
+      '0xA70a1Ad0F91c52c79e177c5A18a7C9E1C4360e0e',
+      '0x3D6AfE2fB73fFEd2E3dD00c501A174554e147a43',
+      '0xf2BcDf38baA52F6b0C1Db5B025DfFf01Ae1d6dBd',
+    ],
+    zap: {
+      router: '0x30C5322E4e08AD500c348007f92f120ab4E2b79e',
+      validator: '0xf0096e5B4AAfeEA1DF557264091569ba125c1172',
+      executor: '0x4f097F7074D52952006a0763312724929Ff95Cf0',
+      helper: '0x4E8419EFa0b0A149Dad77b689D37AF17f762f20A',
+    },
   },
-  limitOrder: {
-    development: '0xAF800D3EB207BAFBadE540554DF8bDCe561166f8',
-    production: '0x227B0c196eA8db17A665EA6824D972A64202E936',
-  },
+  limitOrder: '*',
   averageBlockTimeInSeconds: 120,
   coingeckoNetworkId: 'optimistic-ethereum',
   coingeckoNativeTokenId: 'ethereum',

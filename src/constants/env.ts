@@ -13,11 +13,11 @@ const required = (envKey: string): string => {
 
 export const GOOGLE_RECAPTCHA_KEY = required('GOOGLE_RECAPTCHA_KEY')
 export const PRICE_API = required('PRICE_API')
-export const DEFAULT_AGGREGATOR_API = required('DEFAULT_AGGREGATOR_API')
 export const AGGREGATOR_API = required('AGGREGATOR_API')
 export const SENTRY_DNS = required('SENTRY_DNS')
 export const REWARD_SERVICE_API = required('REWARD_SERVICE_API')
 export const KS_SETTING_API = required('KS_SETTING_API')
+export const BLACKJACK_API = required('BLACKJACK_API')
 export const BLOCK_SERVICE_API = required('BLOCK_SERVICE_API')
 export const PRICE_CHART_API = required('PRICE_CHART_API')
 export const AGGREGATOR_STATS_API = required('AGGREGATOR_STATS_API')
@@ -40,14 +40,13 @@ export const ENV_LEVEL = !import.meta.env.VITE_TAG
   ? ENV_TYPE.DEV
   : ENV_TYPE.PROD
 
-export const LIMIT_ORDER_API_READ = required('LIMIT_ORDER_API_READ')
-export const LIMIT_ORDER_API_WRITE = required('LIMIT_ORDER_API_WRITE')
+export const LIMIT_ORDER_API = required('LIMIT_ORDER_API')
 export const KYBER_DAO_STATS_API = required('KYBER_DAO_STATS_API')
 
 export const OAUTH_CLIENT_ID = required('OAUTH_CLIENT_ID')
 export const BFF_API = required('BFF_API')
 export const KYBER_AI_REFERRAL_ID = required('KYBER_AI_REFERRAL_ID')
-export const KYBER_AI_TOPIC_ID = required('KYBER_AI_TOPIC_ID')
+export const KYBER_AI_TOPIC_ID = required('KYBER_AI_TOPIC_ID').split(',')
 export const PRICE_ALERT_TOPIC_ID = required('PRICE_ALERT_TOPIC_ID')
 export const ELASTIC_POOL_TOPIC_ID = required('ELASTIC_POOL_TOPIC_ID')
 export const BUCKET_NAME = required('BUCKET_NAME')
@@ -64,7 +63,7 @@ type FirebaseConfig = {
   measurementId?: string
 }
 
-export const FIREBASE: { [key: string]: { DEFAULT: FirebaseConfig; LIMIT_ORDER?: FirebaseConfig } } = {
+export const FIREBASE: { [key in EnvKeys]: { DEFAULT: FirebaseConfig; LIMIT_ORDER?: FirebaseConfig } } = {
   development: {
     LIMIT_ORDER: {
       apiKey: 'AIzaSyBHRrinrQ3CXVrevZN442fjG0EZ-nYNNaU',
@@ -75,13 +74,13 @@ export const FIREBASE: { [key: string]: { DEFAULT: FirebaseConfig; LIMIT_ORDER?:
       appId: '1:522790089501:web:524403003ae65c09c727f4',
     },
     DEFAULT: {
-      apiKey: 'AIzaSyD1UhS2D-a5D6e20SuKgx87FGitbQUL_V8',
-      authDomain: 'notification-local-73771.firebaseapp.com',
-      projectId: 'notification-local-73771',
-      storageBucket: 'notification-local-73771.appspot.com',
-      messagingSenderId: '227120017035',
-      appId: '1:227120017035:web:36592ab3e81b5614b7ae8e',
-      measurementId: 'G-Q3EPQSWMM5',
+      apiKey: 'AIzaSyDszHtJ4CJq0mwjBJ1pTt5OOzG5tiooEsg',
+      authDomain: 'test-bace2.firebaseapp.com',
+      databaseURL: 'https://test-bace2-default-rtdb.asia-southeast1.firebasedatabase.app',
+      projectId: 'test-bace2',
+      storageBucket: 'test-bace2.appspot.com',
+      messagingSenderId: '337703820408',
+      appId: '1:337703820408:web:2fb16ef71941817dec618d',
     },
   },
   staging: {
@@ -114,14 +113,17 @@ export const FIREBASE: { [key: string]: { DEFAULT: FirebaseConfig; LIMIT_ORDER?:
   },
 }
 
-const ANNOUNCEMENT_TEMPLATE_IDS: { [key: string]: { [type: string]: string } } = {
+type TemplateConfig = { [type in PrivateAnnouncementType]: string } & { EXCLUDE: string }
+const ANNOUNCEMENT_TEMPLATE_IDS: { [key in EnvKeys]: TemplateConfig } = {
   development: {
     [PrivateAnnouncementType.PRICE_ALERT]: '53',
     [PrivateAnnouncementType.LIMIT_ORDER]: '8,9,10,11,33,34,35,36',
     [PrivateAnnouncementType.BRIDGE_ASSET]: '37,38',
     [PrivateAnnouncementType.CROSS_CHAIN]: '48,49',
     [PrivateAnnouncementType.KYBER_AI]: '46',
+    [PrivateAnnouncementType.KYBER_AI_WATCHLIST]: '54',
     [PrivateAnnouncementType.ELASTIC_POOLS]: '39,40',
+    [PrivateAnnouncementType.DIRECT_MESSAGE]: '',
     EXCLUDE: '2,29,1,47,50,44,45',
   },
   staging: {
@@ -130,7 +132,9 @@ const ANNOUNCEMENT_TEMPLATE_IDS: { [key: string]: { [type: string]: string } } =
     [PrivateAnnouncementType.BRIDGE_ASSET]: '12,13',
     [PrivateAnnouncementType.CROSS_CHAIN]: '25,26',
     [PrivateAnnouncementType.KYBER_AI]: '27',
+    [PrivateAnnouncementType.KYBER_AI_WATCHLIST]: '',
     [PrivateAnnouncementType.ELASTIC_POOLS]: '20,21',
+    [PrivateAnnouncementType.DIRECT_MESSAGE]: '',
     EXCLUDE: '2,11,1,28,29,22,23',
   },
   production: {
@@ -139,14 +143,21 @@ const ANNOUNCEMENT_TEMPLATE_IDS: { [key: string]: { [type: string]: string } } =
     [PrivateAnnouncementType.BRIDGE_ASSET]: '10,11',
     [PrivateAnnouncementType.CROSS_CHAIN]: '27,28',
     [PrivateAnnouncementType.KYBER_AI]: '26',
+    [PrivateAnnouncementType.KYBER_AI_WATCHLIST]: '30',
     [PrivateAnnouncementType.ELASTIC_POOLS]: '17,18',
+    [PrivateAnnouncementType.DIRECT_MESSAGE]: '',
     EXCLUDE: '2,16,19,9,25,24,21,22',
   },
 }
 
-export const ENV_KEY: 'production' | 'staging' | 'development' = import.meta.env.VITE_ENV
+export enum EnvKeys {
+  PROD = 'production',
+  STG = 'staging',
+  DEV = 'development',
+}
+export const ENV_KEY: EnvKeys = import.meta.env.VITE_ENV
 
-export const getAnnouncementsTemplateIds = (type: PrivateAnnouncementType | 'EXCLUDE') => {
+export const getAnnouncementsTemplateIds = (type: keyof TemplateConfig) => {
   return ANNOUNCEMENT_TEMPLATE_IDS[ENV_KEY]?.[type]
 }
 
@@ -157,6 +168,6 @@ export const MOCK_ACCOUNT_SOLANA = mock[1] ?? ''
 const isSupportTestNet = ENV_LEVEL < ENV_TYPE.PROD && new URLSearchParams(window.location.search).get('test')
 export const CROSS_CHAIN_CONFIG = {
   AXELAR_SCAN_URL: isSupportTestNet ? 'https://testnet.axelarscan.io/gmp/' : 'https://axelarscan.io/gmp/',
-  API_DOMAIN: isSupportTestNet ? 'https://testnet.api.0xsquid.com' : 'https://api.0xsquid.com',
+  API_DOMAIN: isSupportTestNet ? 'https://testnet.api.0xsquid.com' : 'https://api.squidrouter.com',
   INTEGRATOR_ID: 'kyberswap-api',
 }

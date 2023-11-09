@@ -19,14 +19,15 @@ import HorizontalScroll from 'components/HorizontalScroll'
 import HoverInlineText from 'components/HoverInlineText'
 import { TwoWayArrow } from 'components/Icons'
 import Harvest from 'components/Icons/Harvest'
-import { RowBetween } from 'components/Row'
 import { MouseoverTooltip, MouseoverTooltipDesktopOnly } from 'components/Tooltip'
 import TransactionConfirmationModal, { TransactionErrorContent } from 'components/TransactionConfirmationModal'
 import { ButtonColorScheme, MinimalActionButton } from 'components/YieldPools/ElasticFarmGroup/buttons'
 import { FeeTag } from 'components/YieldPools/ElasticFarmGroup/styleds'
+import { PartnerFarmTag } from 'components/YieldPools/PartnerFarmTag'
 import { ElasticFarmV2TableRow } from 'components/YieldPools/styleds'
 import { APP_PATHS, ELASTIC_BASE_FEE_UNIT } from 'constants/index'
 import { useActiveWeb3React } from 'hooks'
+import { useAllTokens } from 'hooks/Tokens'
 import useTheme from 'hooks/useTheme'
 import { useShareFarmAddress } from 'state/farms/classic/hooks'
 import { useFarmV2Action, useUserFarmV2Info } from 'state/farms/elasticv2/hooks'
@@ -68,13 +69,15 @@ export const ListView = ({
   const [, setSharePoolAddress] = useShareFarmAddress()
 
   const currentTimestamp = Math.floor(Date.now() / 1000)
-  const stakedPos = useUserFarmV2Info(farm.fId)
+  const stakedPos = useUserFarmV2Info(farm.farmAddress, farm.fId)
   let amountToken0 = CurrencyAmount.fromRawAmount(farm.token0.wrapped, 0)
   let amountToken1 = CurrencyAmount.fromRawAmount(farm.token1.wrapped, 0)
 
   stakedPos.forEach(item => {
-    amountToken0 = amountToken0.add(item.position.amount0)
-    amountToken1 = amountToken1.add(item.position.amount1)
+    if (item.position.amount0?.currency.equals(amountToken0.currency))
+      amountToken0 = amountToken0.add(item.position.amount0)
+    if (item.position.amount1?.currency.equals(amountToken1.currency))
+      amountToken1 = amountToken1.add(item.position.amount1)
   })
 
   const canUnstake = stakedPos.length > 0
@@ -84,7 +87,10 @@ export const ListView = ({
   const userTotalRewards = farm.totalRewards.map((item, index) => {
     return stakedPos
       .map(item => item.unclaimedRewards[index])
-      .reduce((total, cur) => total.add(cur), CurrencyAmount.fromRawAmount(item.currency, 0))
+      .reduce(
+        (total, cur) => (cur?.currency?.equals(total.currency) ? total.add(cur) : total),
+        CurrencyAmount.fromRawAmount(item.currency, 0),
+      )
   })
 
   const myDepositUSD = stakedPos.reduce((total, item) => item.stakedUsdValue + total, 0)
@@ -109,6 +115,8 @@ export const ListView = ({
   const [errorMessage, setErrorMessage] = useState('')
   const [attemptingTxn, setAttemptingTxn] = useState(false)
 
+  const allTokens = useAllTokens()
+
   const handleDismiss = () => {
     setTxHash('')
     setShowConfirmModal(false)
@@ -116,7 +124,7 @@ export const ListView = ({
     setAttemptingTxn(false)
   }
 
-  const { harvest } = useFarmV2Action()
+  const { harvest } = useFarmV2Action(farm.farmAddress)
 
   const handleHarvest = useCallback(() => {
     setShowConfirmModal(true)
@@ -154,11 +162,12 @@ export const ListView = ({
   const maxFarmAPR = Math.max(...farm.ranges.map(r => r.apr || 0))
 
   const mixpanelPayload = { farm_pool_address: farm.poolAddress, farm_id: farm.id, farm_fid: farm.fId }
+  const above1500 = useMedia('(min-width: 1500px)')
 
   return (
     <Wrapper isDeposited={!!stakedPos.length}>
-      <RowBetween gap="1rem">
-        <Flex alignItems="center" justifyContent="space-between">
+      <Flex justifyContent="space-between" sx={{ gap: '1rem' }}>
+        <Flex alignItems="center" justifyContent="space-between" width="max-content">
           <DoubleCurrencyLogo currency0={farm.token0} currency1={farm.token1} />
           <Link
             to={addliquidityElasticPool}
@@ -167,8 +176,21 @@ export const ListView = ({
             }}
           >
             <Text fontSize={14} fontWeight={500}>
-              {getTokenSymbolWithHardcode(chainId, farm.token0.wrapped.address, farm.token0.symbol)} -{' '}
-              {getTokenSymbolWithHardcode(chainId, farm.token1.wrapped.address, farm.token1.symbol)}
+              {getTokenSymbolWithHardcode(
+                chainId,
+                farm.token0.wrapped.address,
+                farm.token0.isNative
+                  ? farm.token0.symbol
+                  : allTokens[farm.token0.address]?.symbol || farm.token0.symbol,
+              )}{' '}
+              -{' '}
+              {getTokenSymbolWithHardcode(
+                chainId,
+                farm.token1.wrapped.address,
+                farm.token1.isNative
+                  ? farm.token1.symbol
+                  : allTokens[farm.token1.address]?.symbol || farm.token1.symbol,
+              )}
             </Text>
           </Link>
 
@@ -191,43 +213,50 @@ export const ListView = ({
           >
             <Share2 size="14px" color={theme.subText} />
           </Flex>
+          <PartnerFarmTag farmPoolAddress={farm.poolAddress} />
         </Flex>
 
-        <HorizontalScroll
-          style={{ gap: '8px', justifyContent: 'flex-end' }}
-          noShadow
-          items={['-1'].concat(farm.ranges.map(item => item.index.toString()))}
-          renderItem={(item, index) => {
-            if (item === '-1')
-              return (
-                <Text color={theme.subText} fontSize={12} fontWeight="500" marginRight="4px">
-                  <Trans>Available Farming Range</Trans>
-                </Text>
-              )
-            const range = farm.ranges.find(r => r.index === +item)
-            if (!range) return null
-            return (
-              <Flex
-                alignItems="center"
-                sx={{ gap: '2px' }}
-                color={range.isRemoved ? theme.warning : theme.subText}
-                fontSize={12}
-                fontWeight="500"
-              >
-                {convertTickToPrice(farm.token0, farm.token1, range.tickLower, farm.pool.fee)}
-                <TwoWayArrow />
-                {convertTickToPrice(farm.token0, farm.token1, range.tickUpper, farm.pool.fee)}
+        <Flex sx={{ gap: '8px' }} alignItems="center">
+          <Text color={theme.subText} fontSize={12} fontWeight="500" marginRight="4px">
+            <Trans>Available Farming Range</Trans>
+          </Text>
 
-                {index !== farm.ranges.length && (
-                  <Text paddingLeft="6px" color={theme.subText}>
-                    |
-                  </Text>
-                )}
-              </Flex>
-            )
-          }}
-        />
-      </RowBetween>
+          <div style={{ maxWidth: above1500 ? '900px' : 'calc(100vw - 500px)' }}>
+            <HorizontalScroll
+              style={{ gap: '8px' }}
+              noShadow
+              items={farm.ranges.map(item => item.index.toString())}
+              renderItem={(item, index) => {
+                const range = farm.ranges.find(r => r.index === +item)
+                if (!range) return null
+                return (
+                  <Flex
+                    alignItems="center"
+                    minWidth="fit-content"
+                    sx={{ gap: '2px' }}
+                    color={range.isRemoved ? theme.disableText : theme.primary}
+                    fontSize={12}
+                    fontWeight="500"
+                  >
+                    <Text minWidth="max-content">
+                      {convertTickToPrice(farm.token0, farm.token1, range.tickLower, farm.pool.fee)}
+                    </Text>
+                    <TwoWayArrow />
+                    <Text minWidth="max-content">
+                      {convertTickToPrice(farm.token0, farm.token1, range.tickUpper, farm.pool.fee)}
+                    </Text>
+                    {index !== farm.ranges.length - 1 && (
+                      <Text paddingLeft="6px" color={theme.subText}>
+                        |
+                      </Text>
+                    )}
+                  </Flex>
+                )
+              }}
+            />
+          </div>
+        </Flex>
+      </Flex>
       <ElasticFarmV2TableRow>
         <Text textAlign="left">{formatDollarAmount(farm.tvl)}</Text>
         <Text
@@ -263,7 +292,7 @@ export const ListView = ({
           </Text>
         </Text>
 
-        <div>
+        <div style={{ width: 'fit-content' }}>
           <MouseoverTooltip
             width="fit-content"
             text={
@@ -288,7 +317,7 @@ export const ListView = ({
                       whiteSpace: upToSmall ? 'wrap' : 'nowrap',
                     }}
                   >
-                    <Trans>Estimated return from trading fees if you participate in the pool</Trans>
+                    <Trans>Estimated return from trading fees if you participate in the pool.</Trans>
                   </Text>
                 </Flex>
 

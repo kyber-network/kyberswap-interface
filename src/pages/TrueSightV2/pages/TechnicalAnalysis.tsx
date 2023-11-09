@@ -1,6 +1,5 @@
 import { Trans, t } from '@lingui/macro'
-import { createContext, useMemo, useState } from 'react'
-import { useParams } from 'react-router-dom'
+import { createContext, useCallback, useMemo, useState } from 'react'
 import { Text } from 'rebass'
 import styled, { useTheme } from 'styled-components'
 
@@ -11,10 +10,11 @@ import Row, { RowFit } from 'components/Row'
 import Toggle from 'components/Toggle'
 import { IChartingLibraryWidget } from 'components/TradingViewChart/charting_library/charting_library'
 import { useTokenAnalysisSettings } from 'state/user/hooks'
-import { getLimitOrderContract } from 'utils'
+import { isSupportLimitOrder } from 'utils'
 
 import { SectionWrapper } from '../components'
 import CexRekt from '../components/CexRekt'
+import TimeFrameLegend from '../components/TimeFrameLegend'
 import { LiquidOnCentralizedExchanges, Prochart } from '../components/chart'
 import { DexTradesShareContent } from '../components/shareContent/DexTradesShareContent'
 import FundingRateShareContent from '../components/shareContent/FundingRateShareContent'
@@ -22,15 +22,15 @@ import ProchartShareContent from '../components/shareContent/ProchartShareConten
 import SupportResistanceShareContent from '../components/shareContent/SupportResistanceShareContent'
 import { FundingRateTable, LiveDEXTrades, SupportResistanceLevel } from '../components/table'
 import { KYBERAI_CHART_ID, NETWORK_TO_CHAINID } from '../constants'
+import useKyberAIAssetOverview from '../hooks/useKyberAIAssetOverview'
 import { useChartingDataQuery } from '../hooks/useKyberAIData'
-import useKyberAITokenOverview from '../hooks/useKyberAITokenOverview'
-import { ChartTab, ISRLevel, OHLCData } from '../types'
+import { ChartTab, ISRLevel, KyberAITimeframe, OHLCData } from '../types'
 import { navigateToLimitPage } from '../utils'
-import { defaultExplorePageToken } from './SingleToken'
 
 const Wrapper = styled.div`
   padding: 20px 0;
   width: 100%;
+  position: relative;
 `
 
 type TechnicalAnalysisContextProps = {
@@ -80,23 +80,24 @@ export const TechnicalAnalysisContext = createContext<TechnicalAnalysisContextPr
 
 export default function TechnicalAnalysis() {
   const theme = useTheme()
-  const { chain, address } = useParams()
+  const { data: tokenOverview, chain, address } = useKyberAIAssetOverview()
   const [tvWidget, setTvWidget] = useState<IChartingLibraryWidget | undefined>()
   const [prochartDataURL, setProchartDataURL] = useState<string | undefined>()
   const [liveChartTab, setLiveChartTab] = useState(ChartTab.First)
   const [showSRLevels, setShowSRLevels] = useState(true)
-  const [priceChartResolution, setPriceChartResolution] = useState('1h')
+  const [priceChartResolution, setPriceChartResolution] = useState('4h')
   const now = Math.floor(Date.now() / 60000) * 60
-  const { data, isLoading } = useChartingDataQuery({
-    chain: chain || defaultExplorePageToken.chain,
-    address: address || defaultExplorePageToken.address,
-    from: now - ({ '1h': 1080000, '4h': 4320000, '1d': 12960000 }[priceChartResolution] || 1080000),
-    to: now,
-    candleSize: priceChartResolution,
-    currency: liveChartTab === ChartTab.First ? 'USD' : 'BTC',
-  })
-
-  const { data: tokenOverview } = useKyberAITokenOverview()
+  const { data, isLoading } = useChartingDataQuery(
+    {
+      chain: chain,
+      address: address,
+      from: now - ({ '1h': 1080000, '4h': 4320000, '1d': 12960000 }[priceChartResolution] || 1080000),
+      to: now,
+      candleSize: priceChartResolution,
+      currency: liveChartTab === ChartTab.First ? 'USD' : 'BTC',
+    },
+    { skip: !chain || !address, pollingInterval: 60000 },
+  )
 
   const SRLevels: ISRLevel[] = useMemo(() => {
     if (isLoading && !data) return []
@@ -138,6 +139,12 @@ export default function TechnicalAnalysis() {
       console.log(err)
     }
   }
+
+  const handleTimeframeSelect = useCallback(
+    (t: KyberAITimeframe) => setPriceChartResolution?.(t as string),
+    [setPriceChartResolution],
+  )
+
   return (
     <TechnicalAnalysisContext.Provider
       value={{
@@ -158,7 +165,17 @@ export default function TechnicalAnalysis() {
           onTabClick={setLiveChartTab}
           style={{ height: '800px' }}
           subTitle={
-            <RowFit gap="8px">
+            <RowFit gap="12px">
+              <TimeFrameLegend
+                selected={priceChartResolution}
+                timeframes={[
+                  KyberAITimeframe.ONE_HOUR,
+                  KyberAITimeframe.FOUR_HOURS,
+                  KyberAITimeframe.ONE_DAY,
+                  KyberAITimeframe.FOUR_DAY,
+                ]}
+                onSelect={handleTimeframeSelect}
+              />
               <Text fontSize="14px" fontStyle="initial">
                 <Trans>Support / Resistance Levels</Trans>
               </Text>
@@ -178,7 +195,7 @@ export default function TechnicalAnalysis() {
         </SectionWrapper>
         <SectionWrapper
           show={tokenAnalysisSettings?.supportResistanceLevels}
-          title={t`Support & Resistance Levels`}
+          title={t`Support & Resistance Levels.`}
           subTitle={t`Note: These are estimated support / resistance levels only and should not be considered as financial advice`}
           description={
             <Trans>
@@ -210,7 +227,7 @@ export default function TechnicalAnalysis() {
           ]}
         >
           <SupportResistanceLevel />
-          {chain && getLimitOrderContract(NETWORK_TO_CHAINID[chain]) && (
+          {chain && isSupportLimitOrder(NETWORK_TO_CHAINID[chain]) && (
             <Row justify="flex-end">
               <ButtonPrimary width="fit-content" onClick={() => navigateToLimitPage({ address, chain })}>
                 <Text color={theme.textReverse} fontSize="14px" lineHeight="20px">
@@ -225,7 +242,7 @@ export default function TechnicalAnalysis() {
         <SectionWrapper
           show={tokenAnalysisSettings?.liveDEXTrades}
           title={t`Live Trades`}
-          subTitle={t`Note:  Live trades may be slightly delayed`}
+          subTitle={t`Note:  Live trades may be slightly delayed.`}
           style={{ height: 'fit-content' }}
           shareContent={mobileMode => <DexTradesShareContent mobileMode={mobileMode} />}
           docsLinks={['https://docs.kyberswap.com/kyberswap-solutions/kyberai/technical-indicators/live-trades']}
@@ -235,7 +252,7 @@ export default function TechnicalAnalysis() {
         <SectionWrapper
           show={tokenAnalysisSettings?.fundingRateOnCEX}
           id={'fundingrate'}
-          title={t`Funding Rate on Centralized Exchanges`}
+          title={t`Funding Rate on Centralized Exchanges.`}
           description={
             <Trans>
               Funding rate is useful in identifying short-term trends.{' '}
@@ -269,7 +286,7 @@ export default function TechnicalAnalysis() {
         <SectionWrapper
           id={KYBERAI_CHART_ID.LIQUID_ON_CEX}
           show={tokenAnalysisSettings?.liquidationsOnCEX}
-          title={t`Liquidations on Centralized Exchanges`}
+          title={t`Liquidations on Centralized Exchanges.`}
           description={`Liquidations describe the forced closing of a trader's futures position due to the partial or total loss
           of their collateral. This happens when a trader has insufficient funds to keep a leveraged trade
           open. Leveraged trading is high risk & high reward. The higher the leverage, the easier it is for a trader to

@@ -1,8 +1,11 @@
 import { Token } from '@kyberswap/ks-sdk-core'
 import { Trans, t } from '@lingui/macro'
 import dayjs from 'dayjs'
+import { rgba } from 'polished'
+import { stringify } from 'querystring'
 import { useMemo, useState } from 'react'
 import { Repeat } from 'react-feather'
+import { useNavigate } from 'react-router-dom'
 import { useMedia } from 'react-use'
 import { Flex, Text } from 'rebass'
 import styled, { CSSProperties, DefaultTheme } from 'styled-components'
@@ -10,26 +13,29 @@ import styled, { CSSProperties, DefaultTheme } from 'styled-components'
 import InfoHelper from 'components/InfoHelper'
 import Logo from 'components/Logo'
 import ProgressBar from 'components/ProgressBar'
-import { checkOrderActive } from 'components/swapv2/LimitOrder/ListOrder'
 import useTheme from 'hooks/useTheme'
 import { useTokenBalance } from 'state/wallet/hooks'
 import { MEDIA_WIDTHS } from 'theme'
 import { toCurrencyAmount } from 'utils/currencyAmount'
 
-import { calcPercentFilledOrder, formatAmountOrder, formatRateLimitOrder } from '../helpers'
+import { calcPercentFilledOrder, formatAmountOrder, formatRateLimitOrder, isActiveStatus } from '../helpers'
 import { LimitOrder, LimitOrderStatus } from '../type'
 import ActionButtons from './ActionButtons'
 
-export const ItemWrapper = styled.div<{ hasBorder?: boolean }>`
+export const ItemWrapper = styled.div<{ hasBorder?: boolean; active?: boolean }>`
   border-bottom: 1px solid ${({ theme, hasBorder }) => (hasBorder ? theme.border : 'transparent')};
   font-size: 12px;
   padding: 10px;
-  grid-template-columns: 1.5fr 1fr 1.5fr 2fr 80px;
+  grid-template-columns: 1.5fr 1fr 1.5fr 2fr ${({ active }) => (active ? '110px' : '80px')};
   display: grid;
   gap: 10px;
   align-items: center;
-  ${({ theme }) => theme.mediaWidth.upToLarge`
-    grid-template-columns: 1.5fr 1.5fr 1.5fr 80px;
+  cursor: pointer;
+  :hover {
+    background-color: ${({ theme }) => rgba(theme.primary, 0.2)};
+  }
+  ${({ theme, active }) => theme.mediaWidth.upToLarge`
+    grid-template-columns: 1.5fr 1.5fr 1.5fr ${active ? '110px' : '80px'};
     .rate {
       display:none;
     }
@@ -42,7 +48,7 @@ const ItemWrapperMobile = styled.div`
   flex-direction: column;
   justify-content: space-between;
   gap: 14px;
-  padding: 20px 0px;
+  padding: 20px 10px;
   border-bottom: 1px solid ${({ theme }) => theme.border};
 `
 const DeltaAmount = styled.div<{ color: string }>`
@@ -62,7 +68,7 @@ const Colum = styled.div`
 const TimeText = ({ time, style = {} }: { time: number; style?: CSSProperties }) => {
   const theme = useTheme()
   return (
-    <Flex fontWeight={'500'} color={theme.subText} style={style}>
+    <Flex fontWeight={'500'} color={theme.text} style={style}>
       <Text>{dayjs(time * 1000).format('DD/MM/YYYY')}</Text>
       &nbsp; <Text>{dayjs(time * 1000).format('HH:mm')}</Text>
     </Flex>
@@ -125,7 +131,7 @@ const AmountInfo = ({ order }: { order: LimitOrder }) => {
       <SingleAmountInfo
         decimals={makerAssetDecimals}
         plus={false}
-        color={theme.border}
+        color={theme.subText}
         logoUrl={makerAssetLogoURL}
         amount={makingAmount}
         symbol={makerAssetSymbol}
@@ -142,8 +148,8 @@ const TradeRateOrder = ({ order, style = {} }: { order: LimitOrder; style?: CSSP
   return (
     <Colum style={style}>
       <Flex style={{ gap: 6, cursor: 'pointer', alignItems: 'center' }} onClick={() => setInvert(!invert)}>
-        <Text color={theme.subText}>{!invert ? `${symbolOut}/${symbolIn}` : `${symbolIn}/${symbolOut}`}</Text>
-        <Repeat color={theme.subText} size={12} />
+        <Text color={theme.text}>{!invert ? `${symbolOut}/${symbolIn}` : `${symbolIn}/${symbolOut}`}</Text>
+        <Repeat color={theme.text} size={12} />
       </Flex>
       <Text color={theme.text}>{formatRateLimitOrder(order, invert)}</Text>
     </Colum>
@@ -216,6 +222,8 @@ export default function OrderItem({
   onEditOrder,
   isOrderCancelling,
   tokenPrices,
+  isLast,
+  hasOrderCancelling,
 }: {
   order: LimitOrder
   onCancelOrder: (order: LimitOrder) => void
@@ -223,6 +231,8 @@ export default function OrderItem({
   index: number
   isOrderCancelling: (order: LimitOrder) => boolean
   tokenPrices: Record<string, number>
+  isLast: boolean
+  hasOrderCancelling: boolean
 }) {
   const [expand, setExpand] = useState(false)
   const upToSmall = useMedia(`(max-width: ${MEDIA_WIDTHS.upToSmall}px)`)
@@ -236,9 +246,11 @@ export default function OrderItem({
     transactions = [],
     takerAssetSymbol,
     takerAssetDecimals,
+    takerAsset,
+    makerAsset,
   } = order
   const status = isCancelling ? LimitOrderStatus.CANCELLING : order.status
-  const isOrderActive = checkOrderActive(order)
+  const isOrderActive = isActiveStatus(order.status)
   const filledPercent = calcPercentFilledOrder(filledTakingAmount, takingAmount, takerAssetDecimals)
   const theme = useTheme()
 
@@ -257,6 +269,16 @@ export default function OrderItem({
   const marketPrice = tokenPrices[order.takerAsset] / tokenPrices[order.makerAsset]
   const selectedPrice = Number(formatRateLimitOrder(order, false))
   const percent = ((marketPrice - selectedPrice) / marketPrice) * 100
+
+  const navigate = useNavigate()
+  const onClickOrder = () => {
+    navigate({
+      search: stringify({
+        inputCurrency: makerAsset,
+        outputCurrency: takerAsset,
+      }),
+    })
+  }
 
   const renderProgressComponent = () => {
     const getTooltipText = () => {
@@ -309,7 +331,7 @@ export default function OrderItem({
 
   if (upToSmall) {
     return (
-      <ItemWrapperMobile>
+      <ItemWrapperMobile onClick={onClickOrder}>
         <Flex justifyContent={'space-between'}>
           <AmountInfo order={order} />
           <ActionButtons
@@ -367,7 +389,11 @@ export default function OrderItem({
   }
   return (
     <>
-      <ItemWrapper hasBorder={!transactions.length || !expand}>
+      <ItemWrapper
+        hasBorder={isLast ? false : !transactions.length || !expand}
+        active={hasOrderCancelling}
+        onClick={onClickOrder}
+      >
         <Flex alignItems={'center'} style={{ gap: 10 }}>
           <IndexText>{index + 1}</IndexText>
           <AmountInfo order={order} />

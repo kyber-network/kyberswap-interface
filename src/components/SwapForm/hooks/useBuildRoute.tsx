@@ -1,12 +1,15 @@
 import { t } from '@lingui/macro'
 import { useCallback, useRef } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import routeApi from 'services/route'
 import { BuildRouteData, BuildRoutePayload } from 'services/route/types/buildRoute'
 import { RouteSummary } from 'services/route/types/getRoute'
 
+import { useRouteApiDomain } from 'components/SwapForm/hooks/useGetRoute'
 import { AGGREGATOR_API_PATHS } from 'constants/index'
 import { NETWORKS_INFO } from 'constants/networks'
 import { useActiveWeb3React } from 'hooks'
+import useENS from 'hooks/useENS'
 import { useKyberswapGlobalConfig } from 'hooks/useKyberSwapConfig'
 
 export type BuildRouteResult =
@@ -29,10 +32,15 @@ type Args = {
 
 const useBuildRoute = (args: Args) => {
   const { recipient, routeSummary, slippage, transactionTimeout, permit } = args
+  const [searchParams] = useSearchParams()
+  const clientId = searchParams.get('clientId')
   const { chainId, account } = useActiveWeb3React()
   const abortControllerRef = useRef(new AbortController())
-  const { aggregatorDomain, isEnableAuthenAggregator } = useKyberswapGlobalConfig()
+  const { isEnableAuthenAggregator } = useKyberswapGlobalConfig()
   const [buildRoute] = routeApi.useBuildRouteMutation()
+  const aggregatorDomain = useRouteApiDomain()
+  const recipientLookup = useENS(recipient)
+  const to: string | null = (recipient === '' ? account : recipientLookup.address) ?? null
 
   const fetcher = useCallback(async (): Promise<BuildRouteResult> => {
     if (!account) {
@@ -52,8 +60,8 @@ const useBuildRoute = (args: Args) => {
       deadline: Math.floor(Date.now() / 1000) + transactionTimeout,
       slippageTolerance: slippage,
       sender: account,
-      recipient: recipient || account,
-      source: 'kyberswap',
+      recipient: to || account,
+      source: clientId || 'kyberswap',
       skipSimulateTx: false,
       permit,
     }
@@ -85,10 +93,11 @@ const useBuildRoute = (args: Args) => {
       }
     }
   }, [
+    clientId,
     account,
     aggregatorDomain,
     chainId,
-    recipient,
+    to,
     routeSummary,
     slippage,
     transactionTimeout,

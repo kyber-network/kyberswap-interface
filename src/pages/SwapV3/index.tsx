@@ -8,7 +8,6 @@ import styled from 'styled-components'
 
 import { ReactComponent as RoutingIcon } from 'assets/svg/routing-icon.svg'
 import Banner from 'components/Banner'
-import { SEOSwap } from 'components/SEO'
 import { SwitchLocaleLink } from 'components/SwitchLocaleLink'
 import TokenWarningModal from 'components/TokenWarningModal'
 import TutorialSwap from 'components/Tutorial/TutorialSwap'
@@ -16,12 +15,10 @@ import { TutorialIds } from 'components/Tutorial/TutorialSwap/constant'
 import GasPriceTrackerPanel from 'components/swapv2/GasPriceTrackerPanel'
 import LimitOrder from 'components/swapv2/LimitOrder'
 import ListLimitOrder from 'components/swapv2/LimitOrder/ListOrder'
-import { ListOrderHandle } from 'components/swapv2/LimitOrder/type'
 import LiquiditySourcesPanel from 'components/swapv2/LiquiditySourcesPanel'
 import PairSuggestion, { PairSuggestionHandle } from 'components/swapv2/PairSuggestion'
 import SettingsPanel from 'components/swapv2/SwapSettingsPanel'
-import TokenInfoTab from 'components/swapv2/TokenInfoTab'
-import TokenInfoV2 from 'components/swapv2/TokenInfoV2'
+import TokenInfoTab from 'components/swapv2/TokenInfo'
 import {
   Container,
   InfoComponentsWrapper,
@@ -48,11 +45,9 @@ import { useLimitActionHandlers } from 'state/limit/hooks'
 import { Field } from 'state/swap/actions'
 import { useDefaultsFromURLSearch, useSwapActionHandlers } from 'state/swap/hooks'
 import { useTutorialSwapGuide } from 'state/tutorial/hooks'
-import { useShowKyberAIBanner, useShowLiveChart, useShowTokenInfo, useShowTradeRoutes } from 'state/user/hooks'
+import { useShowKyberAIBanner, useShowLiveChart, useShowTradeRoutes } from 'state/user/hooks'
 import { DetailedRouteSummary } from 'types/route'
 import { getTradeComposition } from 'utils/aggregationRouting'
-import { getSymbolSlug } from 'utils/string'
-import { checkPairInWhiteList } from 'utils/tokenInfo'
 
 import KyberAIWidget from '../TrueSightV2/components/KyberAIWidget'
 import PopulatedSwapForm from './PopulatedSwapForm'
@@ -76,6 +71,9 @@ export enum TAB {
   LIMIT = 'limit',
   CROSS_CHAIN = 'cross_chain',
 }
+
+export const isSettingTab = (tab: TAB) =>
+  [TAB.INFO, TAB.SETTINGS, TAB.GAS_PRICE_TRACKER, TAB.LIQUIDITY_SOURCES].includes(tab)
 
 export const AppBodyWrapped = styled(BodyWrapper)`
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04);
@@ -107,7 +105,6 @@ export default function Swap() {
   const { chainId } = useActiveWeb3React()
   const isShowLiveChart = useShowLiveChart()
   const isShowTradeRoutes = useShowTradeRoutes()
-  const isShowTokenInfoSetting = useShowTokenInfo()
   const isShowKyberAIBanner = useShowKyberAIBanner()
   const qs = useParsedQueryString<{ highlightBox: string }>()
   const [{ show: isShowTutorial = false }] = useTutorialSwapGuide()
@@ -117,7 +114,6 @@ export default function Swap() {
   const { pathname } = useLocation()
 
   const refSuggestPair = useRef<PairSuggestionHandle>(null)
-  const refListLimitOrder = useRef<ListOrderHandle>(null)
 
   const [showingPairSuggestionImport, setShowingPairSuggestionImport] = useState<boolean>(false) // show modal import when click pair suggestion
 
@@ -139,12 +135,6 @@ export default function Swap() {
   useEffect(() => {
     setActiveTab(getDefaultTab())
   }, [getDefaultTab])
-
-  const refreshListOrder = useCallback(() => {
-    if (isLimitPage) {
-      refListLimitOrder.current?.refreshListOrder()
-    }
-  }, [isLimitPage])
 
   useDefaultsFromURLSearch()
 
@@ -202,15 +192,7 @@ export default function Swap() {
 
   const isLoadedTokenDefault = useIsLoadedTokenDefault()
 
-  const { isInWhiteList: isPairInWhiteList, canonicalUrl } = checkPairInWhiteList(
-    chainId,
-    getSymbolSlug(currencyIn),
-    getSymbolSlug(currencyOut),
-  )
-
   const onBackToSwapTab = () => setActiveTab(getDefaultTab())
-
-  const shouldRenderTokenInfo = isShowTokenInfoSetting && currencyIn && currencyOut && isPairInWhiteList && isSwapPage
 
   const isShowModalImportToken =
     !isCrossChainPage && isLoadedTokenDefault && importTokensNotInDefault.length > 0 && showingPairSuggestionImport
@@ -218,15 +200,11 @@ export default function Swap() {
   const tradeRouteComposition = useMemo(() => {
     return getTradeComposition(chainId, routeSummary?.parsedAmountIn, undefined, routeSummary?.route, defaultTokens)
   }, [chainId, defaultTokens, routeSummary])
+  const swapActionsRef = useRef(null)
 
   return (
     <>
-      {isSwapPage && (
-        <>
-          <SEOSwap canonicalUrl={canonicalUrl} />
-          <TutorialSwap />
-        </>
-      )}
+      {isSwapPage && <TutorialSwap />}
       <TokenWarningModal
         isOpen={isShowModalImportToken}
         tokens={importTokensNotInDefault}
@@ -236,7 +214,7 @@ export default function Swap() {
         <Banner />
         <Container>
           <SwapFormWrapper isShowTutorial={isShowTutorial}>
-            <Header activeTab={activeTab} setActiveTab={setActiveTab} />
+            <Header activeTab={activeTab} setActiveTab={setActiveTab} swapActionsRef={swapActionsRef} />
 
             {(isLimitPage || isSwapPage) && !TYPE_AND_SWAP_NOT_SUPPORTED_CHAINS.includes(chainId) && (
               <PairSuggestion
@@ -246,8 +224,12 @@ export default function Swap() {
               />
             )}
 
-            <AppBodyWrapped data-highlight={shouldHighlightSwapBox} id={TutorialIds.SWAP_FORM}>
-              {activeTab === TAB.SWAP && (
+            <AppBodyWrapped
+              data-highlight={shouldHighlightSwapBox}
+              id={TutorialIds.SWAP_FORM}
+              style={[TAB.INFO, TAB.LIMIT].includes(activeTab) ? { padding: 0 } : undefined}
+            >
+              {isSwapPage && (
                 <PopulatedSwapForm
                   onSelectSuggestedPair={onSelectSuggestedPair}
                   routeSummary={routeSummary}
@@ -265,6 +247,7 @@ export default function Swap() {
                   onBack={onBackToSwapTab}
                   onClickLiquiditySources={() => setActiveTab(TAB.LIQUIDITY_SOURCES)}
                   onClickGasPriceTracker={() => setActiveTab(TAB.GAS_PRICE_TRACKER)}
+                  swapActionsRef={swapActionsRef}
                 />
               )}
               {activeTab === TAB.GAS_PRICE_TRACKER && (
@@ -277,7 +260,6 @@ export default function Swap() {
                 <LimitOrder
                   isSelectCurrencyManual={isSelectCurrencyManually}
                   setIsSelectCurrencyManual={setIsSelectCurrencyManually}
-                  refreshListOrder={refreshListOrder}
                 />
               )}
               {isCrossChainPage && <CrossChain visible={activeTab === TAB.CROSS_CHAIN} />}
@@ -291,7 +273,7 @@ export default function Swap() {
                 <Suspense
                   fallback={
                     <Skeleton
-                      height="100%"
+                      height="84px"
                       baseColor={theme.background}
                       highlightColor={theme.buttonGray}
                       borderRadius="24px"
@@ -348,8 +330,7 @@ export default function Swap() {
                 </Flex>
               </RoutesWrapper>
             )}
-            {isLimitPage && <ListLimitOrder ref={refListLimitOrder} />}
-            {shouldRenderTokenInfo && <TokenInfoV2 currencyIn={currencyIn} currencyOut={currencyOut} />}
+            {isLimitPage && <ListLimitOrder />}
             {isCrossChainPage && <CrossChainTransfersHistory />}
           </InfoComponents>
         </Container>

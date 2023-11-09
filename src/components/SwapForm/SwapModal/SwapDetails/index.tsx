@@ -7,6 +7,7 @@ import { Flex, Text } from 'rebass'
 import { BuildRouteData } from 'services/route/types/buildRoute'
 
 import { TruncatedText } from 'components'
+import { ButtonLight } from 'components/Button'
 import { AutoColumn } from 'components/Column'
 import CopyHelper from 'components/Copy'
 import Divider from 'components/Divider'
@@ -17,10 +18,10 @@ import { TooltipTextOfSwapFee } from 'components/SwapForm/TradeSummary'
 import useCheckStablePairSwap from 'components/SwapForm/hooks/useCheckStablePairSwap'
 import { MouseoverTooltip, TextDashed } from 'components/Tooltip'
 import { StyledBalanceMaxMini } from 'components/swapv2/styleds'
-import { CHAINS_SUPPORT_FEE_CONFIGS } from 'constants/index'
+import { APP_PATHS } from 'constants/index'
 import { useActiveWeb3React } from 'hooks'
+import { isSupportKyberDao, useGasRefundTier } from 'hooks/kyberdao'
 import useTheme from 'hooks/useTheme'
-import { useIsDarkMode } from 'state/user/hooks'
 import { ExternalLink, TYPE } from 'theme'
 import { DetailedRouteSummary } from 'types/route'
 import { formattedNum, shortenAddress } from 'utils'
@@ -71,11 +72,11 @@ export default function SwapDetails({
   priceImpact,
   buildData,
 }: Props) {
-  const { isEVM, chainId, networkInfo } = useActiveWeb3React()
+  const { isEVM, chainId, networkInfo, account } = useActiveWeb3React()
   const [showInverted, setShowInverted] = useState<boolean>(false)
   const theme = useTheme()
-  const isDarkMode = useIsDarkMode()
   const { slippage, routeSummary } = useSwapFormContext()
+  const { gasRefundPercentage } = useGasRefundTier()
 
   const currencyIn = routeSummary?.parsedAmountIn?.currency
   const currencyOut = routeSummary?.parsedAmountOut?.currency
@@ -105,6 +106,10 @@ export default function SwapDetails({
 
   const feeAmountWithSymbol =
     feeAmountFromBuild && currencyFromBuild?.symbol ? `${feeAmountFromBuild} ${currencyFromBuild.symbol}` : ''
+
+  const isPartnerSwap = window.location.pathname.includes(APP_PATHS.PARTNER_SWAP)
+
+  const feeAmount = routeSummary?.extraFee?.feeAmount
 
   return (
     <>
@@ -152,7 +157,7 @@ export default function SwapDetails({
             <TextDashed fontSize={12} fontWeight={400} color={theme.subText} minWidth="max-content">
               <MouseoverTooltip
                 width="200px"
-                text={<Trans>You will receive at least this amount or your transaction will revert</Trans>}
+                text={<Trans>You will receive at least this amount or your transaction will revert.</Trans>}
                 placement="right"
               >
                 <Trans>Minimum Received</Trans>
@@ -223,7 +228,7 @@ export default function SwapDetails({
           <RowBetween height="20px" style={{ gap: '16px' }}>
             <RowFixed>
               <TextDashed fontSize={12} fontWeight={400} color={theme.subText}>
-                <MouseoverTooltip text={<Trans>Estimated network fee for your transaction</Trans>} placement="right">
+                <MouseoverTooltip text={<Trans>Estimated network fee for your transaction.</Trans>} placement="right">
                   <Trans>Est. Gas Fee</Trans>
                 </MouseoverTooltip>
               </TextDashed>
@@ -244,7 +249,7 @@ export default function SwapDetails({
           </RowBetween>
         )}
 
-        {CHAINS_SUPPORT_FEE_CONFIGS.includes(chainId) && (
+        {!!feeAmount && feeAmount !== '0' && (
           <RowBetween height="20px" style={{ gap: '16px' }}>
             <RowFixed>
               <TextDashed fontSize={12} fontWeight={400} color={theme.subText}>
@@ -325,20 +330,50 @@ export default function SwapDetails({
           </TYPE.black>
         </RowBetween>
 
+        {!isPartnerSwap && isSupportKyberDao(chainId) && account && Number(routeSummary?.amountInUsd || 0) > 200 && (
+          <RowBetween height="20px" style={{ gap: '16px' }}>
+            <RowFixed>
+              <TextDashed fontSize={12} fontWeight={400} color={theme.subText}>
+                <MouseoverTooltip
+                  text={
+                    <Text>
+                      <Trans>
+                        Stake KNC in KyberDAO to get gas refund. Read more{' '}
+                        <ExternalLink href="https://docs.kyberswap.com/governance/knc-token/gas-refund-program">
+                          here ↗
+                        </ExternalLink>
+                      </Trans>
+                    </Text>
+                  }
+                  placement="right"
+                >
+                  <Trans>Gas Refund</Trans>
+                </MouseoverTooltip>
+              </TextDashed>
+            </RowFixed>
+
+            <ButtonLight
+              padding="0px 8px"
+              width="fit-content"
+              fontSize={10}
+              fontWeight={500}
+              lineHeight="16px"
+              style={{ pointerEvents: 'none' }}
+            >
+              <Trans>{gasRefundPercentage ? gasRefundPercentage * 100 : '--'}% Refund</Trans>
+            </ButtonLight>
+          </RowBetween>
+        )}
+
         <Divider />
         <RowBetween>
           <TextDashed fontSize={12} color={theme.subText}>
-            <MouseoverTooltip text={<Trans>Chain on which the swap will be executed</Trans>}>
+            <MouseoverTooltip text={<Trans>Chain on which the swap will be executed.</Trans>}>
               <Trans>Chain</Trans>
             </MouseoverTooltip>
           </TextDashed>
           <Flex fontSize={12} fontWeight="501" alignItems="center" sx={{ gap: '4px' }}>
-            <img
-              src={isDarkMode && networkInfo.iconDark ? networkInfo.iconDark : networkInfo.icon}
-              alt="network icon"
-              width="12px"
-              height="12px"
-            />
+            <img src={networkInfo.icon} alt="network icon" width="12px" height="12px" />
             {networkInfo.name}
           </Flex>
         </RowBetween>
@@ -349,7 +384,7 @@ export default function SwapDetails({
               text={
                 <Trans>
                   The contract address that will be executing the swap. You can verify the contract in the block
-                  explorer
+                  explorer.
                 </Trans>
               }
             >

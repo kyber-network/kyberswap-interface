@@ -18,11 +18,10 @@ import SwapSettingBtn from 'assets/images/tutorial_swap/swap_setting_btn.png'
 import WelcomeImage from 'assets/images/tutorial_swap/welcome.png'
 import { ButtonOutlined, ButtonPrimary } from 'components/Button'
 import { ToggleItemType } from 'components/Collapse'
-import { SUPPORTED_WALLETS } from 'constants/wallets'
+import { connections } from 'constants/wallets'
 import { useActiveWeb3React } from 'hooks'
 import useMixpanel, { MIXPANEL_TYPE } from 'hooks/useMixpanel'
 import { useTutorialSwapGuide } from 'state/tutorial/hooks'
-import { useIsDarkMode } from 'state/user/hooks'
 import { ExternalLink } from 'theme'
 import { filterTruthy } from 'utils'
 
@@ -81,6 +80,9 @@ const NetworkItemWrapper = styled.div`
   padding: 10px 15px;
   gap: 10px;
   cursor: pointer;
+  flex-basis: calc((100% - 10px) / 2); // 10px gap
+  min-width: 160px;
+  box-sizing: border-box;
 `
 
 const NetworkWrapper = styled.div`
@@ -89,7 +91,7 @@ const NetworkWrapper = styled.div`
   padding: 15px;
   gap: 10px;
   display: flex;
-  flex-direction: column;
+  flex-wrap: wrap;
 `
 
 const ImageMobile = ({
@@ -146,7 +148,6 @@ function Welcome() {
 function ConnectWallet() {
   const [isExpanded, setIsExpanded] = useState(false)
   const toggleExpand = () => setIsExpanded(!isExpanded)
-  const isDarkMode = useIsDarkMode()
   return (
     <Layout title={LIST_TITLE.CONNECT_WALLET}>
       <Desc>
@@ -162,11 +163,11 @@ function ConnectWallet() {
         </Heading>
         {isExpanded && (
           <NetworkWrapper>
-            {Object.values(SUPPORTED_WALLETS)
+            {Object.values(connections)
               .filter(e => e.installLink)
               .map(item => (
                 <NetworkItemWrapper key={item.name} onClick={() => window.open(item.installLink)}>
-                  <img src={isDarkMode ? item.icon : item.iconLight} alt={item.name} width="20" height="20" />
+                  <img src={item.icon} alt={item.name} style={{ width: '20px', maxHeight: '20px' }} />
                   <span>{item.name}</span>
                 </NetworkItemWrapper>
               ))}
@@ -398,8 +399,9 @@ const getListSteps = (isLogin: boolean, isSolana: boolean) => {
   ])
 }
 
-const TutorialKeys = {
+export const TutorialKeys = {
   SHOWED_SWAP_GUIDE: 'showedTutorialSwapGuide',
+  SHOWED_LO_GUIDE: 'showedTutorialLO',
 }
 
 export default memo(function TutorialSwap() {

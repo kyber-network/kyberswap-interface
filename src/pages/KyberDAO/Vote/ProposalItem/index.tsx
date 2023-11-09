@@ -17,7 +17,9 @@ import { ProposalDetail, ProposalStatus, ProposalType } from 'hooks/kyberdao/typ
 import useTheme from 'hooks/useTheme'
 import { useSwitchToEthereum } from 'pages/KyberDAO/StakeKNC/SwitchToEthereumModal'
 import TimerCountdown from 'pages/KyberDAO/TimerCountdown'
+import { HARDCODED_OPTION_TITLE } from 'pages/KyberDAO/constants'
 import { useWalletModalToggle } from 'state/application/hooks'
+import { escapeScriptHtml } from 'utils/string'
 
 import VoteConfirmModal from '../VoteConfirmModal'
 import OptionButton from './OptionButton'
@@ -176,7 +178,7 @@ const VoteButton = ({
           </ButtonPrimary>
         ) : (
           <ButtonLight width={isMobile ? '100%' : '200px'} onClick={toggleWalletModal}>
-            <Trans>Connect Wallet</Trans>
+            <Trans>Connect</Trans>
           </ButtonLight>
         )
       ) : (
@@ -186,7 +188,7 @@ const VoteButton = ({
   )
 }
 
-const FORCED_TO_BINARY_OPTION_PROPOSALS = [14, 15]
+const FORCED_TO_BINARY_OPTION_PROPOSALS = [14, 15, 17, 18, 19, 20]
 
 function ProposalItem({
   proposal,
@@ -244,7 +246,7 @@ function ProposalItem({
   }
   const { switchToEthereum } = useSwitchToEthereum()
   const handleVote = useCallback(() => {
-    switchToEthereum().then(() => {
+    switchToEthereum(t`This action`).then(() => {
       selectedOptions.length > 0 && setShowConfirmModal(true)
     })
   }, [switchToEthereum, setShowConfirmModal, selectedOptions])
@@ -255,9 +257,13 @@ function ProposalItem({
       voteCallback?.(
         proposal.proposal_id,
         selectedOptions.map(i => i + 1).reduce((acc, item) => (acc += 1 << (item - 1)), 0),
-      ).then(() => {
-        setSelectedOptions([])
-      })
+      )
+        .then(() => {
+          setSelectedOptions([])
+        })
+        .catch(error => {
+          setErrorMessage(error.message)
+        })
   }, [selectedOptions, proposal.proposal_id, voteCallback])
 
   const votedOfCurrentProposal = useMemo(
@@ -323,6 +329,7 @@ function ProposalItem({
                   : 'Finished'
               }
               isCheckBox={proposal.proposal_type === ProposalType.GenericProposal && !isForcedBinaryOption}
+              proposalId={proposal.proposal_id}
               id={index}
             />
           )
@@ -430,7 +437,9 @@ function ProposalItem({
                 lineHeight={isMobile ? '18px' : '22px'}
                 color={theme.subText}
                 marginBottom="20px"
-                dangerouslySetInnerHTML={{ __html: proposal.desc.replaceAll('\\n', '').replaceAll('\\r', '') }}
+                dangerouslySetInnerHTML={{
+                  __html: escapeScriptHtml(proposal.desc.replaceAll('\\n', '').replaceAll('\\r', '')),
+                }}
                 style={{ wordBreak: 'break-word' }}
               ></Text>
               {isMobile && <VoteInformation proposal={proposal} />}
@@ -449,7 +458,13 @@ function ProposalItem({
           isShow={showConfirmModal}
           title={proposal.title}
           toggle={() => setShowConfirmModal(false)}
-          options={selectedOptions.length > 0 ? selectedOptions.map(option => proposal.options[option]).join(', ') : ''}
+          options={
+            selectedOptions.length > 0
+              ? selectedOptions
+                  .map(option => HARDCODED_OPTION_TITLE[proposal.proposal_id]?.[option] || proposal.options[option])
+                  .join(', ')
+              : ''
+          }
           onVoteConfirm={handleVoteConfirm}
         />
       )}

@@ -91,6 +91,16 @@ export interface CampaignLuckyWinner {
   token: SerializedToken
 }
 
+export enum ConditionGroupsType {
+  POINT_MULTIPLIER = 'POINT_MULTIPLIER',
+}
+export interface ConditionGroups {
+  conditions?: any[]
+  extra?: any
+  priority: number
+  type: ConditionGroupsType
+}
+
 export interface CampaignData {
   id: number
   name: string
@@ -115,6 +125,7 @@ export interface CampaignData {
   tradingNumberRequired: number
   competitionId?: number
   competitorId?: number
+  conditionGroups?: ConditionGroups[]
 }
 
 export interface CampaignProofData {
@@ -134,7 +145,7 @@ export const setLoadingCampaignData = createAction<boolean>('campaigns/setLoadin
 
 export const setLastTimeRefreshData = createAction('campaigns/setLastTimeRefreshData')
 
-export const setLoadingCampaignDataError = createAction<Error | undefined>('campaigns/setLoadingCampaignDataError')
+export const setLoadingCampaignDataError = createAction<boolean>('campaigns/setLoadingCampaignDataError')
 
 export const setSelectedCampaign = createAction<{ campaign: CampaignData }>('campaigns/setSelectedCampaign')
 
@@ -152,19 +163,6 @@ export const setSelectedCampaignLeaderboardLookupAddress = createAction<string>(
 )
 
 export const setClaimingCampaignRewardId = createAction<number | null>('campaigns/setClaimingCampaignRewardId')
-
-export const setSelectedCampaignLuckyWinners = createAction<{ luckyWinners: CampaignLuckyWinner[] }>(
-  'campaigns/setSelectedCampaignLuckyWinners',
-)
-export const setLoadingSelectedCampaignLuckyWinners = createAction<boolean>(
-  'campaigns/setLoadingSelectedCampaignLuckyWinners',
-)
-export const setSelectedCampaignLuckyWinnersPageNumber = createAction<number>(
-  'campaigns/setSelectedCampaignLuckyWinnersPageNumber',
-)
-export const setSelectedCampaignLuckyWinnersLookupAddress = createAction<string>(
-  'campaigns/setSelectedCampaignLuckyWinnersLookupAddress',
-)
 
 export const setRecaptchaCampaignId = createAction<number | undefined>('campaigns/setRecaptchaCampaignId')
 export const setRecaptchaCampaignLoading = createAction<boolean>('campaigns/setRecaptchaCampaignLoading')

@@ -11,11 +11,12 @@ import PriceVisualize from 'components/ProAmm/PriceVisualize'
 import { MouseoverTooltipDesktopOnly } from 'components/Tooltip'
 import useIsTickAtLimit from 'hooks/useIsTickAtLimit'
 import useTheme from 'hooks/useTheme'
-import { useElasticFarms, useFarmAction } from 'state/farms/elastic/hooks'
+import { useFarmAction, useUserInfoByFarm } from 'state/farms/elastic/hooks'
 import { FarmingPool, NFTPosition } from 'state/farms/elastic/types'
 import { Bound } from 'state/mint/proamm/type'
 import { formatTickPrice } from 'utils/formatTickPrice'
 import { formatDollarAmount } from 'utils/numbers'
+import { unwrappedToken } from 'utils/wrappedCurrency'
 
 import FeeTarget from './FeeTarget'
 import { ButtonColorScheme, MinimalActionButton } from './buttons'
@@ -41,8 +42,8 @@ const PositionDetail = ({
 }: Props) => {
   const theme = useTheme()
 
-  const { userFarmInfo } = useElasticFarms()
-  const joinedPositions = userFarmInfo?.[farmAddress]?.joinedPositions[pool.pid] || []
+  const userInfo = useUserInfoByFarm(farmAddress)
+  const joinedPositions = userInfo?.joinedPositions[pool.pid] || []
   const { unstake } = useFarmAction(farmAddress)
 
   const joinedInfo = joinedPositions.find(jp => jp.nftId.toString() === item.nftId.toString())
@@ -60,7 +61,7 @@ const PositionDetail = ({
   const priceLower = !isRevertPrice ? item.token0PriceLower : item.token0PriceUpper.invert()
   const priceUpper = !isRevertPrice ? item.token0PriceUpper : item.token0PriceLower.invert()
 
-  const rewardByNft = userFarmInfo?.[farmAddress]?.rewardByNft
+  const rewardByNft = userInfo?.rewardByNft
   const rewards = rewardByNft?.[pool.pid + '_' + item.nftId.toString()] || []
 
   const rewardValue = rewards.reduce(
@@ -144,16 +145,16 @@ const PositionDetail = ({
           dropdownContent={
             <>
               <Flex alignItems="center" key={item.amount0.currency.address}>
-                <CurrencyLogo currency={item.amount0.currency} size="16px" />
+                <CurrencyLogo currency={unwrappedToken(item.amount0.currency)} size="16px" />
                 <Text fontSize="12px" marginLeft="4px" fontWeight="500">
-                  {item.amount0.toSignificant(8)} {item.amount0.currency.symbol}
+                  {item.amount0.toSignificant(8)} {unwrappedToken(item.amount0.currency).symbol}
                 </Text>
               </Flex>
 
               <Flex alignItems="center" key={item.amount1.currency.address}>
-                <CurrencyLogo currency={item.amount1.currency} size="16px" />
+                <CurrencyLogo currency={unwrappedToken(item.amount1.currency)} size="16px" />
                 <Text fontSize="12px" marginLeft="4px" fontWeight="500">
-                  {item.amount1.toSignificant(8)} {item.amount1.currency.symbol}
+                  {item.amount1.toSignificant(8)} {unwrappedToken(item.amount1.currency).symbol}
                 </Text>
               </Flex>
             </>
@@ -176,7 +177,7 @@ const PositionDetail = ({
             <Flex alignItems="center" key={rw.currency.wrapped.address}>
               <CurrencyLogo currency={rw.currency} size="16px" />
               <Text fontSize="12px" marginLeft="4px" fontWeight="500">
-                {rw.toSignificant(8)} {rw.currency.wrapped.symbol}
+                {rw.toSignificant(8)} {rw.currency.symbol}
               </Text>
             </Flex>
           ))}
