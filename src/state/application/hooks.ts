@@ -23,6 +23,9 @@ import { AppJsonRpcProvider } from 'constants/providers'
 import { KNC_ADDRESS } from 'constants/tokens'
 import { VERSION } from 'constants/v2'
 import { useActiveWeb3React } from 'hooks/index'
+
+import { PopupItemType, PopupItemType2 } from 'state/application/reducer'
+
 import { useAppSelector } from 'state/hooks'
 import { AppDispatch, AppState } from 'state/index'
 import { useTokenPricesWithLoading } from 'state/tokenPrices/hooks'
@@ -233,6 +236,7 @@ export function useActivePopups() {
   const { chainId, account } = useActiveWeb3React()
 
   return useMemo(() => {
+
     const topRightPopups = popups.filter(item => {
       const { popupType, content } = item
       if (popupType === PopupType.SIMPLE) return true
@@ -248,6 +252,7 @@ export function useActivePopups() {
     const snippetPopups = popups.filter(e => e.popupType === PopupType.SNIPPET && isPopupCanShow(e, chainId, account))
 
     const centerPopups = popups.filter(e => e.popupType === PopupType.CENTER && isPopupCanShow(e, chainId, account))
+
     return {
       topPopups,
       centerPopups,

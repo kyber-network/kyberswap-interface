@@ -24,6 +24,13 @@ import {
 } from './actions'
 import { ModalParams } from './types'
 
+export type PopupItemType2<T extends PopupContent> = {
+  key: string
+  content: T
+  removeAfterMs: number | null
+  popupType: PopupType
+}
+
 type ETHPrice = {
   currentPrice?: string
   oneDayBackPrice?: string
