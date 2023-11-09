@@ -1,8 +1,7 @@
 import { ChainId } from '@kyberswap/ks-sdk-core'
 
 import EthereumLogo from 'assets/images/ethereum-logo.png'
-import AURORA from 'assets/networks/aurora-network.svg'
-import { KS_SETTING_API } from 'constants/env'
+import auroraIcon from 'assets/networks/aurora.svg'
 import { EVMNetworkInfo } from 'constants/networks/type'
 
 const EMPTY = ''
@@ -17,14 +16,12 @@ const auroraInfo: EVMNetworkInfo = {
   poolFarmRoute: 'aurora',
   aggregatorRoute: 'aurora',
   name: 'Aurora',
-  icon: AURORA,
-  iconDark: NOT_SUPPORT,
+  icon: auroraIcon,
   iconSelected: NOT_SUPPORT,
-  iconDarkSelected: NOT_SUPPORT,
+
   defaultBlockSubgraph: 'https://aurora-graph.kyberengineering.io/subgraphs/name/kybernetwork/aurora-blocks',
   etherscanUrl: 'https://aurorascan.dev',
   etherscanName: 'Aurora Explorer',
-  tokenListUrl: `${KS_SETTING_API}/v1/tokens?chainIds=${ChainId.AURORA}&isWhitelisted=${true}`,
   bridgeURL: EMPTY,
   nativeToken: {
     symbol: 'ETH',
@@ -64,16 +61,13 @@ const auroraInfo: EVMNetworkInfo = {
     routers: '0xC1e7dFE73E1598E3910EF4C7845B68A9Ab6F4c83',
     farms: [],
   },
-  limitOrder: {
-    production: NOT_SUPPORT,
-    development: NOT_SUPPORT,
-  },
+  limitOrder: NOT_SUPPORT,
   averageBlockTimeInSeconds: 1,
   coingeckoNetworkId: 'aurora',
   coingeckoNativeTokenId: 'ethereum',
   deBankSlug: 'aurora',
-  trueSightId: NOT_SUPPORT,
   dexToCompare: 'trisolaris',
+  geckoTermialId: 'aurora',
 }
 
 export default auroraInfo

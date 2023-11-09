@@ -1,5 +1,5 @@
 import { Pair, Trade } from '@kyberswap/ks-sdk-classic'
-import { ChainId, Currency, CurrencyAmount, Fraction, Percent, TradeType } from '@kyberswap/ks-sdk-core'
+import { Currency, CurrencyAmount, Fraction, Percent, TradeType } from '@kyberswap/ks-sdk-core'
 import JSBI from 'jsbi'
 
 import {
@@ -52,16 +52,17 @@ export function warningSeverity(priceImpact: Percent | undefined): 0 | 1 | 2 | 3
   return 0
 }
 
-export function formatExecutionPrice(trade?: AnyTrade | Aggregator, inverted?: boolean, chainId?: ChainId): string {
+export function formatExecutionPrice(trade?: AnyTrade | Aggregator, inverted?: boolean): string {
   if (!trade) {
     return ''
   }
   const nativeInput = trade.inputAmount.currency
 
   const nativeOutput = trade.outputAmount.currency
+
   return inverted
-    ? `${trade.executionPrice.invert().toSignificant(6)} ${nativeInput?.symbol} / ${nativeOutput?.symbol}`
-    : `${trade.executionPrice.toSignificant(6)} ${nativeOutput?.symbol} / ${nativeInput.symbol}`
+    ? `1 ${nativeOutput?.symbol} = ${trade.executionPrice.invert().toSignificant(6)} ${nativeInput?.symbol}`
+    : `1 ${nativeInput?.symbol} = ${trade.executionPrice.toSignificant(6)} ${nativeOutput.symbol}`
 }
 
 export function computePriceImpactWithoutFee(pairs: Pair[], priceImpact?: Percent): Percent | undefined {
@@ -88,9 +89,10 @@ export const checkPriceImpact = (
   isVeryHigh: boolean
 } => {
   return {
+    // priceImpact < 0 is still VALID. That's when you swap $10, but receive back $12
     isInvalid: typeof priceImpact === 'number' && !Number.isFinite(priceImpact),
-    isHigh: !!priceImpact && priceImpact > 5,
-    isVeryHigh: !!priceImpact && priceImpact > 15,
+    isHigh: !!priceImpact && priceImpact > 2,
+    isVeryHigh: !!priceImpact && priceImpact > 10,
   }
 }
 

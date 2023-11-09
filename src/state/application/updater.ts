@@ -1,16 +1,18 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useDispatch } from 'react-redux'
-import { useLazyGetKyberswapConfigurationQuery } from 'services/ksSetting'
+import { useGetKyberswapConfigurationQuery } from 'services/ksSetting'
 
-import { useActiveWeb3React, useWeb3React, useWeb3Solana } from 'hooks'
+import { useActiveWeb3React, useWeb3Solana } from 'hooks'
 import useDebounce from 'hooks/useDebounce'
 import useIsWindowVisible from 'hooks/useIsWindowVisible'
+import { useKyberSwapConfig } from 'state/application/hooks'
 
 import { updateBlockNumber } from './actions'
 
 export default function Updater(): null {
   const { chainId, isEVM, isSolana } = useActiveWeb3React()
-  const { library } = useWeb3React()
+
+  const { readProvider } = useKyberSwapConfig()
   const dispatch = useDispatch()
   const { connection } = useWeb3Solana()
 
@@ -21,12 +23,7 @@ export default function Updater(): null {
     blockNumber: null,
   })
 
-  const [fetchConfig] = useLazyGetKyberswapConfigurationQuery()
-
-  // re-fetch config
-  useEffect(() => {
-    fetchConfig({ chainId })
-  }, [chainId, fetchConfig])
+  useGetKyberswapConfigurationQuery(chainId)
 
   const blockNumberCallback = useCallback(
     (blockNumber: number) => {
@@ -35,28 +32,31 @@ export default function Updater(): null {
           if (typeof state.blockNumber !== 'number') return { chainId, blockNumber }
           return { chainId, blockNumber: Math.max(blockNumber, state.blockNumber) }
         }
-        return state
+        return {
+          chainId,
+          blockNumber,
+        }
       })
     },
-    [chainId, setState],
+    [chainId],
   )
 
   // attach/detach listeners
   useEffect(() => {
-    if (!library || !windowVisible || !isEVM) return undefined
+    if (!readProvider || !windowVisible || !isEVM) return undefined
 
     setState({ chainId, blockNumber: null })
 
-    library
+    readProvider
       .getBlockNumber()
       .then(blockNumberCallback)
       .catch((error: any) => console.error(`Failed to get block number for chainId: ${chainId}`, error))
 
-    library.on('block', blockNumberCallback)
+    readProvider.on('block', blockNumberCallback)
     return () => {
-      library.removeListener('block', blockNumberCallback)
+      readProvider.removeListener('block', blockNumberCallback)
     }
-  }, [dispatch, chainId, library, blockNumberCallback, windowVisible, isEVM])
+  }, [dispatch, chainId, readProvider, blockNumberCallback, windowVisible, isEVM])
 
   useEffect(() => {
     if (!windowVisible || !isSolana || !connection) return undefined

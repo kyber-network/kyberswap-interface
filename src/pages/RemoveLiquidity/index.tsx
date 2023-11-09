@@ -19,6 +19,7 @@ import { Container, LiquidityProviderModeWrapper, PageWrapper, PoolName, TopBar 
 
 export default function RemoveLiquidity() {
   const { currencyIdA = '', currencyIdB = '', pairAddress = '' } = useParams()
+
   const currencyA = useCurrency(currencyIdA) ?? undefined
   const currencyB = useCurrency(currencyIdB) ?? undefined
   const { chainId, isEVM } = useActiveWeb3React()
@@ -53,6 +54,7 @@ export default function RemoveLiquidity() {
           <TopBar>
             <LiquidityProviderModeWrapper>
               <LiquidityProviderMode
+                zapout
                 activeTab={activeTab}
                 setActiveTab={setActiveTab}
                 singleTokenInfo={t`We will automatically remove your liquidity and convert it into your desired token (either token from the token pair), all in a single transaction`}

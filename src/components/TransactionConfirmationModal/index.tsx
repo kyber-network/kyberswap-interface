@@ -7,7 +7,7 @@ import styled from 'styled-components'
 
 import { ReactComponent as Alert } from 'assets/images/alert.svg'
 import Banner from 'components/Banner'
-import { ButtonLight, ButtonPrimary } from 'components/Button'
+import { ButtonLight, ButtonOutlined, ButtonPrimary } from 'components/Button'
 import { AutoColumn, ColumnCenter } from 'components/Column'
 import Loader from 'components/Loader'
 import Modal from 'components/Modal'
@@ -17,12 +17,11 @@ import HurryUpBanner from 'components/swapv2/HurryUpBanner'
 import { SUPPORTED_WALLETS } from 'constants/wallets'
 import { useActiveWeb3React } from 'hooks'
 import useTheme from 'hooks/useTheme'
-import { useIsDarkMode } from 'state/user/hooks'
 import { VIEW_MODE } from 'state/user/reducer'
 import { ExternalLink } from 'theme'
 import { CloseIcon } from 'theme/components'
 import { getEtherscanLink, getTokenLogoURL } from 'utils'
-import { errorFriendly } from 'utils/dmm'
+import { friendlyError } from 'utils/errorMessage'
 
 const Wrapper = styled.div`
   width: 100%;
@@ -56,7 +55,7 @@ export function ConfirmationPendingContent({
 }: {
   onDismiss: () => void
   pendingText: string | React.ReactNode
-  startedTime: number | undefined
+  startedTime?: number | undefined
 }) {
   const theme = useTheme()
 
@@ -90,7 +89,6 @@ export function ConfirmationPendingContent({
 }
 
 function AddTokenToInjectedWallet({ token, chainId }: { token: Token; chainId: ChainId }) {
-  const isDarkMode = useIsDarkMode()
   const { walletKey, isEVM } = useActiveWeb3React()
   const handleClick = async () => {
     const tokenAddress = token.address
@@ -121,6 +119,8 @@ function AddTokenToInjectedWallet({ token, chainId }: { token: Token; chainId: C
 
   if (!walletKey) return null
   if (!isEVM) return null
+  if (walletKey === 'WALLET_CONNECT') return null
+  if (walletKey === 'KRYSTAL_WC') return null
   const walletConfig = SUPPORTED_WALLETS[walletKey]
 
   return (
@@ -129,7 +129,7 @@ function AddTokenToInjectedWallet({ token, chainId }: { token: Token; chainId: C
         <Trans>
           Add {token.symbol} to {walletConfig.name}
         </Trans>{' '}
-        <StyledLogo src={isDarkMode ? walletConfig.icon : walletConfig.iconLight} />
+        <StyledLogo src={walletConfig.icon} />
       </RowFixed>
     </ButtonLight>
   )
@@ -247,9 +247,20 @@ const StyledAlert = styled(Alert)`
   height: 108px;
   width: 108px;
 `
-export function TransactionErrorContent({ message, onDismiss }: { message: string; onDismiss: () => void }) {
+export function TransactionErrorContent({
+  message,
+  onDismiss,
+  confirmAction,
+  confirmText,
+}: {
+  message: string
+  onDismiss: () => void
+  confirmAction?: () => void
+  confirmText?: string
+}) {
   const theme = useTheme()
-  const [showDetail, setShowDetail] = useState<boolean>(true)
+  const [showDetail, setShowDetail] = useState<boolean>(false)
+
   return (
     <Wrapper>
       <Section>
@@ -268,17 +279,17 @@ export function TransactionErrorContent({ message, onDismiss }: { message: strin
             lineHeight={'24px'}
             style={{ textAlign: 'center', width: '85%' }}
           >
-            {errorFriendly(message)}
+            {friendlyError(message)}
           </Text>
-          {message !== errorFriendly(message) && (
+          {message !== friendlyError(message) && (
             <AutoColumn justify="center" style={{ width: '100%' }}>
               <Text
                 color={theme.primary}
                 fontSize="14px"
                 sx={{ cursor: `pointer` }}
-                onClick={() => setShowDetail(!showDetail)}
+                onClick={() => setShowDetail(prev => !prev)}
               >
-                Show more details
+                {showDetail ? 'Show less' : 'Show more details'}
               </Text>
               {showDetail && (
                 <ErrorDetail>{typeof message === 'string' ? message : JSON.stringify(message)}</ErrorDetail>
@@ -288,9 +299,18 @@ export function TransactionErrorContent({ message, onDismiss }: { message: strin
         </AutoColumn>
       </Section>
       <BottomSection gap="12px">
-        <ButtonPrimary onClick={onDismiss}>
-          <Trans>Dismiss</Trans>
-        </ButtonPrimary>
+        <Flex sx={{ gap: '1rem' }}>
+          {confirmAction && confirmText ? (
+            <ButtonOutlined onClick={onDismiss}>
+              <Trans>Dismiss</Trans>
+            </ButtonOutlined>
+          ) : (
+            <ButtonPrimary onClick={onDismiss}>
+              <Trans>Dismiss</Trans>
+            </ButtonPrimary>
+          )}
+          {confirmAction && confirmText && <ButtonPrimary onClick={confirmAction}>{confirmText}</ButtonPrimary>}
+        </Flex>
       </BottomSection>
     </Wrapper>
   )
@@ -302,6 +322,7 @@ interface ConfirmationModalProps {
   hash: string | undefined
   content: () => React.ReactNode
   attemptingTxn: boolean
+  attemptingTxnContent?: () => React.ReactNode
   pendingText: string | React.ReactNode
   tokenAddToMetaMask?: Currency
   showTxBanner?: boolean
@@ -314,6 +335,7 @@ export default function TransactionConfirmationModal({
   isOpen,
   onDismiss,
   attemptingTxn,
+  attemptingTxnContent,
   hash,
   pendingText,
   content,
@@ -334,7 +356,11 @@ export default function TransactionConfirmationModal({
       width={!attemptingTxn && !hash ? width : undefined}
     >
       {attemptingTxn ? (
-        <ConfirmationPendingContent onDismiss={onDismiss} pendingText={pendingText} startedTime={startedTime} />
+        attemptingTxnContent ? (
+          attemptingTxnContent()
+        ) : (
+          <ConfirmationPendingContent onDismiss={onDismiss} pendingText={pendingText} startedTime={startedTime} />
+        )
       ) : hash ? (
         <TransactionSubmittedContent
           showTxBanner={showTxBanner}

@@ -4,15 +4,10 @@ import { Firestore, collection, doc, getFirestore, onSnapshot, query } from 'fir
 
 import { PopupContentAnnouncement } from 'components/Announcement/type'
 import { LimitOrder } from 'components/swapv2/LimitOrder/type'
-import { ENV_LEVEL, FIREBASE } from 'constants/env'
+import { ENV_KEY, ENV_LEVEL, FIREBASE } from 'constants/env'
 import { ENV_TYPE } from 'constants/type'
 
-const { DEFAULT: FIREBASE_CONFIG_DEFAULT, LIMIT_ORDER: FIREBASE_CONFIG_LO } =
-  ENV_LEVEL === ENV_TYPE.PROD
-    ? FIREBASE.production
-    : ENV_LEVEL === ENV_TYPE.STG
-    ? FIREBASE.staging
-    : FIREBASE.development
+const { DEFAULT: FIREBASE_CONFIG_DEFAULT, LIMIT_ORDER: FIREBASE_CONFIG_LO } = FIREBASE[ENV_KEY]
 
 const firebaseApp = firebase.initializeApp(FIREBASE_CONFIG_DEFAULT, 'default')
 const firebaseAppLimitOrder = FIREBASE_CONFIG_LO
@@ -24,17 +19,19 @@ const dbLimitOrder = getFirestore(firebaseAppLimitOrder)
 
 const COLLECTIONS = {
   LO_CANCELLING_ORDERS: 'cancellingOrders',
-  LO_CANCELLED_ORDERS: 'cancelledEvents',
+  LO_CANCELLED_ORDERS: 'cancelledEventsByContract',
   LO_EXPIRED_ORDERS: 'expiredEvents',
   LO_FILLED_ORDERS: 'filledEvents',
 
-  TELEGRAM_SUBSCRIPTION: 'telegramSubscription',
   ANNOUNCEMENT: 'wallets',
+  IDENTITY: 'identities',
   ANNOUNCEMENT_POPUP: 'broadcast',
 }
 
+const enableNotification = ENV_LEVEL !== ENV_TYPE.LOCAL
+
 function subscribeDocument(db: Firestore, collectionName: string, paths: string[], callback: (data: any) => void) {
-  if (ENV_LEVEL === ENV_TYPE.LOCAL) return
+  if (!enableNotification) return
   const ref = doc(db, collectionName, ...paths)
   const unsubscribe = onSnapshot(
     ref,
@@ -47,7 +44,7 @@ function subscribeDocument(db: Firestore, collectionName: string, paths: string[
 }
 
 function subscribeListDocument(db: Firestore, collectionName: string, paths: string[], callback: (data: any) => void) {
-  if (ENV_LEVEL === ENV_TYPE.LOCAL) return
+  if (!enableNotification) return
   const q = query(collection(db, collectionName, ...paths))
   const unsubscribe = onSnapshot(
     q,
@@ -85,7 +82,7 @@ function subscribeListLimitOrder(
         all: [],
       }
       data.forEach((e: any) => {
-        if (e.id.startsWith('nonce')) {
+        if (e.id.includes('nonce')) {
           result.all.push(e as AllItem)
         } else {
           result.orders.push({ ...e, id: Number(e.id) } as LimitOrder)
@@ -98,10 +95,11 @@ function subscribeListLimitOrder(
   return unsubscribe
 }
 
+export type OrderNonces = { [key: string]: number[] }
 export function subscribeCancellingOrders(
   account: string,
   chainId: ChainId,
-  callback: (data: { orderIds: number[]; nonces: number[] }) => void,
+  callback: (data: { orderIds: number[]; noncesByContract: OrderNonces }) => void,
 ) {
   return subscribeDocument(
     dbLimitOrder,
@@ -135,20 +133,26 @@ export function subscribeNotificationOrderExpired(
   return subscribeListLimitOrder(COLLECTIONS.LO_EXPIRED_ORDERS, account, chainId, callback)
 }
 
-export function subscribeTelegramSubscription(account: string, callback: (data: { isSuccessfully: boolean }) => void) {
-  // return subscribeDocument(COLLECTIONS.TELEGRAM_SUBSCRIPTION, [account.toLowerCase()], callback)
-  return () => {
-    //
-  }
-}
-
 export function subscribePrivateAnnouncement(
   account: string | undefined,
   callback: (data: PopupContentAnnouncement[]) => void,
 ) {
   if (!account) return
-  return subscribeDocument(dbNotification, COLLECTIONS.ANNOUNCEMENT, [account.toLowerCase()], data =>
-    callback(data?.metaMessages ?? []),
+  return subscribeListDocument(
+    dbNotification,
+    COLLECTIONS.ANNOUNCEMENT,
+    [account.toLowerCase(), 'metaMessages'],
+    data => callback(data ?? []),
+  )
+}
+
+export function subscribePrivateAnnouncementProfile(
+  identityID: string | undefined,
+  callback: (data: PopupContentAnnouncement[]) => void,
+) {
+  if (!identityID) return
+  return subscribeListDocument(dbNotification, COLLECTIONS.IDENTITY, [identityID.toLowerCase(), 'metaMessages'], data =>
+    callback(data ?? []),
   )
 }
 

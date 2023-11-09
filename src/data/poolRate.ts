@@ -13,13 +13,13 @@ interface ChartResults {
 }
 
 export const getHourlyRateData = async (
+  isEnableBlockService: boolean,
   poolAddress: string,
   startTime: number,
   frequency: number,
   networkInfo: EVMNetworkInfo,
   elasticClient: ApolloClient<NormalizedCacheObject>,
   blockClient: ApolloClient<NormalizedCacheObject>,
-  abortSignal: AbortSignal,
 ): Promise<[PoolRatesEntry[], PoolRatesEntry[]] | undefined> => {
   try {
     const utcEndTime = dayjs.utc()
@@ -38,8 +38,7 @@ export const getHourlyRateData = async (
     }
 
     // once you have all the timestamps, get the blocks for each timestamp in a bulk query
-    let blocks = await getBlocksFromTimestamps(blockClient, timestamps, networkInfo.chainId)
-    if (abortSignal.aborted) return
+    let blocks = await getBlocksFromTimestamps(isEnableBlockService, blockClient, timestamps, networkInfo.chainId)
     // catch failing case
     if (!blocks || blocks?.length === 0) {
       return
@@ -53,7 +52,6 @@ export const getHourlyRateData = async (
       [poolAddress],
       100,
     )
-    if (abortSignal.aborted) return
 
     // format token ETH price results
     const values: {

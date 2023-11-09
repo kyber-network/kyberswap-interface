@@ -1,16 +1,46 @@
-import { Trans, t } from '@lingui/macro'
+import { Trans } from '@lingui/macro'
 import { FC } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { Text } from 'rebass'
+import styled from 'styled-components'
 
+import Column from 'components/Column'
+import Row from 'components/Row'
 import WarningNote from 'components/WarningNote'
+import useMixpanel, { MIXPANEL_TYPE } from 'hooks/useMixpanel'
+import useTheme from 'hooks/useTheme'
+import { useSwitchPairToLimitOrder } from 'state/swap/hooks'
+import { StyledInternalLink } from 'theme'
 import { checkPriceImpact } from 'utils/prices'
+
+export const TextUnderlineColor = styled(Text)`
+  border-bottom: 1px solid ${({ theme }) => theme.text};
+  width: fit-content;
+  cursor: pointer;
+  color: ${({ theme }) => theme.text};
+  font-weight: 500;
+`
+
+const TextUnderlineTransparent = styled(Text)`
+  border-bottom: 1px solid transparent;
+  width: fit-content;
+  cursor: pointer;
+`
+
+export const PRICE_IMPACT_EXPLANATION_URL =
+  'https://docs.kyberswap.com/getting-started/foundational-topics/decentralized-finance/price-impact'
 
 type Props = {
   isDegenMode?: boolean
-  priceImpact: number | undefined
+  priceImpact: number | undefined | null
+  showLimitOrderLink?: boolean
 }
-const PriceImpactNote: FC<Props> = ({ isDegenMode, priceImpact }) => {
+
+const PriceImpactNote: FC<Props> = ({ isDegenMode, priceImpact, showLimitOrderLink = false }) => {
   const priceImpactResult = checkPriceImpact(priceImpact)
+  const theme = useTheme()
+  const switchToLimitOrder = useSwitchPairToLimitOrder()
+  const { mixpanelHandler } = useMixpanel()
 
   if (typeof priceImpact !== 'number') {
     return null
@@ -22,21 +52,26 @@ const PriceImpactNote: FC<Props> = ({ isDegenMode, priceImpact }) => {
       <WarningNote
         level="serious"
         shortText={
-          <Text>
-            <Trans>Unable to calculate Price Impact</Trans>
-          </Text>
+          <Row alignItems="center" style={{ gap: '0.5ch' }}>
+            <Trans>
+              <TextUnderlineTransparent>Unable to calculate</TextUnderlineTransparent>
+              <TextUnderlineColor as="a" href={PRICE_IMPACT_EXPLANATION_URL} target="_blank" rel="noreferrer noopener">
+                Price Impact
+              </TextUnderlineColor>
+            </Trans>
+          </Row>
         }
         longText={
           <Text>
             {isDegenMode ? (
               <Trans>
-                You have turned on <b>Advanced Mode</b> from settings. Trades can still be executed when price impact
+                You have turned on <b>Degen Mode</b> from settings. Trades can still be executed when price impact
                 cannot be calculated.
               </Trans>
             ) : (
               <Trans>
-                You can turn on <b>Advanced Mode</b> from Settings to execute trades when price impact cannot be
-                calculated. This can result in bad rates and loss of funds!
+                You can turn on Degen Mode from Settings to execute trades when price impact cannot be calculated. This
+                can result in bad rates and loss of funds!
               </Trans>
             )}
           </Text>
@@ -44,6 +79,26 @@ const PriceImpactNote: FC<Props> = ({ isDegenMode, priceImpact }) => {
       />
     )
   }
+
+  const limitOrderNote = showLimitOrderLink ? (
+    <Text>
+      <Trans>
+        Do you want to make a{' '}
+        <Text
+          as="b"
+          sx={{ cursor: 'pointer' }}
+          color={theme.primary}
+          onClick={() => {
+            mixpanelHandler(MIXPANEL_TYPE.LO_CLICK_WARNING_IN_SWAP)
+            switchToLimitOrder()
+          }}
+        >
+          Limit Order
+        </Text>{' '}
+        instead?
+      </Trans>
+    </Text>
+  ) : undefined
 
   // VERY high
   if (priceImpactResult.isVeryHigh) {
@@ -51,37 +106,92 @@ const PriceImpactNote: FC<Props> = ({ isDegenMode, priceImpact }) => {
       <WarningNote
         level="serious"
         shortText={
-          <Text>
+          <Row alignItems="center" style={{ gap: '0.5ch' }}>
             <Trans>
-              Price Impact is <b>very</b> high
+              <TextUnderlineColor as="a" href={PRICE_IMPACT_EXPLANATION_URL} target="_blank" rel="noreferrer noopener">
+                Price Impact
+              </TextUnderlineColor>
+              <TextUnderlineTransparent>is very high. You will lose funds!</TextUnderlineTransparent>
             </Trans>
-          </Text>
+          </Row>
         }
         longText={
-          <Text>
-            {isDegenMode ? (
-              <Trans>
-                You have turned on <b>Advanced Mode</b> from settings. Trades with <b>very</b> high price impact can be
-                executed.
-              </Trans>
-            ) : (
-              <Trans>
-                You can turn on <b>Advanced Mode</b> from Settings to execute trades with <b>very</b> high price impact.
-                This can result in bad rates and loss of funds!
-              </Trans>
-            )}
-          </Text>
+          <Column gap="4px">
+            {limitOrderNote}
+            <Text>
+              {isDegenMode ? (
+                <Trans>
+                  You have turned on Degen Mode from settings. Trades with very high price impact can be executed
+                </Trans>
+              ) : (
+                <Trans>
+                  You can turn on Degen Mode from Settings to execute trades with very high price impact. This can
+                  result in bad rates and loss of funds
+                </Trans>
+              )}
+            </Text>
+          </Column>
         }
       />
     )
   }
 
   // high
+
+  const shortText = (
+    <Row alignItems="center" style={{ gap: '0.5ch' }}>
+      <Trans>
+        <TextUnderlineColor as="a" href={PRICE_IMPACT_EXPLANATION_URL} target="_blank" rel="noreferrer">
+          Price Impact
+        </TextUnderlineColor>
+        <TextUnderlineTransparent>is high</TextUnderlineTransparent>
+      </Trans>
+    </Row>
+  )
+
   if (priceImpactResult.isHigh) {
-    return <WarningNote shortText={t`Price Impact is high`} />
+    return <WarningNote shortText={shortText} longText={limitOrderNote} />
   }
 
   return null
+}
+
+export const ZapHighPriceImpact = ({ showInPopup }: { showInPopup?: boolean }) => {
+  const [searchParams, setSearchParams] = useSearchParams()
+  return (
+    <WarningNote
+      level="serious"
+      shortText={
+        <Text>
+          <Trans>
+            <TextUnderlineColor as="a" href={PRICE_IMPACT_EXPLANATION_URL} target="_blank" rel="noreferrer noopener">
+              Price Impact
+            </TextUnderlineColor>{' '}
+            is very high. You will lose funds!{' '}
+            {showInPopup ? (
+              <Text>
+                You have turned on Degen Mode from settings. Trades with very high price impact can be executed
+              </Text>
+            ) : (
+              <>
+                Please turn on{' '}
+                <StyledInternalLink
+                  to="link is not important here"
+                  onClick={e => {
+                    e.preventDefault()
+                    searchParams.set('showSetting', 'true')
+                    setSearchParams(searchParams)
+                  }}
+                >
+                  Degen Mode ↗
+                </StyledInternalLink>
+              </>
+            )}
+          </Trans>
+        </Text>
+      }
+    />
+  )
 }
 
 export default PriceImpactNote

@@ -1,40 +1,20 @@
+import { ChargeFeeBy, Route } from 'types/route'
+
 export type GetRouteParams = {
   tokenIn: string
   tokenOut: string
   amountIn: string
   saveGas: string
-  includedSources: string
+  includedSources?: string
   excludedSources?: string
-  gasInclude: string
-  gasPrice: string
-  feeAmount: string
-  chargeFeeBy: string
-  isInBps: string
-  feeReceiver: string
+  excludedPools?: string
+  gasInclude?: string
+  gasPrice?: string
+  feeAmount?: string
+  chargeFeeBy?: ChargeFeeBy
+  isInBps?: string
+  feeReceiver?: string
   debug?: string
-}
-
-type Route = {
-  pool: string
-
-  tokenIn: string
-  swapAmount: string
-
-  tokenOut: string
-  amountOut: string
-
-  limitReturnAmount: string
-  exchange: string
-  poolLength: number
-  poolType: string
-  extra: string
-}
-
-type FeeConfig = {
-  feeAmount: string
-  chargeFeeBy: string
-  isInBps: boolean
-  feeReceiver: string
 }
 
 export type RouteSummary = {
@@ -51,7 +31,14 @@ export type RouteSummary = {
   gasUsd: string
   gasPrice: string
 
-  extraFee: FeeConfig
+  extraFee: {
+    feeAmount: string
+    chargeFeeBy: ChargeFeeBy
+    isInBps: boolean
+    feeReceiver: string
+    feeAmountUsd: string
+  }
+
   route: Route[][]
 }
 

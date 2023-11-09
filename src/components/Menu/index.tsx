@@ -1,31 +1,22 @@
 import { Trans, t } from '@lingui/macro'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { isMobile } from 'react-device-detect'
-import {
-  Award,
-  BookOpen,
-  Edit,
-  FileText,
-  HelpCircle,
-  Info,
-  Menu as MenuIcon,
-  MessageCircle,
-  PieChart,
-  Share2,
-  UserPlus,
-} from 'react-feather'
-import { NavLink, useLocation } from 'react-router-dom'
+
+import { Award, BookOpen, ChevronDown, Edit, FileText, HelpCircle, Info, MessageCircle, PieChart } from 'react-feather'
+import { NavLink, useLocation, useNavigate } from 'react-router-dom'
+
 import { useMedia } from 'react-use'
 import { Text } from 'rebass'
 import styled, { css } from 'styled-components'
 
+import { ReactComponent as MenuIcon } from 'assets/svg/all_icon.svg'
 import { ReactComponent as BlogIcon } from 'assets/svg/blog.svg'
-import { ReactComponent as DiscoverIconSvg } from 'assets/svg/discover_icon.svg'
+import { ReactComponent as BridgeIcon } from 'assets/svg/bridge_icon.svg'
 import { ReactComponent as LightIcon } from 'assets/svg/light.svg'
 import { ReactComponent as RoadMapIcon } from 'assets/svg/roadmap.svg'
 import { ButtonEmpty, ButtonPrimary } from 'components/Button'
 import { AutoColumn } from 'components/Column'
-import SlideToUnlock from 'components/Header/SlideToUnlock'
+import ApeIcon from 'components/Icons/ApeIcon'
 import ArrowRight from 'components/Icons/ArrowRight'
 import Faucet from 'components/Icons/Faucet'
 import MailIcon from 'components/Icons/MailIcon'
@@ -33,24 +24,24 @@ import LanguageSelector from 'components/LanguageSelector'
 import Loader from 'components/Loader'
 import MenuFlyout from 'components/MenuFlyout'
 import Row, { AutoRow } from 'components/Row'
-import NotificationModal from 'components/SubscribeButton/NotificationModal'
 import Toggle from 'components/Toggle'
-import ThemeToggle from 'components/Toggle/ThemeToggle'
 import { TutorialIds } from 'components/Tutorial/TutorialSwap/constant'
-import { TAG } from 'constants/env'
+import { ENV_LEVEL, TAG } from 'constants/env'
 import { AGGREGATOR_ANALYTICS_URL, APP_PATHS, DMM_ANALYTICS_URL, TERM_FILES_PATH } from 'constants/index'
 import { getLocaleLabel } from 'constants/locales'
 import { FAUCET_NETWORKS } from 'constants/networks'
 import { EVMNetworkInfo } from 'constants/networks/type'
+import { THRESHOLD_HEADER } from 'constants/styles'
+import { ENV_TYPE } from 'constants/type'
 import { useActiveWeb3React } from 'hooks'
 import useClaimReward from 'hooks/useClaimReward'
 import useMixpanel, { MIXPANEL_TYPE } from 'hooks/useMixpanel'
-import useNotification from 'hooks/useNotification'
 import useTheme from 'hooks/useTheme'
+import { PROFILE_MANAGE_ROUTES } from 'pages/NotificationCenter/const'
 import { ApplicationModal } from 'state/application/actions'
 import { useModalOpen, useToggleModal } from 'state/application/hooks'
 import { useTutorialSwapGuide } from 'state/tutorial/hooks'
-import { useDarkModeManager, useHolidayMode, useUserLocale } from 'state/user/hooks'
+import { useHolidayMode, useIsWhiteListKyberAI, useKyberAIWidget, useUserLocale } from 'state/user/hooks'
 import { ExternalLink } from 'theme'
 import { isChristmasTime } from 'utils'
 
@@ -69,14 +60,6 @@ const MenuItem = styled.li`
   color: ${({ theme }) => theme.subText};
   font-size: 15px;
 
-  :hover {
-    color: ${({ theme }) => theme.text};
-    cursor: pointer;
-    a {
-      color: ${({ theme }) => theme.text};
-    }
-  }
-
   svg {
     margin-right: 8px;
     height: 16px;
@@ -94,16 +77,10 @@ const MenuItem = styled.li`
   }
 `
 
-const StyledMenuIcon = styled(MenuIcon)`
-  path {
-    stroke: ${({ theme }) => theme.text};
-  }
-`
-
-const DiscoverWrapper = styled(MenuItem)`
+const KyberAIWrapper = styled(MenuItem)`
   display: none;
 
-  ${({ theme }) => theme.mediaWidth.upToExtraSmall`
+  ${({ theme }) => theme.mediaWidth.upToXXSmall`
     display: flex;
   `};
 `
@@ -112,19 +89,11 @@ const NavLinkBetween = styled(MenuItem)`
   justify-content: space-between;
   position: unset !important;
   max-height: 40px;
+  cursor: pointer;
   svg {
     margin: 0;
     width: unset;
     height: unset;
-  }
-`
-
-const CampaignWrapper = styled.div`
-  display: none;
-
-  /* It's better to break at 420px than at extraSmall */
-  @media (max-width: 420px) {
-    display: flex;
   }
 `
 
@@ -138,15 +107,13 @@ const StyledMenuButton = styled.button<{ active?: boolean }>`
   display: flex;
   align-items: center;
   justify-content: center;
-  color: ${({ theme }) => theme.text};
+  color: ${({ theme }) => theme.subText};
 
   border-radius: 999px;
 
   :hover {
     cursor: pointer;
     outline: none;
-    background-color: ${({ theme }) => theme.buttonBlack};
-    border: 1px solid ${({ theme }) => theme.primary};
   }
 
   ${({ active }) =>
@@ -154,7 +121,7 @@ const StyledMenuButton = styled.button<{ active?: boolean }>`
     css`
       cursor: pointer;
       outline: none;
-      background-color: ${({ theme }) => theme.buttonBlack};
+      color: ${({ theme }) => theme.text};
     `}
 `
 
@@ -165,6 +132,11 @@ const StyledMenu = styled.div`
   position: relative;
   border: none;
   text-align: left;
+`
+
+const ListWrapper = styled.div`
+  max-height: calc(100vh - 150px);
+  overflow-y: scroll;
 `
 
 const MenuFlyoutBrowserStyle = css`
@@ -211,9 +183,29 @@ const Title = styled(MenuItem)`
   font-size: 16px;
   color: ${({ theme }) => theme.text};
 `
-const noop = () => {
-  //
-}
+
+const ScrollEnd = styled.div<{ show: boolean }>`
+  visibility: ${({ show }) => (show ? 'initial' : 'hidden')};
+  position: sticky !important;
+  width: 100%;
+  text-align: center;
+  z-index: 2;
+  @keyframes floating {
+    from {
+      bottom: 10px;
+    }
+    to {
+      bottom: -10px;
+    }
+  }
+  animation-name: floating;
+  animation-duration: 1s;
+  animation-timing-function: ease;
+  animation-iteration-count: infinite;
+  animation-direction: alternate-reverse;
+`
+
+const noop = () => {}
 
 export default function Menu() {
   const { chainId, account, isEVM, networkInfo } = useActiveWeb3React()
@@ -221,15 +213,16 @@ export default function Menu() {
 
   const open = useModalOpen(ApplicationModal.MENU)
   const toggle = useToggleModal(ApplicationModal.MENU)
-  const { showNotificationModal } = useNotification()
-  const [darkMode, toggleSetDarkMode] = useDarkModeManager()
   const [holidayMode, toggleHolidayMode] = useHolidayMode()
+  const [kyberAIWidgetActive, toggleKyberAIWidget] = useKyberAIWidget()
+  const { isWhiteList } = useIsWhiteListKyberAI()
   const [isSelectingLanguage, setIsSelectingLanguage] = useState(false)
 
   const userLocale = useUserLocale()
   const location = useLocation()
 
   const { mixpanelHandler } = useMixpanel()
+  const navigate = useNavigate()
 
   const setShowTutorialSwapGuide = useTutorialSwapGuide()[1]
   const openTutorialSwapGuide = () => {
@@ -238,9 +231,11 @@ export default function Menu() {
     toggle()
   }
 
-  const under1440 = useMedia('(max-width: 1440px)')
-  const above1321 = useMedia('(min-width: 1321px)')
-  const under1040 = useMedia('(max-width: 1040px)')
+  const showAbout = useMedia(`(max-width: ${THRESHOLD_HEADER.ABOUT})`)
+  const showBlog = useMedia(`(max-width: ${THRESHOLD_HEADER.BLOG})`)
+  const showAnalytics = useMedia(`(max-width: ${THRESHOLD_HEADER.ANALYTIC})`)
+  const showKyberDao = useMedia(`(max-width: ${THRESHOLD_HEADER.KYBERDAO})`)
+  const showCampaign = useMedia(`(max-width: ${THRESHOLD_HEADER.CAMPAIGNS})`)
 
   const bridgeLink = networkInfo.bridgeURL
   const toggleClaimPopup = useToggleModal(ApplicationModal.CLAIM_POPUP)
@@ -258,12 +253,34 @@ export default function Menu() {
     mixpanelHandler(MIXPANEL_TYPE.MENU_PREFERENCE_CLICK, { menu: name })
   }
 
+  const [wrapperNode, setWrapperNode] = useState<HTMLDivElement | null>(null)
+  const [showScroll, setShowScroll] = useState<boolean>(false)
+
+  useEffect(() => {
+    if (wrapperNode) {
+      const abortController = new AbortController()
+      const onScroll = () => {
+        if (abortController.signal.aborted) return
+        setShowScroll(Math.abs(wrapperNode.offsetHeight + wrapperNode.scrollTop - wrapperNode.scrollHeight) > 10) //no need to show scroll down when scrolled to last 10px
+      }
+      onScroll()
+      wrapperNode.addEventListener('scroll', onScroll)
+      window.addEventListener('resize', onScroll)
+      return () => {
+        abortController.abort()
+        wrapperNode.removeEventListener('scroll', onScroll)
+        window.removeEventListener('resize', onScroll)
+      }
+    }
+    return
+  }, [wrapperNode])
+
   return (
     <StyledMenu>
       <MenuFlyout
         trigger={
           <StyledMenuButton active={open} onClick={toggle} aria-label="Menu" id={TutorialIds.BUTTON_MENU_HEADER}>
-            <StyledMenuIcon />
+            <MenuIcon width={18} height={18} />
           </StyledMenuButton>
         }
         customStyle={MenuFlyoutBrowserStyle}
@@ -277,7 +294,7 @@ export default function Menu() {
             <LanguageSelector setIsSelectingLanguage={setIsSelectingLanguage} />
           </AutoColumn>
         ) : (
-          <>
+          <ListWrapper ref={wrapperNode => setWrapperNode(wrapperNode)}>
             <Title style={{ paddingTop: 0 }}>
               <Trans>Menu</Trans>
             </Title>
@@ -299,31 +316,54 @@ export default function Menu() {
             {bridgeLink && (
               <MenuItem>
                 <ExternalLink href={bridgeLink}>
-                  <Share2 />
+                  <BridgeIcon />
                   <Trans>Bridge Assets</Trans>
                 </ExternalLink>
               </MenuItem>
             )}
 
-            <DiscoverWrapper>
-              <NavLink to={'/discover?tab=trending_soon'} onClick={toggle}>
-                <DiscoverIconSvg />
-                <SlideToUnlock>
-                  <Trans>Discover</Trans>
-                </SlideToUnlock>
-              </NavLink>
-            </DiscoverWrapper>
+            <KyberAIWrapper>
+              <NavDropDown
+                icon={<ApeIcon />}
+                title={
+                  <Text>
+                    <Trans>KyberAI</Trans>{' '}
+                    <NewLabel>
+                      <Trans>New</Trans>
+                    </NewLabel>
+                  </Text>
+                }
+                link={'#'}
+                options={[
+                  { link: APP_PATHS.KYBERAI_ABOUT, label: t`About` },
+                  {
+                    link: APP_PATHS.KYBERAI_RANKINGS,
+                    label: (
+                      <Text as="span">
+                        <Trans>Rankings</Trans>{' '}
+                      </Text>
+                    ),
+                  },
+                  {
+                    link: APP_PATHS.KYBERAI_EXPLORE,
+                    label: (
+                      <Text as="span">
+                        <Trans>Explore</Trans>{' '}
+                      </Text>
+                    ),
+                  },
+                ]}
+              />
+            </KyberAIWrapper>
 
-            <CampaignWrapper>
+
+            {showCampaign && (
               <MenuItem>
                 <NavDropDown
                   icon={<Award />}
                   title={
                     <Text>
-                      <Trans>Campaigns</Trans>{' '}
-                      <NewLabel>
-                        <Trans>New</Trans>
-                      </NewLabel>
+                      <Trans>Campaigns</Trans>
                     </Text>
                   }
                   link={'#'}
@@ -333,45 +373,16 @@ export default function Menu() {
                       link: APP_PATHS.GRANT_PROGRAMS,
                       label: (
                         <Text as="span">
-                          <Trans>Trading Grant Campaign</Trans>{' '}
-                          <NewLabel>
-                            <Trans>New</Trans>
-                          </NewLabel>
+                          <Trans>Trading Grant Campaign</Trans>
                         </Text>
                       ),
                     },
                   ]}
                 />
               </MenuItem>
-            </CampaignWrapper>
-
-            {under1440 && (
-              <MenuItem>
-                <NavDropDown
-                  icon={<Info />}
-                  title={t`About`}
-                  link={'/about'}
-                  options={[
-                    { link: '/about/kyberswap', label: 'Kyberswap' },
-                    { link: '/about/knc', label: 'KNC' },
-                  ]}
-                />
-              </MenuItem>
             )}
 
-            <MenuItem>
-              <NavLink
-                to="/referral"
-                onClick={() => {
-                  toggle()
-                  handleMenuClickMixpanel('Referral')
-                }}
-              >
-                <UserPlus />
-                <Trans>Referral</Trans>
-              </NavLink>
-            </MenuItem>
-            {under1040 && (
+            {showKyberDao && (
               <MenuItem>
                 <NavDropDown
                   icon={<Info />}
@@ -380,12 +391,13 @@ export default function Menu() {
                   options={[
                     { link: '/kyberdao/stake-knc', label: t`Stake KNC` },
                     { link: '/kyberdao/vote', label: t`Vote` },
+                    { link: APP_PATHS.KYBERDAO_KNC_UTILITY, label: t`KNC Utility` },
                     { link: 'https://kyberswap.canny.io/feature-request', label: t`Feature Request`, external: true },
                   ]}
                 />
               </MenuItem>
             )}
-            {!above1321 && (
+            {showAnalytics && (
               <MenuItem>
                 <NavDropDown
                   icon={<PieChart />}
@@ -402,6 +414,20 @@ export default function Menu() {
                 />
               </MenuItem>
             )}
+            {showAbout && (
+              <MenuItem>
+                <NavDropDown
+                  icon={<Info />}
+                  title={t`About`}
+                  link={'/about'}
+                  options={[
+                    { link: '/about/kyberswap', label: 'KyberSwap' },
+                    { link: '/about/knc', label: 'KNC' },
+                  ]}
+                />
+              </MenuItem>
+            )}
+
             <MenuItem>
               <ExternalLink
                 href="https://docs.kyberswap.com"
@@ -440,7 +466,7 @@ export default function Menu() {
               </ExternalLink>
             </MenuItem>
 
-            {under1440 && (
+            {showBlog && (
               <MenuItem>
                 <ExternalLink href="https://blog.kyberswap.com">
                   <BlogIcon />
@@ -459,6 +485,18 @@ export default function Menu() {
               >
                 <FileText />
                 <Trans>Terms</Trans>
+              </ExternalLink>
+            </MenuItem>
+            <MenuItem>
+              <ExternalLink
+                href={TERM_FILES_PATH.PRIVACY_POLICY}
+                onClick={() => {
+                  toggle()
+                  handleMenuClickMixpanel('Privacy Policy')
+                }}
+              >
+                <FileText />
+                <Trans>Privacy Policy</Trans>
               </ExternalLink>
             </MenuItem>
             <MenuItem>
@@ -483,7 +521,14 @@ export default function Menu() {
                 <Trans>Help</Trans>
               </ExternalLink>
             </MenuItem>
-
+            {ENV_LEVEL === ENV_TYPE.LOCAL && (
+              <MenuItem>
+                <NavLink to="/icons">
+                  <MenuIcon />
+                  <Trans>Icons</Trans>
+                </NavLink>
+              </MenuItem>
+            )}
             <Divider />
 
             <Title>
@@ -499,7 +544,7 @@ export default function Menu() {
                   handlePreferenceClickMixpanel('Swap guide')
                 }}
               >
-                <Trans>Swap Guide</Trans>
+                <Trans>KyberSwap Guide</Trans>
                 <Row justify="flex-end">
                   <Text color={theme.text}>View</Text>&nbsp;
                   <LightIcon color={theme.text} />
@@ -513,23 +558,27 @@ export default function Menu() {
               </NavLinkBetween>
             )}
 
+            {isWhiteList && (
+              <NavLinkBetween
+                onClick={() => {
+                  toggleKyberAIWidget()
+                  handlePreferenceClickMixpanel('KyberAI Widget')
+                }}
+              >
+                <Trans>KyberAI Widget</Trans>
+                <Toggle isActive={kyberAIWidgetActive} toggle={noop} backgroundColor={theme.buttonBlack} />
+              </NavLinkBetween>
+            )}
+
             <NavLinkBetween
               onClick={() => {
-                toggleSetDarkMode()
-                handlePreferenceClickMixpanel('Dark Mode')
-              }}
-            >
-              <Trans>Dark Mode</Trans>
-              <ThemeToggle id="toggle-dark-mode-button" isDarkMode={darkMode} toggle={noop} />
-            </NavLinkBetween>
-            <NavLinkBetween
-              onClick={() => {
-                showNotificationModal()
+                navigate(`${APP_PATHS.PROFILE_MANAGE}${PROFILE_MANAGE_ROUTES.PREFERENCE}`)
                 mixpanelHandler(MIXPANEL_TYPE.NOTIFICATION_CLICK_MENU)
                 handlePreferenceClickMixpanel('Notifications')
+                toggle()
               }}
             >
-              <Trans>Notifications</Trans>
+              <Trans>Notification Center</Trans>
               <MailIcon size={17} color={theme.text} />
             </NavLinkBetween>
             <NavLinkBetween
@@ -572,12 +621,14 @@ export default function Menu() {
             <Text fontSize="10px" fontWeight={300} color={theme.subText} mt="16px" textAlign={'center'}>
               kyberswap@{TAG}
             </Text>
-          </>
+            <ScrollEnd show={showScroll}>
+              <ChevronDown color={theme.text4} />
+            </ScrollEnd>
+          </ListWrapper>
         )}
       </MenuFlyout>
 
       <ClaimRewardModal />
-      <NotificationModal />
       {FAUCET_NETWORKS.includes(chainId) && <FaucetModal />}
     </StyledMenu>
   )

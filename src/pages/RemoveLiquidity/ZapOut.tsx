@@ -18,6 +18,7 @@ import JSBI from 'jsbi'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Flex, Text } from 'rebass'
 
+import { NotificationType } from 'components/Announcement/type'
 import { ButtonConfirmed, ButtonError, ButtonLight, ButtonPrimary } from 'components/Button'
 import { BlackCard } from 'components/Card'
 import { AutoColumn } from 'components/Column'
@@ -35,7 +36,8 @@ import TransactionConfirmationModal, {
 } from 'components/TransactionConfirmationModal'
 import ZapError from 'components/ZapError'
 import FormattedPriceImpact from 'components/swapv2/FormattedPriceImpact'
-import { EIP712Domain } from 'constants/index'
+import { didUserReject } from 'constants/connectors/utils'
+import { APP_PATHS, EIP712Domain } from 'constants/index'
 import { EVMNetworkInfo } from 'constants/networks/type'
 import { NativeCurrencies } from 'constants/tokens'
 import { useActiveWeb3React, useWeb3React } from 'hooks'
@@ -45,10 +47,11 @@ import { usePairContract } from 'hooks/useContract'
 import useIsArgentWallet from 'hooks/useIsArgentWallet'
 import useTheme from 'hooks/useTheme'
 import useTransactionDeadline from 'hooks/useTransactionDeadline'
-import { Wrapper } from 'pages/Pool/styleds'
-import { useTokensPrice, useWalletModalToggle } from 'state/application/hooks'
+import { Wrapper } from 'pages/MyPool/styleds'
+import { useNotify, useWalletModalToggle } from 'state/application/hooks'
 import { Field } from 'state/burn/actions'
 import { useBurnState, useDerivedZapOutInfo, useZapOutActionHandlers } from 'state/burn/hooks'
+import { useTokenPrices } from 'state/tokenPrices/hooks'
 import { useTransactionAdder } from 'state/transactions/hooks'
 import { TRANSACTION_TYPE } from 'state/transactions/type'
 import { useDegenModeManager, useUserSlippageTolerance } from 'state/user/hooks'
@@ -56,8 +59,10 @@ import { StyledInternalLink, TYPE, UppercaseText } from 'theme'
 import { calculateGasMargin, formattedNum } from 'utils'
 import { currencyId } from 'utils/currencyId'
 import { useCurrencyConvertedToNative } from 'utils/dmm'
+import { friendlyError } from 'utils/errorMessage'
 import { formatJSBIValue } from 'utils/formatBalance'
 import { getZapContract } from 'utils/getContract'
+import { formatDisplayNumber } from 'utils/numbers'
 import { computePriceImpactWithoutFee, warningSeverity } from 'utils/prices'
 import { ErrorName } from 'utils/sentry'
 import useDebouncedChangeHandler from 'utils/useDebouncedChangeHandler'
@@ -94,6 +99,7 @@ export default function ZapOut({
   const theme = useTheme()
 
   const [isDegenMode] = useDegenModeManager()
+  const notify = useNotify()
 
   // toggle wallet when disconnected
   const toggleWalletModal = useWalletModalToggle()
@@ -232,23 +238,32 @@ export default function ZapOut({
       message,
     })
 
-    library
-      .send('eth_signTypedData_v4', [account, data])
-      .then(splitSignature)
-      .then(signature => {
-        setSignatureData({
-          v: signature.v,
-          r: signature.r,
-          s: signature.s,
-          deadline: deadline.toNumber(),
+    try {
+      await library
+        .send('eth_signTypedData_v4', [account, data])
+        .then(splitSignature)
+        .then(signature => {
+          setSignatureData({
+            v: signature.v,
+            r: signature.r,
+            s: signature.s,
+            deadline: deadline.toNumber(),
+          })
         })
-      })
-      .catch((error: any) => {
-        // for all errors other than 4001 (EIP-1193 user rejected request), fall back to manual approve
-        if (error?.code !== 4001) {
-          approveCallback()
-        }
-      })
+    } catch (error) {
+      if (didUserReject(error)) {
+        notify(
+          {
+            title: t`Approve failed`,
+            summary: friendlyError(error),
+            type: NotificationType.ERROR,
+          },
+          8000,
+        )
+      } else {
+        approveCallback()
+      }
+    }
   }
 
   // wrapped onUserInput to clear signatures
@@ -264,6 +279,7 @@ export default function ZapOut({
     (typedValue: string): void => onUserInput(Field.LIQUIDITY, typedValue),
     [onUserInput],
   )
+
   const onCurrencyInput = useCallback(
     (typedValue: string): void => onUserInput(independentTokenField, typedValue),
     [independentTokenField, onUserInput],
@@ -369,7 +385,7 @@ export default function ZapOut({
           .then(calculateGasMargin)
           .catch(err => {
             // we only care if the error is something other than the user rejected the tx
-            if ((err as any)?.code !== 4001) {
+            if (!didUserReject(err)) {
               console.error(`estimateGas failed`, methodName, args, err)
             }
 
@@ -380,7 +396,7 @@ export default function ZapOut({
               setZapOutError(t`Insufficient Liquidity in the Liquidity Pool to Swap`)
             } else {
               setZapOutError(err?.message)
-              if ((err as any)?.code !== 4001 && (err as any)?.code !== 'ACTION_REJECTED') {
+              if (!didUserReject(err)) {
                 const e = new Error('estimate gas zap out failed', { cause: err })
                 e.name = ErrorName.RemoveClassicLiquidityError
                 captureException(e, { extra: { args } })
@@ -410,7 +426,8 @@ export default function ZapOut({
         .then((response: TransactionResponse) => {
           if (currencyA && currencyB) {
             setAttemptingTxn(false)
-            const tokenAmount = parsedAmounts[independentTokenField]?.toSignificant(6)
+            const tokenAmount = parsedAmounts[independentTokenField]
+            const tokenAmountStr = tokenAmount?.toSignificant(6)
             addTransactionWithType({
               hash: response.hash,
               type: TRANSACTION_TYPE.CLASSIC_REMOVE_LIQUIDITY,
@@ -419,7 +436,9 @@ export default function ZapOut({
                 tokenAddressOut: currencyB.wrapped.address,
                 tokenSymbolIn: currencyA.symbol,
                 tokenSymbolOut: currencyB.symbol,
-                tokenAmountIn: tokenAmount,
+                [(tokenAmount as TokenAmount)?.currency?.address === currencyA?.wrapped.address
+                  ? 'tokenAmountIn'
+                  : 'tokenAmountOut']: tokenAmountStr,
                 contract: pairAddress,
                 arbitrary: {
                   poolAddress: pairAddress,
@@ -434,19 +453,20 @@ export default function ZapOut({
             setTxHash(response.hash)
           }
         })
-        .catch((err: Error) => {
+        .catch((error: Error) => {
           setAttemptingTxn(false)
-          // we only care if the error is something _other_ than the user rejected the tx
-          if ((err as any)?.code !== 4001 && (err as any)?.code !== 'ACTION_REJECTED') {
-            const e = new Error('zap out failed', { cause: err })
+
+          const message = error.message.includes('INSUFFICIENT')
+            ? t`Insufficient liquidity available. Please reload page or increase max slippage and try again!`
+            : error.message
+
+          setZapOutError(message)
+
+          if (!didUserReject(error)) {
+            console.error('Remove Classic Liquidity Error:', { message, error })
+            const e = new Error(friendlyError(message), { cause: error })
             e.name = ErrorName.RemoveClassicLiquidityError
             captureException(e, { extra: { args } })
-          }
-
-          if (err.message.includes('INSUFFICIENT_OUTPUT_AMOUNT')) {
-            setZapOutError(t`Insufficient Liquidity in the Liquidity Pool to Swap`)
-          } else {
-            setZapOutError(err?.message)
           }
         })
     }
@@ -492,7 +512,12 @@ export default function ZapOut({
         )
       : undefined
 
-  const usdPrices = useTokensPrice([tokenA, tokenB])
+  const tokenAddresses: string[] = useMemo(
+    () => [tokenA, tokenB].map(token => token?.address as string).filter(item => !!item),
+    [tokenA, tokenB],
+  )
+  const marketPriceMap = useTokenPrices(tokenAddresses)
+  const usdPrices = [tokenA, tokenB].map(item => marketPriceMap[item?.address || ''] || 0)
 
   const independentTokenPrice = independentTokenField === Field.CURRENCY_A ? usdPrices[0] : usdPrices[1]
 
@@ -500,16 +525,14 @@ export default function ZapOut({
     parsedAmounts[independentTokenField] && independentTokenPrice
       ? parseFloat((parsedAmounts[independentTokenField] as TokenAmount).toSignificant(6)) * independentTokenPrice
       : 0
-
+  const noZapDependentAmount = noZapAmounts[dependentTokenField]
   const priceImpact =
     priceToSwap &&
-    noZapAmounts[dependentTokenField] &&
+    noZapDependentAmount &&
     amountOut &&
-    computePriceImpact(
-      priceToSwap,
-      noZapAmounts[dependentTokenField] as CurrencyAmount<Currency>,
-      amountOut as CurrencyAmount<Currency>,
-    )
+    !priceToSwap.equalTo(0) &&
+    !noZapDependentAmount.equalTo(0) &&
+    computePriceImpact(priceToSwap, noZapDependentAmount, amountOut as CurrencyAmount<Currency>)
 
   const priceImpactWithoutFee = pair && priceImpact ? computePriceImpactWithoutFee([pair], priceImpact) : undefined
 
@@ -615,6 +638,12 @@ export default function ZapOut({
     )
   }
 
+  const lpToken = useMemo(() => {
+    return (
+      pair && new Token(chainId, pair.liquidityToken?.address, pair.liquidityToken?.decimals, `LP Tokens`, `LP Tokens`)
+    )
+  }, [chainId, pair])
+
   return (
     <>
       <Wrapper>
@@ -648,7 +677,13 @@ export default function ZapOut({
                     </Text>
 
                     <Text fontSize={12} fontWeight={500}>
-                      <Trans>Balance</Trans>: {!userLiquidity ? <Loader /> : userLiquidity?.toSignificant(6)} LP Tokens
+                      <Trans>Balance</Trans>:{' '}
+                      {!userLiquidity ? (
+                        <Loader />
+                      ) : (
+                        formatDisplayNumber(userLiquidity, { style: 'decimal', significantDigits: 6 })
+                      )}{' '}
+                      LP Tokens
                     </Text>
                   </RowBetween>
                   <Row style={{ alignItems: 'flex-end' }}>
@@ -680,15 +715,7 @@ export default function ZapOut({
                   onMax={null}
                   onHalf={null}
                   disableCurrencySelect
-                  currency={
-                    new Token(
-                      chainId,
-                      pair.liquidityToken?.address,
-                      pair.liquidityToken?.decimals,
-                      `LP Tokens`,
-                      `LP Tokens`,
-                    )
-                  }
+                  currency={lpToken}
                   id="liquidity-amount"
                 />
               )}
@@ -721,12 +748,15 @@ export default function ZapOut({
                         replace
                         to={
                           independentTokenField === Field.CURRENCY_A
-                            ? `/remove/${
+                            ? `/${networkInfo.route}${APP_PATHS.CLASSIC_REMOVE_POOL}/${
                                 selectedCurrencyIsETHER
                                   ? currencyId(WETH[chainId], chainId)
                                   : currencyId(NativeCurrencies[chainId], chainId)
                               }/${currencyId(currencies[dependentTokenField] as Currency, chainId)}/${pairAddress}`
-                            : `/remove/${currencyId(currencies[dependentTokenField] as Currency, chainId)}/${
+                            : `/${networkInfo.route}${APP_PATHS.CLASSIC_REMOVE_POOL}/${currencyId(
+                                currencies[dependentTokenField] as Currency,
+                                chainId,
+                              )}/${
                                 selectedCurrencyIsETHER
                                   ? currencyId(WETH[chainId], chainId)
                                   : currencyId(NativeCurrencies[chainId], chainId)
@@ -809,7 +839,7 @@ export default function ZapOut({
               <div style={{ position: 'relative' }}>
                 {!account ? (
                   <ButtonLight onClick={toggleWalletModal}>
-                    <Trans>Connect Wallet</Trans>
+                    <Trans>Connect</Trans>
                   </ButtonLight>
                 ) : (
                   <RowBetween>

@@ -1,30 +1,41 @@
+import { Token } from '@kyberswap/ks-sdk-core'
 import { Trans, t } from '@lingui/macro'
 import dayjs from 'dayjs'
-import { useState } from 'react'
+import { rgba } from 'polished'
+import { stringify } from 'querystring'
+import { useMemo, useState } from 'react'
 import { Repeat } from 'react-feather'
+import { useNavigate } from 'react-router-dom'
 import { useMedia } from 'react-use'
 import { Flex, Text } from 'rebass'
 import styled, { CSSProperties, DefaultTheme } from 'styled-components'
 
+import InfoHelper from 'components/InfoHelper'
 import Logo from 'components/Logo'
 import ProgressBar from 'components/ProgressBar'
 import useTheme from 'hooks/useTheme'
+import { useTokenBalance } from 'state/wallet/hooks'
 import { MEDIA_WIDTHS } from 'theme'
+import { toCurrencyAmount } from 'utils/currencyAmount'
 
-import { calcPercentFilledOrder, formatAmountOrder, formatRateLimitOrder } from '../helpers'
+import { calcPercentFilledOrder, formatAmountOrder, formatRateLimitOrder, isActiveStatus } from '../helpers'
 import { LimitOrder, LimitOrderStatus } from '../type'
 import ActionButtons from './ActionButtons'
 
-export const ItemWrapper = styled.div<{ hasBorder?: boolean }>`
+export const ItemWrapper = styled.div<{ hasBorder?: boolean; active?: boolean }>`
   border-bottom: 1px solid ${({ theme, hasBorder }) => (hasBorder ? theme.border : 'transparent')};
   font-size: 12px;
   padding: 10px;
-  grid-template-columns: 1.5fr 1fr 1.5fr 2fr 80px;
+  grid-template-columns: 1.5fr 1fr 1.5fr 2fr ${({ active }) => (active ? '110px' : '80px')};
   display: grid;
   gap: 10px;
   align-items: center;
-  ${({ theme }) => theme.mediaWidth.upToLarge`
-    grid-template-columns: 1.5fr 1.5fr 1.5fr 80px;
+  cursor: pointer;
+  :hover {
+    background-color: ${({ theme }) => rgba(theme.primary, 0.2)};
+  }
+  ${({ theme, active }) => theme.mediaWidth.upToLarge`
+    grid-template-columns: 1.5fr 1.5fr 1.5fr ${active ? '110px' : '80px'};
     .rate {
       display:none;
     }
@@ -37,7 +48,7 @@ const ItemWrapperMobile = styled.div`
   flex-direction: column;
   justify-content: space-between;
   gap: 14px;
-  padding: 20px 0px;
+  padding: 20px 10px;
   border-bottom: 1px solid ${({ theme }) => theme.border};
 `
 const DeltaAmount = styled.div<{ color: string }>`
@@ -57,7 +68,7 @@ const Colum = styled.div`
 const TimeText = ({ time, style = {} }: { time: number; style?: CSSProperties }) => {
   const theme = useTheme()
   return (
-    <Flex fontWeight={'500'} color={theme.subText} style={style}>
+    <Flex fontWeight={'500'} color={theme.text} style={style}>
       <Text>{dayjs(time * 1000).format('DD/MM/YYYY')}</Text>
       &nbsp; <Text>{dayjs(time * 1000).format('HH:mm')}</Text>
     </Flex>
@@ -120,7 +131,7 @@ const AmountInfo = ({ order }: { order: LimitOrder }) => {
       <SingleAmountInfo
         decimals={makerAssetDecimals}
         plus={false}
-        color={theme.border}
+        color={theme.subText}
         logoUrl={makerAssetLogoURL}
         amount={makingAmount}
         symbol={makerAssetSymbol}
@@ -137,8 +148,8 @@ const TradeRateOrder = ({ order, style = {} }: { order: LimitOrder; style?: CSSP
   return (
     <Colum style={style}>
       <Flex style={{ gap: 6, cursor: 'pointer', alignItems: 'center' }} onClick={() => setInvert(!invert)}>
-        <Text color={theme.subText}>{!invert ? `${symbolOut}/${symbolIn}` : `${symbolIn}/${symbolOut}`}</Text>
-        <Repeat color={theme.subText} size={12} />
+        <Text color={theme.text}>{!invert ? `${symbolOut}/${symbolIn}` : `${symbolIn}/${symbolOut}`}</Text>
+        <Repeat color={theme.text} size={12} />
       </Flex>
       <Text color={theme.text}>{formatRateLimitOrder(order, invert)}</Text>
     </Colum>
@@ -150,7 +161,15 @@ function formatStatus(status: string) {
   return status.charAt(0).toUpperCase() + status.slice(1)
 }
 
-function formatStatusLimitOrder(order: LimitOrder, isCancelling = false) {
+function getNeededMakingAmount(order: LimitOrder) {
+  const makingToken = new Token(order.chainId, order.makerAsset, order.makerAssetDecimals, order.makerAssetSymbol, '')
+  const makingAmount = toCurrencyAmount(makingToken, order.makingAmount)
+  const filledMakingAmount = toCurrencyAmount(makingToken, order.filledMakingAmount)
+
+  return makingAmount.subtract(filledMakingAmount)
+}
+
+function formatStatusLimitOrder(order: LimitOrder, isCancelling = false, isNotSufficientFund = false) {
   const { takingAmount, filledTakingAmount, takerAssetDecimals } = order
   const filledPercent = calcPercentFilledOrder(filledTakingAmount, takingAmount, takerAssetDecimals)
   const status = isCancelling ? LimitOrderStatus.CANCELLING : order.status
@@ -159,11 +178,13 @@ function formatStatusLimitOrder(order: LimitOrder, isCancelling = false) {
     status,
   )
     ? ` | ${formatStatus(status)}`
+    : isNotSufficientFund && status !== LimitOrderStatus.FILLED
+    ? `, ${t`insufficient funds`}`
     : ''
-  return `${partiallyFilled ? t`Partially Filled` : t`Filled`} ${filledPercent}% ${expandTitle}`
+  return `${partiallyFilled ? t`Partially Filled` : t`Filled`} ${filledPercent}%${expandTitle}`
 }
 
-const getColorStatus = (status: LimitOrderStatus, theme: DefaultTheme) => {
+const getColorStatus = (status: LimitOrderStatus, theme: DefaultTheme, isNotSufficientFund = false) => {
   const MapStatusColor: { [key: string]: string } = {
     [LimitOrderStatus.FILLED]: theme.primary,
     [LimitOrderStatus.CANCELLED]: theme.red,
@@ -171,7 +192,17 @@ const getColorStatus = (status: LimitOrderStatus, theme: DefaultTheme) => {
     [LimitOrderStatus.EXPIRED]: theme.warning,
     [LimitOrderStatus.PARTIALLY_FILLED]: theme.warning,
   }
-  return MapStatusColor[status]
+
+  const color = MapStatusColor[status]
+  if (color) {
+    return color
+  }
+
+  if (isNotSufficientFund) {
+    return theme.warning
+  }
+
+  return undefined
 }
 const IndexText = styled.div`
   width: 18px;
@@ -179,18 +210,29 @@ const IndexText = styled.div`
   font-weight: 500;
   color: ${({ theme }) => theme.subText};
 `
+
+const WarningText = styled.span`
+  color: ${({ theme }) => theme.warning};
+`
+
 export default function OrderItem({
   order,
   index,
   onCancelOrder,
   onEditOrder,
   isOrderCancelling,
+  tokenPrices,
+  isLast,
+  hasOrderCancelling,
 }: {
   order: LimitOrder
   onCancelOrder: (order: LimitOrder) => void
   onEditOrder: (order: LimitOrder) => void
   index: number
   isOrderCancelling: (order: LimitOrder) => boolean
+  tokenPrices: Record<string, number>
+  isLast: boolean
+  hasOrderCancelling: boolean
 }) {
   const [expand, setExpand] = useState(false)
   const upToSmall = useMedia(`(max-width: ${MEDIA_WIDTHS.upToSmall}px)`)
@@ -203,31 +245,93 @@ export default function OrderItem({
     filledTakingAmount,
     transactions = [],
     takerAssetSymbol,
-    makerAssetDecimals,
     takerAssetDecimals,
+    takerAsset,
+    makerAsset,
   } = order
   const status = isCancelling ? LimitOrderStatus.CANCELLING : order.status
+  const isOrderActive = isActiveStatus(order.status)
   const filledPercent = calcPercentFilledOrder(filledTakingAmount, takingAmount, takerAssetDecimals)
   const theme = useTheme()
-  const colorStatus = getColorStatus(status, theme)
 
-  const progressComponent = (
-    <Colum>
-      <Text color={colorStatus}>{formatStatusLimitOrder(order, isCancelling)}</Text>
-      <ProgressBar
-        width={upToSmall ? '160px' : 'unset'}
-        backgroundColor={theme.subText}
-        color={colorStatus}
-        height="11px"
-        percent={isNaN(parseFloat(filledPercent)) ? 0 : parseFloat(filledPercent)}
-      />
-    </Colum>
-  )
+  const makingToken = useMemo(() => {
+    return new Token(order.chainId, order.makerAsset, order.makerAssetDecimals, order.makerAssetSymbol, '')
+  }, [order.chainId, order.makerAsset, order.makerAssetDecimals, order.makerAssetSymbol])
+
+  const makingTokenBalance = useTokenBalance(makingToken)
+  const neededFund = getNeededMakingAmount(order)
+  const isNotSufficientFund = makingTokenBalance ? makingTokenBalance.lessThan(neededFund) : false
+
+  const colorStatus = getColorStatus(status, theme, isNotSufficientFund)
   const txHash = transactions[0]?.txHash ?? ''
   const toggle = () => setExpand(prev => !prev)
+
+  const marketPrice = tokenPrices[order.takerAsset] / tokenPrices[order.makerAsset]
+  const selectedPrice = Number(formatRateLimitOrder(order, false))
+  const percent = ((marketPrice - selectedPrice) / marketPrice) * 100
+
+  const navigate = useNavigate()
+  const onClickOrder = () => {
+    navigate({
+      search: stringify({
+        inputCurrency: makerAsset,
+        outputCurrency: takerAsset,
+      }),
+    })
+  }
+
+  const renderProgressComponent = () => {
+    const getTooltipText = () => {
+      const texts = [<Trans key={0}>Insufficient {order.makerAssetSymbol} balance for order execution.</Trans>]
+
+      if (Number.isFinite(percent) && percent < 0) {
+        texts.push(<> </>)
+        texts.push(
+          <Trans key={1}>
+            Once you add {order.makerAssetSymbol}, the order will be executed at{' '}
+            <WarningText>{percent.toFixed(2)}%</WarningText> below the market price.
+          </Trans>,
+        )
+      }
+
+      return texts
+    }
+
+    return (
+      <Colum>
+        <Flex
+          alignItems="center"
+          color={colorStatus}
+          sx={{
+            gap: '4px',
+          }}
+        >
+          {isOrderActive && isNotSufficientFund && (
+            <InfoHelper
+              style={{
+                marginLeft: 0,
+              }}
+              placement="top"
+              color={colorStatus}
+              text={getTooltipText()}
+            />
+          )}{' '}
+          {formatStatusLimitOrder(order, isCancelling, isNotSufficientFund)}
+        </Flex>
+        <ProgressBar
+          width={upToSmall ? '160px' : 'unset'}
+          backgroundColor={theme.subText}
+          color={colorStatus}
+          height="11px"
+          percent={isNaN(parseFloat(filledPercent)) ? 0 : parseFloat(filledPercent)}
+        />
+      </Colum>
+    )
+  }
+
   if (upToSmall) {
     return (
-      <ItemWrapperMobile>
+      <ItemWrapperMobile onClick={onClickOrder}>
         <Flex justifyContent={'space-between'}>
           <AmountInfo order={order} />
           <ActionButtons
@@ -241,7 +345,7 @@ export default function OrderItem({
           />
         </Flex>
         <Flex justifyContent={'space-between'}>
-          {progressComponent}
+          {renderProgressComponent()}
           <TradeRateOrder order={order} style={{ textAlign: 'right' }} />
         </Flex>
         {expand && (
@@ -250,7 +354,7 @@ export default function OrderItem({
               return (
                 <Flex key={txs.txHash} style={{ justifyContent: 'space-between' }}>
                   <SingleAmountInfo
-                    decimals={makerAssetDecimals}
+                    decimals={takerAssetDecimals}
                     color={theme.subText}
                     logoUrl={order.takerAssetLogoURL}
                     amount={txs.takingAmount}
@@ -285,7 +389,11 @@ export default function OrderItem({
   }
   return (
     <>
-      <ItemWrapper hasBorder={!transactions.length || !expand}>
+      <ItemWrapper
+        hasBorder={isLast ? false : !transactions.length || !expand}
+        active={hasOrderCancelling}
+        onClick={onClickOrder}
+      >
         <Flex alignItems={'center'} style={{ gap: 10 }}>
           <IndexText>{index + 1}</IndexText>
           <AmountInfo order={order} />
@@ -297,7 +405,7 @@ export default function OrderItem({
           <TimeText time={createdAt} />
           <TimeText time={expiredAt} />
         </Colum>
-        <Colum>{progressComponent}</Colum>
+        <Colum>{renderProgressComponent()}</Colum>
         <ActionButtons
           order={order}
           onExpand={toggle}
@@ -310,7 +418,7 @@ export default function OrderItem({
       </ItemWrapper>
       {expand && (
         <Flex flexDirection="column" style={{ paddingBottom: 10, borderBottom: `1px solid ${theme.border}` }}>
-          {transactions.map((txs, i) => {
+          {transactions.map(txs => {
             const filledPercent = calcPercentFilledOrder(txs.takingAmount, takingAmount, takerAssetDecimals)
             return (
               <ItemWrapper key={txs.txHash} hasBorder={false} style={{ paddingTop: 0, paddingBottom: 0 }}>

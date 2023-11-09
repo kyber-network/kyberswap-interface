@@ -7,36 +7,44 @@ import { Trans, t } from '@lingui/macro'
 import { captureException } from '@sentry/react'
 import JSBI from 'jsbi'
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { ChevronLeft } from 'react-feather'
+import { AlertTriangle } from 'react-feather'
 import { Navigate, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { useMedia, usePrevious } from 'react-use'
 import { Flex, Text } from 'rebass'
 import styled from 'styled-components'
 
-import { ReactComponent as TutorialIcon } from 'assets/svg/play_circle_outline.svg'
 import RangeBadge from 'components/Badge/RangeBadge'
 import { ButtonConfirmed, ButtonPrimary } from 'components/Button'
-import { BlackCard } from 'components/Card'
+import { BlackCard, OutlineCard, WarningCard } from 'components/Card'
 import { AutoColumn } from 'components/Column'
-import Copy from 'components/Copy'
 import CurrencyInputPanel from 'components/CurrencyInputPanel'
 import CurrencyLogo from 'components/CurrencyLogo'
 import Divider from 'components/Divider'
 import FormattedCurrencyAmount from 'components/FormattedCurrencyAmount'
 import Loader from 'components/Loader'
-import { StyledMenuButton } from 'components/NavigationTabs'
+import { AddRemoveTabs, LiquidityAction } from 'components/NavigationTabs'
 import ProAmmFee from 'components/ProAmm/ProAmmFee'
 import ProAmmPoolInfo from 'components/ProAmm/ProAmmPoolInfo'
 import ProAmmPooledTokens from 'components/ProAmm/ProAmmPooledTokens'
+import { RowBetween } from 'components/Row'
 import Slider from 'components/Slider'
+import { SLIPPAGE_EXPLANATION_URL } from 'components/SlippageWarningNote'
+import { MouseoverTooltip, TextDashed } from 'components/Tooltip'
 import TransactionConfirmationModal, {
   ConfirmationModalContent,
   TransactionErrorContent,
 } from 'components/TransactionConfirmationModal'
-import TransactionSettings from 'components/TransactionSettings'
-import Tutorial, { TutorialType } from 'components/Tutorial'
+import { TutorialType } from 'components/Tutorial'
+import FarmV21ABI from 'constants/abis/v2/farmv2.1.json'
+import FarmV2ABI from 'constants/abis/v2/farmv2.json'
+import { didUserReject } from 'constants/connectors/utils'
+import { EVMNetworkInfo } from 'constants/networks/type'
 import { useActiveWeb3React, useWeb3React } from 'hooks'
-import { useProAmmNFTPositionManagerContract } from 'hooks/useContract'
+import {
+  useProAmmNFTPositionManagerReadingContract,
+  useProMMFarmSigningContract,
+  useSigningContract,
+} from 'hooks/useContract'
 import useProAmmPoolInfo from 'hooks/useProAmmPoolInfo'
 import { useProAmmPositionsFromTokenId } from 'hooks/useProAmmPositions'
 import useTheme from 'hooks/useTheme'
@@ -50,9 +58,11 @@ import { useTokenPrices } from 'state/tokenPrices/hooks'
 import { useTransactionAdder } from 'state/transactions/hooks'
 import { TRANSACTION_TYPE } from 'state/transactions/type'
 import { useUserSlippageTolerance } from 'state/user/hooks'
-import { MEDIA_WIDTHS } from 'theme'
-import { basisPointsToPercent, calculateGasMargin, formattedNum, formattedNumLong, shortenAddress } from 'utils'
+import { ExternalLink, MEDIA_WIDTHS, TYPE } from 'theme'
+import { basisPointsToPercent, buildFlagsForFarmV21, calculateGasMargin, formattedNum, isAddressString } from 'utils'
+import { formatDollarAmount } from 'utils/numbers'
 import { ErrorName } from 'utils/sentry'
+import { SLIPPAGE_STATUS, checkRangeSlippage, checkWarningSlippage, formatSlippage } from 'utils/slippage'
 import useDebouncedChangeHandler from 'utils/useDebouncedChangeHandler'
 
 import {
@@ -65,6 +75,21 @@ import {
   TokenId,
   TokenInputWrapper,
 } from './styled'
+
+const TextUnderlineColor = styled(Text)`
+  border-bottom: 1px solid ${({ theme }) => theme.text};
+  width: fit-content;
+  display: inline;
+  cursor: pointer;
+  color: ${({ theme }) => theme.text};
+  font-weight: 500;
+`
+
+const TextUnderlineTransparent = styled(Text)`
+  border-bottom: 1px solid transparent;
+  width: fit-content;
+  display: inline;
+`
 
 const MaxButton = styled(MaxBtn)`
   margin: 0;
@@ -127,15 +152,29 @@ export default function RemoveLiquidityProAmm() {
 
 function Remove({ tokenId }: { tokenId: BigNumber }) {
   const { position } = useProAmmPositionsFromTokenId(tokenId)
-  const positionManager = useProAmmNFTPositionManagerContract()
+  const positionManager = useProAmmNFTPositionManagerReadingContract()
   const theme = useTheme()
-  const { account, chainId, isEVM } = useActiveWeb3React()
+  const { networkInfo, account, chainId, isEVM } = useActiveWeb3React()
   const { library } = useWeb3React()
   const toggleWalletModal = useWalletModalToggle()
   const [removeLiquidityError, setRemoveLiquidityError] = useState<string>('')
 
   const owner = useSingleCallResult(!!tokenId ? positionManager : null, 'ownerOf', [tokenId.toNumber()]).result?.[0]
-  const ownsNFT = owner === account
+  const isFarmV2 = (networkInfo as EVMNetworkInfo).elastic.farmV2S
+    ?.map(item => item.toLowerCase())
+    .includes(owner?.toLowerCase())
+  const isFarmV21 = (networkInfo as EVMNetworkInfo).elastic['farmV2.1S']
+    ?.map(item => item.toLowerCase())
+    .includes(owner?.toLowerCase())
+
+  const ownByFarm = isEVM
+    ? (networkInfo as EVMNetworkInfo).elastic.farms.flat().includes(isAddressString(chainId, owner)) ||
+      isFarmV2 ||
+      isFarmV21
+    : false
+
+  const ownsNFT = owner === account || ownByFarm
+
   const navigate = useNavigate()
   const prevChainId = usePrevious(chainId)
 
@@ -224,13 +263,100 @@ function Remove({ tokenId }: { tokenId: BigNumber }) {
       : 0
 
   const deadline = useTransactionDeadline() // custom from users settings
-  const allowedSlippage = useUserSlippageTolerance()
+  const [allowedSlippage] = useUserSlippageTolerance()
   const [showConfirm, setShowConfirm] = useState(false)
   const [attemptingTxn, setAttemptingTxn] = useState(false)
   const [txnHash, setTxnHash] = useState<string | undefined>()
   const addTransactionWithType = useTransactionAdder()
 
-  const burn = useCallback(async () => {
+  const farmV1Contract = useProMMFarmSigningContract(owner)
+
+  const farmV2Address = isFarmV2 ? owner : undefined
+  const farmV2Contract = useSigningContract(farmV2Address, FarmV2ABI)
+  const farmV21Contract = useSigningContract(isFarmV21 ? owner : undefined, FarmV21ABI)
+
+  const handleBroadcastRemoveSuccess = (response: TransactionResponse) => {
+    setAttemptingTxn(false)
+    const tokenAmountIn = liquidityValue0?.toSignificant(6)
+    const tokenAmountOut = liquidityValue1?.toSignificant(6)
+    const tokenSymbolIn = liquidityValue0?.currency.symbol ?? ''
+    const tokenSymbolOut = liquidityValue1?.currency.symbol ?? ''
+    addTransactionWithType({
+      hash: response.hash,
+      type: TRANSACTION_TYPE.ELASTIC_REMOVE_LIQUIDITY,
+      extraInfo: {
+        tokenAmountIn,
+        tokenAmountOut,
+        tokenSymbolIn,
+        tokenSymbolOut,
+        tokenAddressIn: liquidityValue0?.currency.wrapped.address,
+        tokenAddressOut: liquidityValue1?.currency.wrapped.address,
+        contract: poolAddress,
+        nftId: tokenId.toString(),
+      },
+    })
+    setTxnHash(response.hash)
+  }
+
+  const burnFromFarm = async () => {
+    const contract = isFarmV21 ? farmV21Contract : isFarmV2 ? farmV2Contract : farmV1Contract
+
+    if (!contract || !liquidityValue0 || !liquidityValue1 || !deadline || !positionSDK || !liquidityPercentage) {
+      return
+    }
+
+    try {
+      const amount0Min = liquidityValue0?.subtract(liquidityValue0.multiply(basisPointsToPercent(allowedSlippage)))
+      const amount1Min = liquidityValue1?.subtract(liquidityValue1.multiply(basisPointsToPercent(allowedSlippage)))
+
+      const params = isFarmV21
+        ? [
+            tokenId.toString(),
+            liquidityPercentage.multiply(positionSDK.liquidity).quotient.toString(),
+            amount0Min.quotient.toString(),
+            amount1Min.quotient.toString(),
+            deadline.toString(),
+            buildFlagsForFarmV21({
+              isClaimFee: !!feeValue0?.greaterThan('0') && !!feeValue1?.greaterThan('0'),
+              isSyncFee: !!feeValue0?.greaterThan('0') && !!feeValue1?.greaterThan('0'),
+              isClaimReward: true,
+              isReceiveNative: !receiveWETH,
+            }),
+          ]
+        : isFarmV2
+        ? [
+            tokenId.toString(),
+            liquidityPercentage.multiply(positionSDK.liquidity).quotient.toString(),
+            amount0Min.quotient.toString(),
+            amount1Min.quotient.toString(),
+            deadline.toString(),
+            feeValue0?.greaterThan('0'),
+            !receiveWETH,
+          ]
+        : [
+            tokenId.toString(),
+            liquidityPercentage.multiply(positionSDK.liquidity).quotient.toString(),
+            amount0Min.quotient.toString(),
+            amount1Min.quotient.toString(),
+            deadline.toString(),
+            !receiveWETH,
+            [feeValue0?.greaterThan('0'), true],
+          ]
+
+      const gasEstimation = await contract.estimateGas.removeLiquidity(...params)
+
+      const tx = await contract.removeLiquidity(...params, {
+        gasLimit: calculateGasMargin(gasEstimation),
+      })
+
+      handleBroadcastRemoveSuccess(tx)
+    } catch (e) {
+      setAttemptingTxn(false)
+      setRemoveLiquidityError(e?.message || JSON.stringify(e))
+    }
+  }
+
+  const burn = async () => {
     setAttemptingTxn(true)
     if (
       !positionManager ||
@@ -267,20 +393,19 @@ function Remove({ tokenId }: { tokenId: BigNumber }) {
 
       return
     }
-    // const partialPosition = new Position({
-    //   pool: positionSDK.pool,
-    //   liquidity: liquidityPercentage.multiply(positionSDK.liquidity).quotient,
-    //   tickLower: positionSDK.tickLower,
-    //   tickUpper: positionSDK.tickUpper,
-    // })
+
+    if (ownByFarm) {
+      return burnFromFarm()
+    }
+
     const { calldata, value } = NonfungiblePositionManager.removeCallParameters(positionSDK, {
       tokenId: tokenId.toString(),
       liquidityPercentage,
-      slippageTolerance: basisPointsToPercent(allowedSlippage[0]),
+      slippageTolerance: basisPointsToPercent(allowedSlippage),
       deadline: deadline.toString(),
       collectOptions: {
-        expectedCurrencyOwed0: feeValue0.subtract(feeValue0.multiply(basisPointsToPercent(allowedSlippage[0]))),
-        expectedCurrencyOwed1: feeValue1.subtract(feeValue1.multiply(basisPointsToPercent(allowedSlippage[0]))),
+        expectedCurrencyOwed0: feeValue0.subtract(feeValue0.multiply(basisPointsToPercent(allowedSlippage))),
+        expectedCurrencyOwed1: feeValue1.subtract(feeValue1.multiply(basisPointsToPercent(allowedSlippage))),
         recipient: account,
         deadline: deadline.toString(),
         isRemovingLiquid: true,
@@ -292,6 +417,7 @@ function Remove({ tokenId }: { tokenId: BigNumber }) {
       data: calldata,
       value,
     }
+
     library
       .getSigner()
       .estimateGas(txn)
@@ -304,32 +430,13 @@ function Remove({ tokenId }: { tokenId: BigNumber }) {
           .getSigner()
           .sendTransaction(newTxn)
           .then((response: TransactionResponse) => {
-            setAttemptingTxn(false)
-            const tokenAmountIn = liquidityValue0?.toSignificant(6)
-            const tokenAmountOut = liquidityValue1?.toSignificant(6)
-            const tokenSymbolIn = liquidityValue0?.currency.symbol ?? ''
-            const tokenSymbolOut = liquidityValue1?.currency.symbol ?? ''
-            addTransactionWithType({
-              hash: response.hash,
-              type: TRANSACTION_TYPE.ELASTIC_REMOVE_LIQUIDITY,
-              extraInfo: {
-                tokenAmountIn,
-                tokenAmountOut,
-                tokenSymbolIn,
-                tokenSymbolOut,
-                tokenAddressIn: liquidityValue0?.currency.wrapped.address,
-                tokenAddressOut: liquidityValue1?.currency.wrapped.address,
-                contract: poolAddress,
-                nftId: tokenId.toString(),
-              },
-            })
-            setTxnHash(response.hash)
+            handleBroadcastRemoveSuccess(response)
           })
       })
       .catch((error: any) => {
         setAttemptingTxn(false)
 
-        if (error?.code !== 'ACTION_REJECTED') {
+        if (!didUserReject(error)) {
           const e = new Error('Remove Elastic Liquidity Error', { cause: error })
           e.name = ErrorName.RemoveElasticLiquidityError
           captureException(e, {
@@ -343,23 +450,8 @@ function Remove({ tokenId }: { tokenId: BigNumber }) {
 
         setRemoveLiquidityError(error?.message || JSON.stringify(error))
       })
-  }, [
-    positionManager,
-    liquidityValue0,
-    liquidityValue1,
-    deadline,
-    account,
-    chainId,
-    feeValue0,
-    feeValue1,
-    positionSDK,
-    liquidityPercentage,
-    library,
-    tokenId,
-    allowedSlippage,
-    addTransactionWithType,
-    poolAddress,
-  ])
+  }
+
   const handleDismissConfirmation = useCallback(() => {
     setShowConfirm(false)
     // if there was a tx hash, we want to clear the input
@@ -402,6 +494,9 @@ function Remove({ tokenId }: { tokenId: BigNumber }) {
 
   const upToMedium = useMedia(`(max-width: ${MEDIA_WIDTHS.upToMedium}px)`)
 
+  const isWarningSlippage = checkWarningSlippage(allowedSlippage, false)
+  const slippageStatus = checkRangeSlippage(allowedSlippage, false)
+
   if (!isEVM) return <Navigate to="/" />
 
   return (
@@ -438,6 +533,63 @@ function Remove({ tokenId }: { tokenId: BigNumber }) {
                   ) : (
                     <Loader />
                   )}
+
+                  <OutlineCard marginTop="1rem" padding="1rem">
+                    <AutoColumn gap="md">
+                      <Text fontSize={12} fontWeight={500}>
+                        <Trans>More Information</Trans>
+                      </Text>
+                      <Divider />
+                      <RowBetween>
+                        <TextDashed fontSize={12} fontWeight={500} color={theme.subText} minWidth="max-content">
+                          <MouseoverTooltip
+                            width="200px"
+                            text={
+                              <Text>
+                                <Trans>
+                                  During your swap if the price changes by more than this %, your transaction will
+                                  revert. Read more{' '}
+                                  <ExternalLink href="https://docs.kyberswap.com/getting-started/foundational-topics/decentralized-finance/slippage">
+                                    here ↗
+                                  </ExternalLink>
+                                </Trans>
+                              </Text>
+                            }
+                            placement="auto"
+                          >
+                            <Trans>Max Slippage</Trans>
+                          </MouseoverTooltip>
+                        </TextDashed>
+                        <TYPE.black fontSize={12} color={isWarningSlippage ? theme.warning : undefined}>
+                          {formatSlippage(allowedSlippage)}
+                        </TYPE.black>
+                      </RowBetween>
+                    </AutoColumn>
+                  </OutlineCard>
+
+                  {slippageStatus === SLIPPAGE_STATUS.HIGH && (
+                    <WarningCard padding="10px 16px" m="20px 0 0">
+                      <Flex alignItems="center">
+                        <AlertTriangle stroke={theme.warning} size="16px" />
+                        <TYPE.black ml="12px" fontSize="12px" flex={1}>
+                          <Trans>
+                            <TextUnderlineColor
+                              style={{ minWidth: 'max-content' }}
+                              as="a"
+                              href={SLIPPAGE_EXPLANATION_URL}
+                              target="_blank"
+                              rel="noreferrer"
+                            >
+                              Slippage
+                            </TextUnderlineColor>
+                            <TextUnderlineTransparent sx={{ ml: '0.5ch' }}>
+                              is high. Your transaction may be front-run
+                            </TextUnderlineTransparent>
+                          </Trans>
+                        </TYPE.black>
+                      </Flex>
+                    </WarningCard>
+                  )}
                 </>
               )}
               bottomContent={modalFooter}
@@ -447,45 +599,15 @@ function Remove({ tokenId }: { tokenId: BigNumber }) {
         pendingText={pendingText}
       />
       <Container>
-        <Flex justifyContent="space-between" alignItems="center" marginTop="32px" marginBottom="24px">
-          <Flex
-            role="button"
-            onClick={() => navigate(-1)}
-            alignItems="center"
-            sx={{ cursor: 'pointer', ':hover': { opacity: '0.8' } }}
-          >
-            <ChevronLeft size={28} color={theme.subText} />
-            <Text fontSize="24px" fontWeight="500" marginLeft="8px">
-              Remove Liquidity
-            </Text>
-          </Flex>
-
-          <Flex>
-            {owner && account && !ownsNFT && (
-              <Text
-                fontSize="12px"
-                fontWeight="500"
-                color={theme.subText}
-                display="flex"
-                alignItems="center"
-                marginRight="8px"
-              >
-                <Trans>The owner of this liquidity position is {shortenAddress(chainId, owner)}</Trans>
-                <Copy toCopy={owner} />
-              </Text>
-            )}
-
-            <Tutorial
-              type={TutorialType.ELASTIC_REMOVE_LIQUIDITY}
-              customIcon={
-                <StyledMenuButton>
-                  <TutorialIcon />
-                </StyledMenuButton>
-              }
-            />
-            <TransactionSettings hoverBg={theme.buttonBlack} />
-          </Flex>
-        </Flex>
+        <AddRemoveTabs
+          hideShare
+          alignTitle="left"
+          action={LiquidityAction.REMOVE}
+          showTooltip={false}
+          tutorialType={TutorialType.ELASTIC_REMOVE_LIQUIDITY}
+          owner={owner}
+          showOwner={owner && account && !ownsNFT}
+        />
 
         <Content>
           {position ? (
@@ -516,7 +638,7 @@ function Remove({ tokenId }: { tokenId: BigNumber }) {
                       <Text>
                         <Trans>My Liquidity</Trans>
                       </Text>
-                      <Text>{formattedNumLong(totalPooledUSD, true)}</Text>
+                      <Text>{formatDollarAmount(totalPooledUSD)}</Text>
                     </Flex>
 
                     <Divider />
@@ -550,7 +672,7 @@ function Remove({ tokenId }: { tokenId: BigNumber }) {
                       marginBottom="0.75rem"
                     >
                       <Text>My Fee Earnings</Text>
-                      {loadingFee && !feeValue0 ? <Loader /> : <Text>{formattedNumLong(totalFeeRewardUSD, true)}</Text>}
+                      {loadingFee && !feeValue0 ? <Loader /> : <Text>{formatDollarAmount(totalFeeRewardUSD)}</Text>}
                     </Flex>
 
                     <Divider />
@@ -657,17 +779,35 @@ function Remove({ tokenId }: { tokenId: BigNumber }) {
                         />
                       </div>
                     </TokenInputWrapper>
-
-                    <Text fontSize="0.75rem" fontStyle="italic" textAlign="left" marginTop="12px" color={theme.subText}>
-                      <Trans>
-                        Note: When you remove liquidity (even partially), you will receive 100% of your fee earnings
-                      </Trans>
-                    </Text>
                   </AmoutToRemoveContent>
+
+                  {slippageStatus === SLIPPAGE_STATUS.HIGH && (
+                    <WarningCard padding="10px 16px" m="24px 0 0">
+                      <Flex alignItems="center">
+                        <AlertTriangle stroke={theme.warning} size="16px" />
+                        <TYPE.black ml="12px" fontSize="12px" flex={1}>
+                          <Trans>
+                            <TextUnderlineColor
+                              style={{ minWidth: 'max-content' }}
+                              as="a"
+                              href={SLIPPAGE_EXPLANATION_URL}
+                              target="_blank"
+                              rel="noreferrer"
+                            >
+                              Slippage
+                            </TextUnderlineColor>
+                            <TextUnderlineTransparent sx={{ ml: '0.5ch' }}>
+                              is high. Your transaction may be front-run
+                            </TextUnderlineTransparent>
+                          </Trans>
+                        </TYPE.black>
+                      </Flex>
+                    </WarningCard>
+                  )}
 
                   <Flex justifyContent="flex-end">
                     <ButtonConfirmed
-                      style={{ marginTop: '24px', width: upToMedium ? '100%' : 'fit-content', minWidth: '164px' }}
+                      style={{ marginTop: '16px', width: upToMedium ? '100%' : 'fit-content', minWidth: '164px' }}
                       confirmed={false}
                       disabled={
                         removed ||

@@ -9,6 +9,7 @@ import { AlertTriangle, Plus } from 'react-feather'
 import { Link, Navigate, useNavigate, useParams } from 'react-router-dom'
 import { Flex, Text } from 'rebass'
 
+import { NotificationType } from 'components/Announcement/type'
 import { ButtonError, ButtonLight, ButtonPrimary } from 'components/Button'
 import { BlueCard, LightCard } from 'components/Card'
 import { AutoColumn, ColumnCenter } from 'components/Column'
@@ -21,6 +22,7 @@ import QuestionHelper from 'components/QuestionHelper'
 import Row, { AutoRow, RowBetween, RowFlat } from 'components/Row'
 import TransactionConfirmationModal, { ConfirmationModalContent } from 'components/TransactionConfirmationModal'
 import { TutorialType } from 'components/Tutorial'
+import { didUserReject } from 'constants/connectors/utils'
 import { APP_PATHS, CREATE_POOL_AMP_HINT } from 'constants/index'
 import { ONLY_DYNAMIC_FEE_CHAINS, ONLY_STATIC_FEE_CHAINS, STATIC_FEE_OPTIONS } from 'constants/networks'
 import { EVMNetworkInfo } from 'constants/networks/type'
@@ -31,13 +33,14 @@ import { useCurrency } from 'hooks/Tokens'
 import { ApprovalState, useApproveCallback } from 'hooks/useApproveCallback'
 import useMixpanel, { MIXPANEL_TYPE } from 'hooks/useMixpanel'
 import useTheme from 'hooks/useTheme'
-import useTokensMarketPrice from 'hooks/useTokensMarketPrice'
 import useTransactionDeadline from 'hooks/useTransactionDeadline'
-import { Dots, Wrapper } from 'pages/Pool/styleds'
-import { useTokensPrice, useWalletModalToggle } from 'state/application/hooks'
+import DisclaimerERC20 from 'pages/AddLiquidityV2/components/DisclaimerERC20'
+import { Dots, Wrapper } from 'pages/MyPool/styleds'
+import { useNotify, useWalletModalToggle } from 'state/application/hooks'
 import { Field } from 'state/mint/actions'
 import { useDerivedMintInfo, useMintActionHandlers, useMintState } from 'state/mint/hooks'
 import { useDerivedPairInfo } from 'state/pair/hooks'
+import { useTokenPrices } from 'state/tokenPrices/hooks'
 import { useTransactionAdder } from 'state/transactions/hooks'
 import { TRANSACTION_TYPE } from 'state/transactions/type'
 import { useDegenModeManager, usePairAdderByTokens, useUserSlippageTolerance } from 'state/user/hooks'
@@ -45,6 +48,7 @@ import { StyledInternalLink, TYPE } from 'theme'
 import { calculateGasMargin, calculateSlippageAmount, formattedNum } from 'utils'
 import { currencyId } from 'utils/currencyId'
 import { feeRangeCalc, useCurrencyConvertedToNative } from 'utils/dmm'
+import { friendlyError } from 'utils/errorMessage'
 import { getDynamicFeeRouterContract, getStaticFeeRouterContract } from 'utils/getContract'
 import isZero from 'utils/isZero'
 import { maxAmountSpend } from 'utils/maxAmountSpend'
@@ -182,6 +186,7 @@ export default function CreatePool() {
 
   const addTransactionWithType = useTransactionAdder()
   const addPair = usePairAdderByTokens()
+  const notify = useNotify()
 
   async function onAdd() {
     // if (!pair) return
@@ -286,7 +291,7 @@ export default function CreatePool() {
             setAttemptingTxn(false)
             setShowConfirm(false)
             // we only care if the error is something _other_ than the user rejected the tx
-            if (error?.code !== 4001) {
+            if (!didUserReject(error)) {
               console.error(error)
             }
           })
@@ -295,9 +300,18 @@ export default function CreatePool() {
         setAttemptingTxn(false)
         setShowConfirm(false)
         // we only care if the error is something _other_ than the user rejected the tx
-        if (error?.code !== 4001) {
+        if (!didUserReject(error)) {
           console.error(error)
         }
+        const message = friendlyError(error)
+        notify(
+          {
+            title: t`Create Classic Pool Error`,
+            summary: message,
+            type: NotificationType.ERROR,
+          },
+          8000,
+        )
       })
   }
 
@@ -349,32 +363,36 @@ export default function CreatePool() {
 
       // support WETH
       if (isWrappedTokenInPool(currencyA, selectedCurrencyA)) {
-        navigate(`/create/${newCurrencyIdA}/${currencyIdB}`)
+        navigate(`/${networkInfo.route}${APP_PATHS.CLASSIC_CREATE_POOL}/${newCurrencyIdA}/${currencyIdB}`)
       } else if (newCurrencyIdA === currencyIdB) {
-        navigate(`/create/${currencyIdB}/${currencyIdA}`)
+        navigate(`/${networkInfo.route}${APP_PATHS.CLASSIC_CREATE_POOL}/${currencyIdB}/${currencyIdA}`)
       } else {
-        navigate(`/create/${newCurrencyIdA}/${currencyIdB}`)
+        navigate(`/${networkInfo.route}${APP_PATHS.CLASSIC_CREATE_POOL}/${newCurrencyIdA}/${currencyIdB}`)
       }
     },
-    [currencyIdB, navigate, currencyIdA, isWrappedTokenInPool, currencyA, chainId],
+    [chainId, isWrappedTokenInPool, currencyA, currencyIdB, navigate, networkInfo.route, currencyIdA],
   )
   const handleCurrencyBSelect = useCallback(
     (selectedCurrencyB: Currency) => {
       const newCurrencyIdB = currencyId(selectedCurrencyB, chainId)
 
       if (isWrappedTokenInPool(currencyB, selectedCurrencyB)) {
-        navigate(`/create/${currencyIdA}/${newCurrencyIdB}`)
+        navigate(`/${networkInfo.route}${APP_PATHS.CLASSIC_CREATE_POOL}/${currencyIdA}/${newCurrencyIdB}`)
       } else if (newCurrencyIdB === currencyIdA) {
         if (currencyIdB) {
-          navigate(`/create/${currencyIdB}/${currencyIdA}`)
+          navigate(`/${networkInfo.route}${APP_PATHS.CLASSIC_CREATE_POOL}/${currencyIdB}/${currencyIdA}`)
         } else {
-          navigate(`/create/${newCurrencyIdB}`)
+          navigate(`/${networkInfo.route}${APP_PATHS.CLASSIC_CREATE_POOL}/${newCurrencyIdB}`)
         }
       } else {
-        navigate(`/create/${currencyIdA ? currencyIdA : 'ETH'}/${newCurrencyIdB}`)
+        navigate(
+          `/${networkInfo.route}${APP_PATHS.CLASSIC_CREATE_POOL}/${
+            currencyIdA ? currencyIdA : 'ETH'
+          }/${newCurrencyIdB}`,
+        )
       }
     },
-    [currencyIdA, navigate, currencyIdB, isWrappedTokenInPool, currencyB, chainId],
+    [chainId, isWrappedTokenInPool, currencyB, currencyIdA, navigate, networkInfo.route, currencyIdB],
   )
 
   const handleDismissConfirmation = useCallback(() => {
@@ -404,8 +422,13 @@ export default function CreatePool() {
     [currencies],
   )
 
-  const usdPrices = useTokensPrice(tokens)
-  const marketPrices = useTokensMarketPrice(tokens)
+  const tokenAddresses: string[] = useMemo(
+    () => tokens.map(token => token?.address as string).filter(item => !!item),
+    [tokens],
+  )
+
+  const marketPriceMap = useTokenPrices(tokenAddresses)
+  const marketPrices = tokens.map(item => marketPriceMap[item?.address || ''] || 0)
 
   const poolRatio = Number(price?.toSignificant(6))
   const marketRatio = marketPrices[1] && marketPrices[0] / marketPrices[1]
@@ -461,7 +484,7 @@ export default function CreatePool() {
                         <StyledInternalLink
                           onClick={handleDismissConfirmation}
                           id="unamplified-pool-link"
-                          to={`/add/${currencyIdA}/${currencyIdB}/${unAmplifiedPairAddress}`}
+                          to={`/${networkInfo.route}${APP_PATHS.CLASSIC_ADD_LIQ}/${currencyIdA}/${currencyIdB}/${unAmplifiedPairAddress}`}
                         >
                           Go to unamplified pool
                         </StyledInternalLink>
@@ -519,8 +542,8 @@ export default function CreatePool() {
                   />
                   <Flex justifyContent="space-between" alignItems="center" marginTop="0.5rem">
                     <USDPrice>
-                      {usdPrices[0] ? (
-                        `1 ${nativeA?.symbol} = ${formattedNum(usdPrices[0].toString(), true)}`
+                      {marketPrices[0] ? (
+                        `1 ${nativeA?.symbol} = ${formattedNum(marketPrices[0].toString(), true)}`
                       ) : (
                         <Loader />
                       )}
@@ -562,8 +585,8 @@ export default function CreatePool() {
                   />
                   <Flex justifyContent="space-between" alignItems="center" marginTop="0.5rem">
                     <USDPrice>
-                      {usdPrices[1] ? (
-                        `1 ${nativeB?.symbol} = ${formattedNum(usdPrices[1].toString(), true)}`
+                      {marketPrices[1] ? (
+                        `1 ${nativeB?.symbol} = ${formattedNum(marketPrices[1].toString(), true)}`
                       ) : (
                         <Loader />
                       )}
@@ -725,9 +748,15 @@ export default function CreatePool() {
                   </Warning>
                 )}
 
+                <DisclaimerERC20
+                  href="https://docs.kyberswap.com/liquidity-solutions/kyberswap-classic/user-guides/classic-pool-creation#non-standard-tokens"
+                  token0={currencyA?.wrapped.address || ''}
+                  token1={currencyB?.wrapped.address || ''}
+                />
+
                 {!account ? (
                   <ButtonLight onClick={toggleWalletModal}>
-                    <Trans>Connect Wallet</Trans>
+                    <Trans>Connect</Trans>
                   </ButtonLight>
                 ) : (
                   <AutoColumn gap={'md'}>

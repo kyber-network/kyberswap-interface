@@ -96,7 +96,7 @@ export const TabContainer = styled.div`
   justify-content: space-between;
   align-items: center;
   margin-bottom: 24px;
-  gap: 24px;
+  gap: 20px;
 
   ${({ theme }) => theme.mediaWidth.upToXL`
     flex-direction: column;
@@ -104,30 +104,25 @@ export const TabContainer = styled.div`
   `};
 `
 
+export const TabGroup = styled.div`
+  display: flex;
+  padding: 2px;
+  border-radius: 999px;
+  border: 1px solid ${({ theme }) => theme.border};
+  background: transparent;
+  align-items: center;
+
+  ${({ theme }) => theme.mediaWidth.upToExtraSmall`
+    width: 100%;
+    > div {
+      flex: 1
+    }
+  `};
+`
+
 export const PoolTitleContainer = styled.div`
   display: flex;
   align-items: center;
-`
-
-export const StakedOnlyToggleWrapper = styled.div`
-  display: flex;
-  align-items: center;
-
-  ${({ theme }) => theme.mediaWidth.upToLarge`
-    width: 100%;
-    justify-content: space-between;
-  `}
-`
-
-export const StakedOnlyToggleText = styled.div`
-  font-size: 14px;
-  font-weight: 500;
-  color: ${({ theme }) => theme.subText};
-  margin-right: 8px;
-
-  ${({ theme }) => theme.mediaWidth.upToLarge`
-    margin-left: 4px;
-  `}
 `
 
 export const HeadingContainer = styled.div`
@@ -140,7 +135,7 @@ export const HeadingContainer = styled.div`
     width: 100%;
   `}
 
-  ${({ theme }) => theme.mediaWidth.upToLarge`
+  ${({ theme }) => theme.mediaWidth.upToMedium`
     flex-direction: column;
     align-items: flex-start;
   `}
@@ -211,7 +206,7 @@ export const TableHeader = styled.div<{ fade?: boolean; oddRow?: boolean }>`
 
 export const ProMMFarmTableHeader = styled(TableHeader)`
   padding: 16px;
-  grid-template-columns: 230px 0.5fr 0.5fr 1fr 1fr 0.75fr 120px;
+  grid-template-columns: 280px 0.5fr 0.5fr 1fr 1fr 0.75fr 120px;
   grid-template-areas: 'token_pairs staked_tvl apr ending_in my_deposit reward action';
   grid-gap: 2rem;
 
@@ -220,7 +215,7 @@ export const ProMMFarmTableHeader = styled(TableHeader)`
   background-color: ${({ theme }) => theme.buttonGray};
 
   ${({ theme }) => theme.mediaWidth.upToLarge`
-    grid-template-columns: 170px 0.5fr 0.75fr 1fr 1fr 0.75fr 120px;
+    grid-template-columns: 250px 0.5fr 0.75fr 1fr 1fr 0.75fr 120px;
     grid-gap: 1rem;
   `};
 `
@@ -230,6 +225,24 @@ export const ProMMFarmTableRow = styled(ProMMFarmTableHeader)<{ isOpen: boolean 
   background-color: ${({ theme, isOpen }) => (isOpen ? theme.buttonGray : theme.buttonBlack)};
   border-radius: 0;
   box-shadow: none;
+`
+
+export const ElasticFarmV2TableHeader = styled(ProMMFarmTableHeader)`
+  grid-template-columns: 1fr 1.5fr 2fr 1fr 1fr 1fr;
+  grid-template-areas: 'staked_tvl ending_in apr my_deposit reward action';
+
+  ${({ theme }) => theme.mediaWidth.upToLarge`
+    grid-gap: 1rem;
+  `};
+`
+
+export const ElasticFarmV2TableRow = styled(ElasticFarmV2TableHeader)`
+  background-color: transparent;
+  font-size: 14px;
+  border-radius: 0;
+  box-shadow: none;
+  padding: 0;
+  margin-top: 12px;
 `
 
 export const ClickableText = styled(Text)`
@@ -264,10 +277,13 @@ export const TableRow = styled.div<{ fade?: boolean; joined?: boolean }>`
   ${({ joined }) =>
     joined &&
     css`
-      background: url(/static/media/card-background.77fbb037.png),
-        linear-gradient(to right, rgba(15, 170, 162, 0.12), rgba(15, 170, 162, 0.12)), #0f0f0f;
-      background-size: cover;
-      background-position: center;
+      background-image: ${({ theme }) =>
+        `url(${bgimg}),
+        linear-gradient(to right, ${rgba(theme.apr, 0.12)}, ${rgba(theme.apr, 0.12)}),
+        linear-gradient(to right, ${theme.buttonBlack}, ${theme.buttonBlack})`};
+
+      background-size: cover, cover, cover;
+      background-repeat: no-repeat, no-repeat, no-repeat;
     `}
 
   ${({ theme }) => theme.mediaWidth.upToSmall`

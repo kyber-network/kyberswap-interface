@@ -15,7 +15,7 @@ type Props = {
   currencyOut: Currency | undefined
   balanceIn: CurrencyAmount<Currency> | undefined
   onChangeCurrencyIn: (c: Currency) => void
-  setTypedValue: React.Dispatch<React.SetStateAction<string>>
+  setTypedValue: (v: string) => void
 }
 const InputCurrencyPanel: React.FC<Props> = ({
   wrapType,
@@ -61,6 +61,7 @@ const InputCurrencyPanel: React.FC<Props> = ({
       onCurrencySelect={onChangeCurrencyIn}
       otherCurrency={currencyOut}
       id="swap-currency-input"
+      dataTestId="swap-currency-input"
       showCommonBases={true}
       estimatedUsd={trade?.amountInUsd ? `${formattedNum(trade.amountInUsd.toString(), true)}` : undefined}
     />

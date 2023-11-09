@@ -5,13 +5,13 @@ import { useMedia } from 'react-use'
 import styled, { css, keyframes } from 'styled-components'
 
 import CtaButton from 'components/Announcement/Popups/CtaButton'
-import { useNavigateCtaPopup } from 'components/Announcement/helper'
 import { AnnouncementTemplatePopup, PopupType } from 'components/Announcement/type'
 import Announcement from 'components/Icons/Announcement'
 import useMixpanel, { MIXPANEL_TYPE } from 'hooks/useMixpanel'
 import useTheme from 'hooks/useTheme'
 import { useActivePopups, useRemoveAllPopupByType } from 'state/application/hooks'
 import { MEDIA_WIDTHS } from 'theme'
+import { useNavigateToUrl } from 'utils/redirect'
 import { escapeScriptHtml } from 'utils/string'
 
 const BannerWrapper = styled.div<{ color?: string }>`
@@ -86,6 +86,8 @@ const TextContent = styled.div<{ isOverflow: boolean; animationDuration: number 
      };
     white-space: nowrap;
     position: absolute;
+    display: flex;
+    gap: 4px;
   `}
   > * {
     margin: 0;
@@ -113,7 +115,7 @@ function TopBanner() {
   const contentNode = refContent.current
   const [isOverflowParent, setIsOverflowParent] = useState(false)
 
-  const navigate = useNavigateCtaPopup()
+  const navigate = useNavigateToUrl()
   const [animationDuration, setAnimationDuration] = useState(15)
 
   useEffect(() => {
@@ -154,7 +156,7 @@ function TopBanner() {
             ref={refContent}
             isOverflow={isOverflowParent}
             dangerouslySetInnerHTML={{
-              __html: escapeScriptHtml(content),
+              __html: escapeScriptHtml(isMobile ? content.replace(/<br\/>/g, '&nbsp;') : content),
             }}
           />
         </TextWrapper>

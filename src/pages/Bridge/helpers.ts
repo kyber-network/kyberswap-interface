@@ -2,7 +2,9 @@ import { ChainId } from '@kyberswap/ks-sdk-core'
 import { t } from '@lingui/macro'
 import axios from 'axios'
 
-import { NETWORKS_INFO_CONFIG } from 'constants/networks'
+import { SUPPORTED_NETWORKS } from 'constants/networks'
+import { MultichainTransferStatus } from 'hooks/bridge/useGetBridgeTransfers'
+import { PoolBridgeValue } from 'state/crossChain/reducer'
 import { formatNumberWithPrecisionRange, isAddress } from 'utils'
 import { getTokenSymbolWithHardcode } from 'utils/tokenInfo'
 
@@ -11,6 +13,7 @@ import { MultiChainTokenInfo } from './type'
 export const BridgeLocalStorageKeys = {
   BRIDGE_INFO: 'bridgeInfo',
   SHOWED_DISCLAIMED: 'showedDisclaimed',
+  SHOWED_DISCLAIMED_CROSS_CHAIN: 'showedDisclaimedCross',
   CHAINS_SUPPORTED: 'chainSupported',
   TOKEN_VERSION: 'tokenVer',
   TOKEN_LIST: 'bridgeTokenList',
@@ -71,7 +74,7 @@ const filterTokenList = (tokens: { [key: string]: MultiChainTokenInfo }) => {
             delete destChains[chain][address]
           }
         })
-        if (NETWORKS_INFO_CONFIG[chain as unknown as keyof typeof NETWORKS_INFO_CONFIG]) {
+        if (SUPPORTED_NETWORKS.includes(Number(chain))) {
           hasChainSupport = true
         }
         if (!Object.keys(destChains[chain]).length) {
@@ -97,11 +100,21 @@ export async function getTokenlist(chainId: ChainId, isStaleData: boolean) {
     tokens = filterTokenList(tokens)
     local = getTokenListCache() // make sure get latest data
     try {
-      localStorage.setItem(BridgeLocalStorageKeys.TOKEN_LIST, JSON.stringify({ ...local, [chainId]: tokens }))
+      const filterChain = Object.keys(local).reduce<{ [chainId: string]: any }>((rs, chainId) => {
+        if (!Object.keys(rs).length) {
+          rs[chainId] = local[chainId]
+        }
+        return rs
+      }, {})
+      // only store info 2 chain
+      localStorage.setItem(BridgeLocalStorageKeys.TOKEN_LIST, JSON.stringify({ ...filterChain, [chainId]: tokens }))
     } catch (error) {
       console.log('overflow localstorage QuotaExceededError')
       localStorage.removeItem(BridgeLocalStorageKeys.TOKEN_LIST)
-      localStorage.setItem(BridgeLocalStorageKeys.TOKEN_LIST, JSON.stringify({ [chainId]: tokens }))
+      try {
+        // still overflow, don't save into local
+        localStorage.setItem(BridgeLocalStorageKeys.TOKEN_LIST, JSON.stringify({ [chainId]: tokens }))
+      } catch (error) {}
     }
     return tokens
   } catch (e) {
@@ -120,7 +133,7 @@ export async function getChainlist(isStaleData: boolean) {
     const tokens = await fetchListChainSupport()
     const filter = Object.keys(tokens)
       .map(Number)
-      .filter(id => !!NETWORKS_INFO_CONFIG[id as ChainId])
+      .filter(id => SUPPORTED_NETWORKS.includes(id))
     setBridgeLocalstorage(BridgeLocalStorageKeys.CHAINS_SUPPORTED, filter)
     return filter
   } catch (e) {
@@ -129,12 +142,54 @@ export async function getChainlist(isStaleData: boolean) {
   }
 }
 
-export const formatPoolValue = (amount: string | number | undefined) => {
+export const formatPoolValue = (amount: PoolBridgeValue) => {
   try {
+    if (amount === null) return t`loading`
     if (amount === undefined) return t`Unlimited`
     if (Number(amount) && amount) return formatNumberWithPrecisionRange(parseFloat(amount + ''), 0, 2)
   } catch (error) {}
   return '0'
 }
 
-export const formatAmountBridge = (amount: string) => formatNumberWithPrecisionRange(parseFloat(amount ?? '0'), 0, 6)
+/**
+  1.123456 => 1.12
+  12.123456 => 12.12
+  123.123456 => 123.12
+  1234.123456 => 1,234.12
+  12345.123456 => 12,345.12
+  123456.123456 => 123,456.12
+  1234567.123456 => 1,234,567.12
+  12345678.123456 => 12,345,678.12
+  123456789.123456 => 123.457M
+  1234567890.123456 => 1.23457B
+  12345678901.123456 => 12.3457B
+  123456789012.123456 => 123.457B
+  1234567890123.123456 => 1.23457T
+ */
+/** @deprecated use formatDisplayNumber instead */
+export const formatAmountBridge = (rawAmount: string) => {
+  const amount = parseFloat(String(rawAmount) ?? '0')
+  if (amount > 100_000_000) {
+    const formatter = Intl.NumberFormat('en-US', {
+      notation: 'compact',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 2,
+      minimumSignificantDigits: 1,
+      maximumSignificantDigits: 6,
+    })
+
+    return formatter.format(amount)
+  }
+
+  return formatNumberWithPrecisionRange(amount, 0, 16)
+}
+
+export const getLabelByStatus = (status: MultichainTransferStatus): string => {
+  const labelByGeneralStatus: Record<MultichainTransferStatus, string> = {
+    [MultichainTransferStatus.Success]: t`Success`,
+    [MultichainTransferStatus.Failure]: t`Failed`,
+    [MultichainTransferStatus.Processing]: t`Processing`,
+  }
+
+  return labelByGeneralStatus[status]
+}

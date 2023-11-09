@@ -1,5 +1,6 @@
 import { t } from '@lingui/macro'
 import { useState } from 'react'
+import { isMobile } from 'react-device-detect'
 import { Share2, X } from 'react-feather'
 import { Flex, Text } from 'rebass'
 import styled from 'styled-components'
@@ -71,30 +72,126 @@ const AlertMessage = styled.span`
   }
 `
 
-const ButtonWithHoverEffect = ({ children, onClick }: { children: (color: string) => any; onClick: () => void }) => {
+const ButtonWithHoverEffect = ({
+  children,
+  onClick,
+  renderItem,
+}: {
+  children: (color: string) => any
+  onClick: () => void
+  renderItem?: (props: PropsItem) => JSX.Element
+}) => {
   const theme = useTheme()
   const [isHovering, setIsHovering] = useState<boolean>(false)
-  const handleMouseEnter = () => {
+  const onMouseEnter = () => {
     setIsHovering(true)
   }
-  const handleMouseLeave = () => {
+  const onMouseLeave = () => {
     setIsHovering(false)
   }
-  return (
-    <ButtonWrapper onMouseEnter={handleMouseEnter} onMouseLeave={handleMouseLeave} onClick={onClick}>
-      {children(isHovering ? theme.text : theme.subText)}
-    </ButtonWrapper>
+  const color = isHovering ? theme.text : theme.subText
+  const props = {
+    onClick,
+    color,
+    children,
+    onMouseEnter,
+    onMouseLeave,
+  }
+  if (renderItem) return renderItem(props)
+  return <ButtonWrapper {...props}>{children(color)}</ButtonWrapper>
+}
+
+type PropsItem = { onClick: () => void; children: (color: string) => any; color?: string }
+export const ShareGroupButtons = ({
+  shareUrl,
+  onShared = () => null,
+  showLabel = true,
+  renderItem,
+  size = 36,
+}: {
+  shareUrl: string
+  onShared?: () => void
+  showLabel?: boolean
+  renderItem?: (props: PropsItem) => JSX.Element
+  size?: number
+}) => {
+  const { telegram, twitter, facebook, discord } = getSocialShareUrls(shareUrl)
+
+  const ShareItem = (props: PropsItem) => (
+    <ButtonWithHoverEffect renderItem={renderItem} onClick={onShared}>
+      {props.children}
+    </ButtonWithHoverEffect>
   )
+
+  return (
+    <Flex justifyContent="space-between" padding="32px 0" width="100%">
+      <ShareItem onClick={onShared}>
+        {(color: string) => (
+          <>
+            <ExternalLink href={telegram} style={{ display: 'flex' }}>
+              <Telegram size={size} color={color} />
+            </ExternalLink>
+            {showLabel && <Text>Telegram</Text>}
+          </>
+        )}
+      </ShareItem>
+      <ShareItem onClick={onShared}>
+        {(color: string) => (
+          <>
+            <ExternalLink href={twitter} style={{ display: 'flex' }}>
+              <TwitterIcon width={size} height={size} color={color} />
+            </ExternalLink>
+            {showLabel && <Text>Twitter</Text>}
+          </>
+        )}
+      </ShareItem>
+      <ShareItem onClick={onShared}>
+        {(color: string) => (
+          <>
+            <ExternalLink href={facebook} style={{ display: 'flex' }}>
+              <Facebook color={color} size={size} />
+            </ExternalLink>
+            {showLabel && <Text>Facebook</Text>}
+          </>
+        )}
+      </ShareItem>
+      <ShareItem onClick={onShared}>
+        {(color: string) => (
+          <>
+            <ExternalLink href={discord} style={{ display: 'flex' }}>
+              <Discord width={size} height={size} color={color} />
+            </ExternalLink>
+            {showLabel && <Text>Discord</Text>}
+          </>
+        )}
+      </ShareItem>
+    </Flex>
+  )
+}
+
+export const getSocialShareUrls = (shareUrl: string) => {
+  return {
+    telegram: 'https://telegram.me/share/url?url=' + encodeURIComponent(shareUrl),
+    twitter: 'https://twitter.com/intent/tweet?text=' + encodeURIComponent(shareUrl),
+    facebook: 'https://www.facebook.com/sharer/sharer.php?u=' + encodeURIComponent(shareUrl),
+    discord: 'https://discord.com/app/',
+  }
+}
+
+const noop = () => {
+  // empty
 }
 
 export default function ShareModal({
   title,
   url,
-  onShared = () => null,
+  onShared = noop,
+  onDismiss = noop,
 }: {
   title: string
   url?: string
   onShared?: () => void
+  onDismiss?: () => void
 }) {
   const isOpen = useModalOpen(ApplicationModal.SHARE)
   const toggle = useToggleModal(ApplicationModal.SHARE)
@@ -107,61 +204,27 @@ export default function ShareModal({
     setCopied(shareUrl)
   }
 
+  const handleDismissModal = () => {
+    onDismiss()
+    toggle()
+  }
+
   return (
-    <Modal isOpen={isOpen} onDismiss={toggle}>
+    <Modal isOpen={isOpen} onDismiss={handleDismissModal}>
       <Flex flexDirection="column" alignItems="center" padding="25px" width="100%">
         <RowBetween>
           <Text fontSize={18} fontWeight={500}>
             {title}
           </Text>
-          <ButtonText onClick={toggle} style={{ lineHeight: '0' }}>
+          <ButtonText onClick={handleDismissModal} style={{ lineHeight: '0' }}>
             <X color={theme.text} />
           </ButtonText>
         </RowBetween>
-        <Flex justifyContent="space-between" padding="32px 0" width="100%">
-          <ButtonWithHoverEffect onClick={onShared}>
-            {(color: string) => (
-              <>
-                <ExternalLink href={'https://telegram.me/share/url?url=' + encodeURIComponent(shareUrl)}>
-                  <Telegram size={36} color={color} />
-                </ExternalLink>
-                <Text>Telegram</Text>
-              </>
-            )}
-          </ButtonWithHoverEffect>
-          <ButtonWithHoverEffect onClick={onShared}>
-            {(color: string) => (
-              <>
-                <ExternalLink href={'https://twitter.com/intent/tweet?text=' + encodeURIComponent(shareUrl)}>
-                  <TwitterIcon width={36} height={36} color={color} />
-                </ExternalLink>
-                <Text>Twitter</Text>
-              </>
-            )}
-          </ButtonWithHoverEffect>
-          <ButtonWithHoverEffect onClick={onShared}>
-            {(color: string) => (
-              <>
-                <ExternalLink href={'https://www.facebook.com/sharer/sharer.php?u=' + encodeURIComponent(shareUrl)}>
-                  <Facebook color={color} />
-                </ExternalLink>
-                <Text>Facebook</Text>
-              </>
-            )}
-          </ButtonWithHoverEffect>
-          <ButtonWithHoverEffect onClick={onShared}>
-            {(color: string) => (
-              <>
-                <ExternalLink href="https://discord.com/app/">
-                  <Discord width={36} height={36} color={color} />
-                </ExternalLink>
-                <Text>Discord</Text>
-              </>
-            )}
-          </ButtonWithHoverEffect>
-        </Flex>
+
+        <ShareGroupButtons shareUrl={shareUrl} onShared={onShared} />
+
         <InputWrapper>
-          <input type="text" value={shareUrl} />
+          <input type="text" value={shareUrl} onChange={noop} />
           <ButtonPrimary onClick={handleCopyClick} fontSize={14} padding="8px 12px" width="auto">
             Copy Link
             <AlertMessage className={isCopied ? 'show' : ''}>Copied!</AlertMessage>
@@ -181,7 +244,7 @@ export const ShareButtonWithModal: React.FC<Props> = ({ url, onShared, color, ti
   return (
     <>
       <StyledActionButtonSwapForm onClick={toggle}>
-        <MouseoverTooltip text={t`Share`} placement="top" width="fit-content">
+        <MouseoverTooltip text={t`Share`} placement="top" width="fit-content" disableTooltip={isMobile}>
           <Share2 size={18} color={color || theme.subText} />
         </MouseoverTooltip>
       </StyledActionButtonSwapForm>

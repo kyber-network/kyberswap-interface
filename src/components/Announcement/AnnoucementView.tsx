@@ -1,12 +1,12 @@
 import { Trans } from '@lingui/macro'
-import { useCallback } from 'react'
+import { RefObject, useEffect } from 'react'
 import { Info, X } from 'react-feather'
 import { useMedia } from 'react-use'
 import AutoSizer from 'react-virtualized-auto-sizer'
 import { FixedSizeList } from 'react-window'
 import InfiniteLoader from 'react-window-infinite-loader'
 import { Flex, Text } from 'rebass'
-import AnnouncementApi from 'services/announcement'
+import { useAckPrivateAnnouncementsMutation } from 'services/announcement'
 import styled, { CSSProperties, css } from 'styled-components'
 
 import AnnouncementItem from 'components/Announcement/AnnoucementItem'
@@ -20,7 +20,6 @@ import { RowBetween } from 'components/Row'
 import { useActiveWeb3React } from 'hooks'
 import useMixpanel, { MIXPANEL_TYPE } from 'hooks/useMixpanel'
 import useTheme from 'hooks/useTheme'
-import { useWalletModalToggle } from 'state/application/hooks'
 import { MEDIA_WIDTHS } from 'theme'
 
 const Wrapper = styled.div`
@@ -130,6 +129,7 @@ type Props = {
   loadMoreAnnouncements: () => void
   toggleNotificationCenter: () => void
   showDetailAnnouncement: (index: number) => void
+  scrollRef: RefObject<HTMLDivElement>
 }
 
 export default function AnnouncementView({
@@ -142,13 +142,12 @@ export default function AnnouncementView({
   isMyInboxTab,
   onSetTab,
   showDetailAnnouncement,
+  scrollRef,
 }: Props) {
   const { account } = useActiveWeb3React()
 
   const theme = useTheme()
-  const toggleWalletModal = useWalletModalToggle()
 
-  const { useAckPrivateAnnouncementsMutation } = AnnouncementApi
   const [ackAnnouncement] = useAckPrivateAnnouncementsMutation()
   const isMobile = useMedia(`(max-width: ${MEDIA_WIDTHS.upToMedium}px)`)
   const { mixpanelHandler } = useMixpanel()
@@ -163,7 +162,7 @@ export default function AnnouncementView({
       toggleNotificationCenter()
       return
     }
-    ackAnnouncement({ account, action: 'read', ids: [item.id] })
+    ackAnnouncement({ action: 'read', ids: [item.id] })
       .then(() => {
         refreshAnnouncement()
         toggleNotificationCenter()
@@ -184,7 +183,7 @@ export default function AnnouncementView({
 
   const clearAll = () => {
     if (!announcements.length || !account) return
-    ackAnnouncement({ account, action: 'clear-all' })
+    ackAnnouncement({ action: 'clear-all' })
       .then(() => {
         refreshAnnouncement()
       })
@@ -214,11 +213,12 @@ export default function AnnouncementView({
 
   const showClearAll = account && isMyInboxTab && announcements.length > 0
 
-  const onRefChange = useCallback((node: HTMLDivElement) => {
+  const node = scrollRef?.current
+  useEffect(() => {
     if (!node?.classList.contains('scrollbar')) {
       node?.classList.add('scrollbar')
     }
-  }, [])
+  }, [node])
 
   return (
     <Wrapper>
@@ -229,7 +229,11 @@ export default function AnnouncementView({
             <Trans>Notifications</Trans>
           </Title>
           <Flex style={{ gap: '20px', alignItems: 'center' }}>
-            {showClearAll && <MenuMoreAction showClearAll={Boolean(showClearAll)} clearAll={clearAll} />}
+            <MenuMoreAction
+              showClearAll={Boolean(showClearAll)}
+              clearAll={clearAll}
+              toggleModal={toggleNotificationCenter}
+            />
             {isMobile && <X color={theme.subText} onClick={toggleNotificationCenter} cursor="pointer" />}
           </Flex>
         </RowBetween>
@@ -244,11 +248,11 @@ export default function AnnouncementView({
               <InfiniteLoader isItemLoaded={isItemLoaded} itemCount={itemCount} loadMoreItems={loadMoreAnnouncements}>
                 {({ onItemsRendered, ref }) => (
                   <FixedSizeList
-                    outerRef={onRefChange}
+                    outerRef={scrollRef}
                     height={height}
                     width={width}
                     itemCount={itemCount}
-                    itemSize={isMyInboxTab ? 116 : 126}
+                    itemSize={isMyInboxTab ? 120 : 126}
                     onItemsRendered={onItemsRendered}
                     ref={ref}
                   >
@@ -282,20 +286,9 @@ export default function AnnouncementView({
       ) : (
         <Column style={{ alignItems: 'center', margin: '24px 0px 32px 0px' }} gap="8px">
           <Info color={theme.subText} size={27} />
-          {!account && isMyInboxTab ? (
-            <>
-              <Text color={theme.primary} sx={{ cursor: 'pointer' }} textAlign="center" onClick={toggleWalletModal}>
-                <Trans>Connect Wallet</Trans>
-              </Text>
-              <Text color={theme.subText} textAlign="center">
-                <Trans>to view My inbox</Trans>
-              </Text>
-            </>
-          ) : (
-            <Text color={theme.subText} textAlign="center">
-              <Trans>No notifications found</Trans>
-            </Text>
-          )}
+          <Text color={theme.subText} textAlign="center">
+            <Trans>No notifications found</Trans>
+          </Text>
         </Column>
       )}
     </Wrapper>

@@ -14,15 +14,22 @@ import { convertSymbol } from 'utils/tokenInfo'
 import { useAllTokens, useIsLoadedTokenDefault } from './Tokens'
 import useParsedQueryString from './useParsedQueryString'
 
-type TokenSymbolUrl = {
+type TokenSymbolParams = {
   fromCurrency: string
   toCurrency: string
   network: string
 }
-const getUrlMatchParams = (params: Params): TokenSymbolUrl => {
-  const fromCurrency = (params.fromCurrency || '').toLowerCase()
-  const toCurrency = (params.toCurrency || '').toLowerCase()
+
+const getUrlMatchParams = (params: Params): TokenSymbolParams => {
+  const currencyParam = (params.currency || '').toLowerCase()
   const network: string = convertToSlug(params.network || '')
+
+  let fromCurrency = '',
+    toCurrency = ''
+
+  const matches = currencyParam.split('-to-')
+  fromCurrency ||= matches[0]
+  toCurrency ||= matches[1]
   return { fromCurrency, toCurrency, network }
 }
 
@@ -36,20 +43,22 @@ export default function useSyncTokenSymbolToUrl(
   isSelectCurrencyManual: boolean,
   disabled = false,
 ) {
-  const params = useParams()
+  const params = useParams<TokenSymbolParams>()
   const { fromCurrency, toCurrency, network } = getUrlMatchParams(params)
+
   const { chainId } = useActiveWeb3React()
   const navigate = useNavigate()
   const qs = useParsedQueryString()
   const { pathname } = useLocation()
   const allTokens = useAllTokens()
   const isLoadedTokenDefault = useIsLoadedTokenDefault()
+
   const currentPath = [APP_PATHS.SWAP, APP_PATHS.LIMIT].find(path => pathname.startsWith(path)) || APP_PATHS.SWAP
 
   const redirect = useCallback(
     (url: string) => {
       const { inputCurrency, outputCurrency, ...newQs } = qs
-      navigate(`${currentPath}${url ? `/${url}` : ''}?${stringify(newQs)}`) // keep query params
+      navigate(`${currentPath}${url ? `/${url}` : ''}?${stringify(newQs)}`, { replace: true }) // keep query params
     },
     [navigate, qs, currentPath],
   )
@@ -87,7 +96,7 @@ export default function useSyncTokenSymbolToUrl(
           onCurrencySelection(fromToken)
           if (isSame) redirect(`${network}/${fromCurrency}`)
         } else {
-          redirect('')
+          redirect(network)
         }
         return
       }
@@ -97,7 +106,7 @@ export default function useSyncTokenSymbolToUrl(
       const toToken = findTokenBySymbol(convertSymbol(network, toCurrency), chainId)
 
       if (!toToken || !fromToken) {
-        redirect('')
+        redirect(network)
         return
       }
       onCurrencySelection(fromToken, toToken)
@@ -105,10 +114,11 @@ export default function useSyncTokenSymbolToUrl(
     [findTokenBySymbol, redirect, onCurrencySelection, fromCurrency, network, toCurrency],
   )
 
-  const checkedTokenFromUrl = useRef(false)
+  const checkedTokenFromUrlWhenInit = useRef(false)
+
   useEffect(() => {
     if (
-      !checkedTokenFromUrl.current &&
+      !checkedTokenFromUrlWhenInit.current &&
       isLoadedTokenDefault &&
       Object.values(allTokens)[0]?.chainId === chainId &&
       network === NETWORKS_INFO[chainId].route &&
@@ -116,11 +126,12 @@ export default function useSyncTokenSymbolToUrl(
     ) {
       // call once
       setTimeout(() => findTokenPairFromUrl(chainId))
-      checkedTokenFromUrl.current = true
+      checkedTokenFromUrlWhenInit.current = true
     }
   }, [allTokens, findTokenPairFromUrl, chainId, isLoadedTokenDefault, disabled, network])
 
   // when token change, sync symbol to url
+
   useEffect(() => {
     if (isSelectCurrencyManual && isLoadedTokenDefault && !disabled) {
       syncTokenSymbolToUrl(currencyIn, currencyOut)

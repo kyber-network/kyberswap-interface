@@ -1,13 +1,15 @@
 import { Currency } from '@kyberswap/ks-sdk-core'
 import { useCallback, useMemo } from 'react'
+import { useLocation, useSearchParams } from 'react-router-dom'
 
 import SwapForm, { SwapFormProps } from 'components/SwapForm'
+import { APP_PATHS } from 'constants/index'
 import useSyncTokenSymbolToUrl from 'hooks/useSyncTokenSymbolToUrl'
 import useUpdateSlippageInStableCoinSwap from 'pages/SwapV3/useUpdateSlippageInStableCoinSwap'
 import { useAppSelector } from 'state/hooks'
 import { Field } from 'state/swap/actions'
-import { useInputCurrency, useOutputCurrency, useSwapActionHandlers, useSwapState } from 'state/swap/hooks'
-import { useDegenModeManager, useUserSlippageTolerance, useUserTransactionTTL } from 'state/user/hooks'
+import { useInputCurrency, useOutputCurrency, useSwapActionHandlers } from 'state/swap/hooks'
+import { useDegenModeManager, usePermitData, useUserSlippageTolerance, useUserTransactionTTL } from 'state/user/hooks'
 import { useCurrencyBalances } from 'state/wallet/hooks'
 import { DetailedRouteSummary } from 'types/route'
 
@@ -17,9 +19,16 @@ type Props = {
   routeSummary: DetailedRouteSummary | undefined
   setRouteSummary: React.Dispatch<React.SetStateAction<DetailedRouteSummary | undefined>>
   goToSettingsView: () => void
+  onSelectSuggestedPair: (fromToken: Currency | undefined, toToken: Currency | undefined, amount?: string) => void
   hidden: boolean
 }
-const PopulatedSwapForm: React.FC<Props> = ({ routeSummary, setRouteSummary, goToSettingsView, hidden }) => {
+const PopulatedSwapForm: React.FC<Props> = ({
+  routeSummary,
+  setRouteSummary,
+  goToSettingsView,
+  hidden,
+  onSelectSuggestedPair,
+}) => {
   const currencyIn = useInputCurrency()
   const currencyOut = useOutputCurrency()
 
@@ -30,38 +39,45 @@ const PopulatedSwapForm: React.FC<Props> = ({ routeSummary, setRouteSummary, goT
   const [ttl] = useUserTransactionTTL()
   const [isDegenMode] = useDegenModeManager()
   const [slippage] = useUserSlippageTolerance()
+  const permitData = usePermitData(currencyIn?.wrapped.address)
 
-  const { feeConfig } = useSwapState()
-  const { onUserInput, onCurrencySelection, onResetSelectCurrency } = useSwapActionHandlers()
+  const { onCurrencySelection, onResetSelectCurrency } = useSwapActionHandlers()
 
   useUpdateSlippageInStableCoinSwap()
 
-  const onSelectSuggestedPair = useCallback(
-    (fromToken: Currency | undefined, toToken: Currency | undefined, amount?: string) => {
-      if (fromToken) onCurrencySelection(Field.INPUT, fromToken)
-      if (toToken) onCurrencySelection(Field.OUTPUT, toToken)
-      if (amount) {
-        onUserInput(Field.INPUT, amount)
-      }
-    },
-    [onCurrencySelection, onUserInput],
-  )
-
-  useSyncTokenSymbolToUrl(currencyIn, currencyOut, onSelectSuggestedPair, isSelectTokenManually)
+  const { pathname } = useLocation()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const isPartnerSwap = pathname.startsWith(APP_PATHS.PARTNER_SWAP)
+  useSyncTokenSymbolToUrl(currencyIn, currencyOut, onSelectSuggestedPair, isSelectTokenManually, isPartnerSwap)
   useResetCurrenciesOnRemoveImportedTokens(currencyIn, currencyOut, onResetSelectCurrency)
+
+  const outId =
+    searchParams.get('outputCurrency') || (currencyOut?.isNative ? currencyOut.symbol : currencyOut?.wrapped.address)
+  const inId =
+    searchParams.get('inputCurrency') || (currencyIn?.isNative ? currencyIn.symbol : currencyIn?.wrapped.address)
 
   const onChangeCurrencyIn = useCallback(
     (c: Currency) => {
-      onCurrencySelection(Field.INPUT, c)
+      if (isPartnerSwap) {
+        const value = c.isNative ? c.symbol || c.wrapped.address : c.wrapped.address
+        if (value === outId) searchParams.set('outputCurrency', inId || '')
+        searchParams.set('inputCurrency', value)
+        setSearchParams(searchParams)
+      } else onCurrencySelection(Field.INPUT, c)
     },
-    [onCurrencySelection],
+    [searchParams, setSearchParams, isPartnerSwap, onCurrencySelection, inId, outId],
   )
 
   const onChangeCurrencyOut = useCallback(
     (c: Currency) => {
-      onCurrencySelection(Field.OUTPUT, c)
+      if (isPartnerSwap) {
+        const value = c.isNative ? c.symbol || c.wrapped.address : c.wrapped.address
+        if (value === inId) searchParams.set('inputCurrency', outId || '')
+        searchParams.set('outputCurrency', value)
+        setSearchParams(searchParams)
+      } else onCurrencySelection(Field.OUTPUT, c)
     },
-    [onCurrencySelection],
+    [searchParams, setSearchParams, isPartnerSwap, onCurrencySelection, inId, outId],
   )
 
   const props: SwapFormProps = {
@@ -74,8 +90,8 @@ const PopulatedSwapForm: React.FC<Props> = ({ routeSummary, setRouteSummary, goT
     balanceOut,
     isDegenMode,
     slippage,
-    feeConfig,
     transactionTimeout: ttl,
+    permit: permitData?.rawSignature,
     onChangeCurrencyIn,
     onChangeCurrencyOut,
     goToSettingsView,

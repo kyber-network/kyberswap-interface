@@ -1,60 +1,29 @@
 import { Currency } from '@kyberswap/ks-sdk-core'
 import { useCallback, useEffect } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
-import { useLocation } from 'react-router-dom'
 
 import { CreateOrderParam } from 'components/swapv2/LimitOrder/type'
 import { APP_PATHS } from 'constants/index'
-import { DEFAULT_OUTPUT_TOKEN_BY_CHAIN, NativeCurrencies } from 'constants/tokens'
-import { useActiveWeb3React } from 'hooks'
-import { useCurrencyV2 } from 'hooks/Tokens'
-import useParsedQueryString from 'hooks/useParsedQueryString'
+import useDefaultsTokenFromURLSearch from 'hooks/useDefaultsTokenFromURLSearch'
 import { AppDispatch, AppState } from 'state/index'
-import { Field } from 'state/swap/actions'
-import { queryParametersToSwapState } from 'state/swap/hooks'
 
-import { removeCurrentOrderUpdate, setCurrentOrderUpdate, setInputAmount, setLimitCurrency } from './actions'
+import {
+  pushOrderNeedCreated as pushOrderNeedCreatedAction,
+  removeOrderNeedCreated as removeOrderNeedCreatedAction,
+  setInputAmount,
+  setLimitCurrency,
+  setOrderEditing as setOrderEditingAction,
+} from './actions'
 import { LimitState } from './reducer'
 
 export function useLimitState(): LimitState {
   return useSelector((state: AppState) => state.limit)
 }
 
-const useDefaultsTokenFromURLSearch = () => {
-  const { chainId } = useActiveWeb3React()
-  const parsedQs = useParsedQueryString()
-  const { currencyIn, currencyOut } = useLimitState()
-  const storedInputValue = currencyIn?.chainId === chainId ? currencyIn : undefined
-  const storedOutputValue = currencyOut?.chainId === chainId ? currencyOut : undefined
-  const { pathname } = useLocation()
-  const parsed = queryParametersToSwapState(parsedQs, chainId, pathname.startsWith(APP_PATHS.LIMIT))
-
-  const outputCurrencyAddress = chainId ? DEFAULT_OUTPUT_TOKEN_BY_CHAIN[chainId]?.address ?? '' : ''
-
-  const parsedInputValue = parsed[Field.INPUT].currencyId // default inputCurrency is the native token
-  const parsedOutputValue = parsed[Field.OUTPUT].currencyId || outputCurrencyAddress || ''
-
-  const inputCurrencyId = parsedQs.inputCurrency ? parsedInputValue : storedInputValue || parsedInputValue
-  let outputCurrencyId = parsedQs.outputCurrency ? parsedOutputValue : storedOutputValue || parsedOutputValue
-
-  const native = chainId ? NativeCurrencies[chainId].symbol : ''
-  if (native && outputCurrencyId === native && inputCurrencyId === native) {
-    outputCurrencyId = outputCurrencyAddress
-  }
-
-  // if currency is object, no need to call
-  const inputCurrency =
-    useCurrencyV2(inputCurrencyId && typeof inputCurrencyId === 'object' ? '' : inputCurrencyId) ?? storedInputValue
-  const outputCurrency =
-    useCurrencyV2(outputCurrencyId && typeof outputCurrencyId === 'object' ? '' : outputCurrencyId) ?? storedOutputValue
-
-  return { inputCurrency, outputCurrency }
-}
-
 export function useLimitActionHandlers() {
   const dispatch = useDispatch<AppDispatch>()
   const { currencyIn, currencyOut } = useLimitState()
-  const { inputCurrency, outputCurrency } = useDefaultsTokenFromURLSearch()
+  const { inputCurrency, outputCurrency } = useDefaultsTokenFromURLSearch(currencyIn, currencyOut, APP_PATHS.LIMIT)
 
   const setInputValue = useCallback(
     (inputAmount: string) => {
@@ -109,16 +78,23 @@ export function useLimitActionHandlers() {
     onSelectPair(currencyOut, currencyIn)
   }, [onSelectPair, currencyOut, currencyIn])
 
-  const setCurrentOrder = useCallback(
+  const pushOrderNeedCreated = useCallback(
     (order: CreateOrderParam) => {
-      dispatch(setCurrentOrderUpdate(order))
+      dispatch(pushOrderNeedCreatedAction(order))
     },
     [dispatch],
   )
 
-  const removeCurrentOrder = useCallback(
+  const removeOrderNeedCreated = useCallback(
     (orderId: number) => {
-      dispatch(removeCurrentOrderUpdate(orderId))
+      dispatch(removeOrderNeedCreatedAction(orderId))
+    },
+    [dispatch],
+  )
+
+  const setOrderEditing = useCallback(
+    (order: CreateOrderParam) => {
+      dispatch(setOrderEditingAction(order))
     },
     [dispatch],
   )
@@ -128,8 +104,10 @@ export function useLimitActionHandlers() {
     setCurrencyIn,
     setCurrencyOut,
     onSelectPair,
-    setCurrentOrder,
-    removeCurrentOrder,
+    pushOrderNeedCreated,
+    removeOrderNeedCreated,
+    setOrderEditing,
     resetState,
+    setInputValue,
   }
 }

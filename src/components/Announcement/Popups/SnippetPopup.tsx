@@ -4,11 +4,10 @@ import { X } from 'react-feather'
 import { Flex } from 'rebass'
 import styled, { css } from 'styled-components'
 import { Navigation, Pagination } from 'swiper'
-import { Swiper, SwiperSlide } from 'swiper/react/swiper-react'
+import { Swiper, SwiperSlide } from 'swiper/react'
 
 import NotificationImage from 'assets/images/notification_default.png'
 import CtaButton from 'components/Announcement/Popups/CtaButton'
-import { useNavigateCtaPopup } from 'components/Announcement/helper'
 import {
   AnnouncementTemplatePopup,
   PopupContentAnnouncement,
@@ -19,7 +18,10 @@ import { AutoColumn } from 'components/Column'
 import { Z_INDEXS } from 'constants/styles'
 import useMixpanel, { MIXPANEL_TYPE } from 'hooks/useMixpanel'
 import useTheme from 'hooks/useTheme'
+
 import { useDetailAnnouncement, useRemovePopup } from 'state/application/hooks'
+import { useNavigateToUrl } from 'utils/redirect'
+
 
 const IMAGE_HEIGHT = '124px'
 const PADDING_MOBILE = '16px'
@@ -83,6 +85,8 @@ const SeeMore = styled.div`
   color: ${({ theme }) => theme.subText};
   font-size: 14px;
   font-weight: 500;
+  text-align: right;
+  white-space: nowrap;
 `
 
 function SnippetPopupItem({
@@ -90,6 +94,7 @@ function SnippetPopupItem({
   index,
   showDetailAnnouncement,
 }: {
+
   index: number
   data: PopupItemType<PopupContentAnnouncement>
   showDetailAnnouncement: (index: number) => void
@@ -97,12 +102,13 @@ function SnippetPopupItem({
   const { templateBody = {} } = data.content
   const { ctas = [], name, thumbnailImageURL } = templateBody as AnnouncementTemplatePopup
 
+
   const removePopup = useRemovePopup()
   const toggle = () => {
     showDetailAnnouncement(index)
     removePopup(data)
   }
-  const navigate = useNavigateCtaPopup()
+  const navigate = useNavigateToUrl()
   const ctaInfo = ctas[0]
   const hasCta = Boolean(ctaInfo?.name && ctaInfo?.url)
 
@@ -176,7 +182,9 @@ const Wrapper = styled.div`
   .swiper-pagination {
     display: none;
   }
-
+  ${({ theme }) => theme.mediaWidth.upToMedium`
+    bottom: 74px;
+  `}
   ${({ theme }) => theme.mediaWidth.upToSmall`
     ${css`
       left: 0;
@@ -191,17 +199,23 @@ const Close = styled(X)`
   position: absolute;
   right: 12px;
   top: 12px;
+  width: 18px;
+  height: 18px;
   cursor: pointer;
   z-index: 1;
   ${({ theme }) => theme.mediaWidth.upToSmall`
-    right: calc(12px + ${PADDING_MOBILE});
+    right: calc(12px + ${PADDING_MOBILE}); 
+    width: 22px;
+    height: 22px;
   `}
 `
 export default function SnippetPopup({
   data,
   clearAll,
 }: {
+
   data: PopupItemType<PopupContentAnnouncement>[]
+
   clearAll: () => void
 }) {
   const theme = useTheme()
@@ -231,14 +245,15 @@ export default function SnippetPopup({
         observeParents
         modules={[Navigation, Pagination]}
       >
+
         {data.map((banner, index) => (
+
           <SwiperSlide key={banner.key}>
             <SnippetPopupItem index={index} data={banner} showDetailAnnouncement={showDetailAnnouncement} />
           </SwiperSlide>
         ))}
       </Swiper>
       <Close
-        size={18}
         color={theme.subText}
         onClick={() => {
           clearAll()

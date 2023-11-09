@@ -27,7 +27,6 @@ interface FarmingPool {
   startTime: string
   endTime: string
   feeTarget: string
-  vestingDuration: string
   rewardTokens: Array<{
     token: SubgraphToken
     amount: string
@@ -64,7 +63,6 @@ interface FarmingPool {
 
 interface SubgraphFarm {
   id: string
-  rewardLocker: string
   farmingPools: Array<FarmingPool>
 }
 
@@ -72,14 +70,16 @@ const ELASTIC_FARM_QUERY = gql`
   query getFarms {
     farms(first: 1000) {
       id
-      rewardLocker
-      farmingPools(orderBy: pid, orderDirection: desc) {
+      farmingPools(
+        orderBy: pid
+        orderDirection: desc
+        where: { pool_: { id_not: "0xf2057f0231bedcecf32436e3cd6b0b93c6675e0a" } }
+      ) {
         id
         pid
         startTime
         endTime
         feeTarget
-        vestingDuration
         rewardTokens(orderBy: priority, orderDirection: asc) {
           token {
             id
@@ -151,24 +151,24 @@ const FarmUpdaterV1: React.FC<CommonProps> = ({ interval }) => {
   })
 
   useEffect(() => {
-    if (!elasticFarm.farms && !elasticFarm.loading) {
-      dispatch(setLoading({ chainId, loading: true }))
-      getElasticFarms().finally(() => {
-        dispatch(setLoading({ chainId, loading: false }))
-      })
+    const getFarm = (withLoading = false) => {
+      withLoading && dispatch(setLoading({ chainId, loading: true }))
+      try {
+        getElasticFarms()
+      } finally {
+        withLoading && dispatch(setLoading({ chainId, loading: false }))
+      }
     }
-  }, [elasticFarm, getElasticFarms, dispatch, chainId])
-
-  useEffect(() => {
+    getFarm(true)
     const i = interval
       ? setInterval(() => {
-          getElasticFarms()
-        }, 10_000)
+          getFarm()
+        }, 20_000)
       : undefined
     return () => {
       i && clearInterval(i)
     }
-  }, [interval, getElasticFarms])
+  }, [interval, chainId, getElasticFarms, dispatch])
 
   useEffect(() => {
     if (error && chainId) {
@@ -177,16 +177,16 @@ const FarmUpdaterV1: React.FC<CommonProps> = ({ interval }) => {
     }
   }, [error, dispatch, chainId])
 
+  const hasFarm = elasticFarm?.farms?.length
   useEffect(() => {
-    if (data?.farms && chainId) {
+    if (data?.farms && chainId && !hasFarm) {
       // transform farm data
       const formattedData: ElasticFarm[] = data.farms.map((farm: SubgraphFarm) => {
         return {
           id: farm.id,
-          rewardLocker: isAddressString(chainId, farm.rewardLocker),
           pools: farm.farmingPools.map(pool => {
-            const token0Address = isAddressString(chainId, pool.pool.token0.id)
-            const token1Address = isAddressString(chainId, pool.pool.token1.id)
+            const token0Address = isAddressString(chainId, pool.pool.token0?.id)
+            const token1Address = isAddressString(chainId, pool.pool.token1?.id)
 
             const token0 =
               token0Address === WETH[chainId].address
@@ -241,7 +241,6 @@ const FarmUpdaterV1: React.FC<CommonProps> = ({ interval }) => {
               pid: pool.pid,
               id: pool.id,
               feeTarget: pool.feeTarget,
-              vestingDuration: Number(pool.vestingDuration),
               token0,
               token1,
               poolAddress: pool.pool.id,
@@ -268,7 +267,7 @@ const FarmUpdaterV1: React.FC<CommonProps> = ({ interval }) => {
       })
       dispatch(setFarms({ chainId, farms: formattedData }))
     }
-  }, [data, dispatch, chainId])
+  }, [data, dispatch, chainId, hasFarm])
 
   return null
 }

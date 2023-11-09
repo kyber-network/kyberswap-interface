@@ -1,10 +1,10 @@
 import { commify, formatUnits } from '@ethersproject/units'
-import { Trans } from '@lingui/macro'
+import { Trans, t } from '@lingui/macro'
 import { isMobile } from 'react-device-detect'
 import Skeleton from 'react-loading-skeleton'
 import { NavLink, useNavigate } from 'react-router-dom'
 import { Text } from 'rebass'
-import styled from 'styled-components'
+import styled, { css } from 'styled-components'
 
 import bgimg from 'assets/images/about_background.png'
 import governancePNG from 'assets/images/kyberdao/governance.png'
@@ -13,16 +13,19 @@ import kyberCrystal from 'assets/images/kyberdao/kyber_crystal.png'
 import kyberdaoPNG from 'assets/images/kyberdao/kyberdao.png'
 import migratePNG from 'assets/images/kyberdao/migrate.png'
 import stakevotePNG from 'assets/images/kyberdao/stake_vote.png'
+import GasRefundTier1 from 'assets/svg/refund1.svg'
+import GasRefundTier2 from 'assets/svg/refund2.svg'
+import GasRefundTier3 from 'assets/svg/refund3.svg'
 import { ButtonLight, ButtonPrimary } from 'components/Button'
 import Divider from 'components/Divider'
 import Row, { RowBetween, RowFit } from 'components/Row'
+import { MouseoverTooltip } from 'components/Tooltip'
 import { APP_PATHS } from 'constants/index'
-import { useStakingInfo } from 'hooks/kyberdao'
-import useTotalVotingReward from 'hooks/kyberdao/useTotalVotingRewards'
+import { useGasRefundTier, useStakingInfo } from 'hooks/kyberdao'
 import useMixpanel, { MIXPANEL_TYPE } from 'hooks/useMixpanel'
 import useTheme from 'hooks/useTheme'
 import { ApplicationModal } from 'state/application/actions'
-import { useToggleModal } from 'state/application/hooks'
+import { useKNCPrice, useToggleModal } from 'state/application/hooks'
 import { ExternalLink } from 'theme'
 
 import KNCLogo from '../kncLogo'
@@ -76,18 +79,25 @@ const CardGroup = styled.div`
   width: 772px;
   order: 3;
 
-  ${({ theme }) => theme.mediaWidth.upToExtraSmall`
+  ${({ theme }) => theme.mediaWidth.upToSmall`
     width: 100vw;
     padding: 0 16px;
   `}
 `
-const Card = styled.div`
+const Card = styled.div<{ background?: string }>`
   display: flex;
   border: 1px solid ${({ theme }) => theme.border};
   border-radius: 20px;
   gap: 12px;
   width: 100%;
   padding: 24px 16px;
+  backdrop-filter: blur(25px);
+  ${({ background }) =>
+    background &&
+    css`
+      background: ${background};
+    `}
+  backdrop-filter: blur(25px);
 `
 const Image = styled.img`
   height: 44px;
@@ -113,15 +123,17 @@ export default function StakeKNC() {
   const theme = useTheme()
   const toggleMigrationModal = useToggleModal(ApplicationModal.MIGRATE_KNC)
   const { switchToEthereum } = useSwitchToEthereum()
-  const { kncPriceETH } = useTotalVotingReward()
   const { totalMigratedKNC } = useStakingInfo()
   const navigate = useNavigate()
   const { mixpanelHandler } = useMixpanel()
   const handleMigrateClick = () => {
-    switchToEthereum().then(() => {
+    switchToEthereum(t`Migrate`).then(() => {
       toggleMigrationModal()
     })
   }
+  const kncPrice = useKNCPrice()
+  const { userTier, gasRefundPercentage } = useGasRefundTier()
+
   return (
     <Wrapper>
       <Container>
@@ -132,7 +144,7 @@ export default function StakeKNC() {
             </Text>
             <RowFit gap="4px">
               <KNCLogo size={20} />
-              <Text fontSize={16}>KNC: ${kncPriceETH ? kncPriceETH.toPrecision(4) : '--'}</Text>
+              <Text fontSize={16}>KNC: ${kncPrice ? (+kncPrice).toPrecision(4) : '--'}</Text>
             </RowFit>
           </RowBetween>
           <Divider margin={isMobile ? '20px 0' : '28px 0'} />
@@ -145,7 +157,7 @@ export default function StakeKNC() {
           </Text>
           <RowBetween align={isMobile ? 'flex-start' : 'center'} flexDirection={isMobile ? 'column' : 'row'} gap="12px">
             <Text fontSize={16} lineHeight="24px" fontWeight={400} color={theme.warning}>
-              <Trans>Note: Staking KNC is only available on Ethereum chain</Trans>
+              <Trans>Note: Staking KNC is only available on Ethereum chain.</Trans>
             </Text>
             <NavLink to={APP_PATHS.ABOUT + '/knc'}>Read about KNC ↗</NavLink>
           </RowBetween>
@@ -220,6 +232,56 @@ export default function StakeKNC() {
             </ButtonLight>
           </Card>
           <Card>
+            <Image src={kncUtilityPNG} alt="KNC Utility" />
+            <CardInfo>
+              <Text fontSize={20} lineHeight="24px" fontWeight={500} color={theme.text}>
+                <Trans>KNC Utility</Trans>
+              </Text>
+              <Row gap="4px">
+                <Text fontSize={12} lineHeight="16px" fontWeight={500} textAlign="left" color={theme.subText}>
+                  <Trans>
+                    Discover more staking KNC utility and benefits{' '}
+                    <NavLink
+                      to={APP_PATHS.KYBERDAO_KNC_UTILITY}
+                      onClick={() => {
+                        mixpanelHandler(MIXPANEL_TYPE.GAS_REFUND_SOURCE_CLICK, { source: 'StakeKNC_page_KNC_utility' })
+                      }}
+                    >
+                      here ↗
+                    </NavLink>
+                    .
+                  </Trans>
+                </Text>
+              </Row>
+            </CardInfo>
+            <MouseoverTooltip
+              text={
+                <Trans>
+                  Tier {userTier} - You are eligible for{' '}
+                  <NavLink
+                    to={APP_PATHS.KYBERDAO_KNC_UTILITY}
+                    onClick={() => {
+                      mixpanelHandler(MIXPANEL_TYPE.GAS_REFUND_SOURCE_CLICK, {
+                        source: 'StakeKNC_page_KNC_utility_tier',
+                      })
+                    }}
+                  >
+                    {gasRefundPercentage ? gasRefundPercentage * 100 : '--'}% gas refund
+                  </NavLink>
+                  .
+                </Trans>
+              }
+            >
+              {userTier === 1 ? (
+                <img src={GasRefundTier1} alt="Tier 1" />
+              ) : userTier === 2 ? (
+                <img src={GasRefundTier2} alt="Tier 2" />
+              ) : userTier === 3 ? (
+                <img src={GasRefundTier3} alt="Tier 3" />
+              ) : null}
+            </MouseoverTooltip>
+          </Card>
+          <Card>
             <Image src={kyberdaoPNG} alt="KyberDAO v1" />
             <CardInfo>
               <Text fontSize={20} lineHeight="24px" fontWeight={500} color={theme.text}>
@@ -228,27 +290,14 @@ export default function StakeKNC() {
               <Text fontSize={12} lineHeight="16px" fontWeight={500} color={theme.subText}>
                 <Trans>
                   You can access legacy KyberDAO v1 to read about previous KIPs{' '}
-                  <a href="https://legacy.kyber.org/vote" target="_blank" rel="noreferrer">
+                  <ExternalLink href="https://legacy.kyber.org/vote" target="_blank" rel="noreferrer">
                     here ↗
-                  </a>
+                  </ExternalLink>
+                  .
                 </Trans>
               </Text>
             </CardInfo>
           </Card>
-          <Card>
-            <Image src={kncUtilityPNG} alt="KNC Utility" />
-            <CardInfo>
-              <Text fontSize={20} lineHeight="24px" fontWeight={500} color={theme.text}>
-                <Trans>KNC Utility</Trans>
-              </Text>
-              <Text fontSize={12} lineHeight="16px" fontWeight={500} color={theme.subText}>
-                <Trans>Coming soon</Trans>
-              </Text>
-            </CardInfo>
-          </Card>
-          <Text fontSize={12} lineHeight="14px" fontWeight={400} color={theme.subText} fontStyle="italic">
-            <Trans>Note: Staking KNC is only available on Ethereum chain</Trans>
-          </Text>
         </CardGroup>
         <StakeKNCComponent />
       </Container>

@@ -27,6 +27,7 @@ type CampaignUserInfo = {
   tradingNumber: number
   rankNo: number
   status: CampaignUserInfoStatus
+  rewards: CampaignLeaderboardReward[]
 }
 
 type RewardSingle = {
@@ -90,6 +91,16 @@ export interface CampaignLuckyWinner {
   token: SerializedToken
 }
 
+export enum ConditionGroupsType {
+  POINT_MULTIPLIER = 'POINT_MULTIPLIER',
+}
+export interface ConditionGroups {
+  conditions?: any[]
+  extra?: any
+  priority: number
+  type: ConditionGroupsType
+}
+
 export interface CampaignData {
   id: number
   name: string
@@ -112,9 +123,9 @@ export interface CampaignData {
   tradingVolumeRequired: number
   userInfo?: CampaignUserInfo
   tradingNumberRequired: number
-  leaderboard: CampaignLeaderboard | undefined
   competitionId?: number
   competitorId?: number
+  conditionGroups?: ConditionGroups[]
 }
 
 export interface CampaignProofData {
@@ -126,8 +137,15 @@ export interface CampaignProofData {
 }
 
 export const setCampaignData = createAction<{ campaigns: CampaignData[] }>('campaigns/setCampaignData')
+export const setCampaignDataByPage = createAction<{ campaigns: CampaignData[]; isReset: boolean }>(
+  'campaigns/setCampaignDataByPage',
+)
+
 export const setLoadingCampaignData = createAction<boolean>('campaigns/setLoadingCampaignData')
-export const setLoadingCampaignDataError = createAction<Error | undefined>('campaigns/setLoadingCampaignDataError')
+
+export const setLastTimeRefreshData = createAction('campaigns/setLastTimeRefreshData')
+
+export const setLoadingCampaignDataError = createAction<boolean>('campaigns/setLoadingCampaignDataError')
 
 export const setSelectedCampaign = createAction<{ campaign: CampaignData }>('campaigns/setSelectedCampaign')
 
@@ -145,19 +163,6 @@ export const setSelectedCampaignLeaderboardLookupAddress = createAction<string>(
 )
 
 export const setClaimingCampaignRewardId = createAction<number | null>('campaigns/setClaimingCampaignRewardId')
-
-export const setSelectedCampaignLuckyWinners = createAction<{ luckyWinners: CampaignLuckyWinner[] }>(
-  'campaigns/setSelectedCampaignLuckyWinners',
-)
-export const setLoadingSelectedCampaignLuckyWinners = createAction<boolean>(
-  'campaigns/setLoadingSelectedCampaignLuckyWinners',
-)
-export const setSelectedCampaignLuckyWinnersPageNumber = createAction<number>(
-  'campaigns/setSelectedCampaignLuckyWinnersPageNumber',
-)
-export const setSelectedCampaignLuckyWinnersLookupAddress = createAction<string>(
-  'campaigns/setSelectedCampaignLuckyWinnersLookupAddress',
-)
 
 export const setRecaptchaCampaignId = createAction<number | undefined>('campaigns/setRecaptchaCampaignId')
 export const setRecaptchaCampaignLoading = createAction<boolean>('campaigns/setRecaptchaCampaignLoading')

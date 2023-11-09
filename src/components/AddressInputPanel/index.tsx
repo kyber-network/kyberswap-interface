@@ -55,14 +55,17 @@ const Input = styled.input<{ error?: boolean }>`
   }
   padding: 0px;
   -webkit-appearance: textfield;
+  appearance: textfield;
 
   ::-webkit-search-decoration {
     -webkit-appearance: none;
+    appearance: none;
   }
 
   ::-webkit-outer-spin-button,
   ::-webkit-inner-spin-button {
     -webkit-appearance: none;
+    appearance: none;
   }
 `
 
@@ -73,6 +76,7 @@ const DropdownIcon = styled(DropdownSVG)<{ $rotated: boolean }>`
 `
 
 type Props = {
+  pattern?: string | null
   error?: boolean
   value: string | null
   placeholder?: string
@@ -80,12 +84,13 @@ type Props = {
   disabled?: boolean
   className?: string
   style?: CSSProperties
-} & Pick<DOMAttributes<HTMLInputElement>, 'onBlur' | 'onFocus' | 'onChange'>
+} & Pick<DOMAttributes<HTMLInputElement>, 'onBlur' | 'onFocus' | 'onChange' | 'onClick'>
 
-export const AddressInput = function AddressInput({
+const AddressInputComponent = function AddressInput({
   onChange,
   onFocus,
   onBlur,
+  onClick,
   value,
   error = false,
   placeholder,
@@ -93,9 +98,10 @@ export const AddressInput = function AddressInput({
   disabled = false,
   style = {},
   className,
+  pattern = '^(0x[a-fA-F0-9]{40})$',
 }: Props) {
   return (
-    <ContainerRow error={error} className={className}>
+    <ContainerRow error={error} className={className} onClick={onClick}>
       <InputContainer>
         <Row gap="5px">
           <Input
@@ -109,7 +115,7 @@ export const AddressInput = function AddressInput({
             spellCheck="false"
             placeholder={placeholder || t`Wallet Address or ENS name`}
             error={error}
-            pattern="^(0x[a-fA-F0-9]{40})$"
+            pattern={pattern || undefined}
             onBlur={onBlur}
             onFocus={onFocus}
             onChange={onChange}
@@ -121,6 +127,8 @@ export const AddressInput = function AddressInput({
     </ContainerRow>
   )
 }
+
+export const AddressInput = styled(AddressInputComponent)``
 
 export default function AddressInputPanel({
   id,
@@ -159,15 +167,19 @@ export default function AddressInputPanel({
           alignItems: 'center',
           marginTop: '4px',
           color: theme.subText,
+          padding: '0 8px',
         }}
       >
-        <Text fontSize="12px" fontWeight="500">
+        <Text fontSize="12px" fontWeight="400" color={theme.subText}>
           <Trans>Recipient (Optional)</Trans>
 
           {address && (
             <ExternalLink
               href={getEtherscanLink(chainId, name ?? address, 'address')}
               style={{ fontSize: '12px', marginLeft: '4px' }}
+              onClick={e => {
+                e.stopPropagation()
+              }}
             >
               ({networkInfo.etherscanName})
             </ExternalLink>

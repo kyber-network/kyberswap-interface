@@ -16,9 +16,11 @@ import { useVotingInfo } from 'hooks/kyberdao'
 import { ProposalDetail, ProposalStatus, ProposalType } from 'hooks/kyberdao/types'
 import useTheme from 'hooks/useTheme'
 import { useSwitchToEthereum } from 'pages/KyberDAO/StakeKNC/SwitchToEthereumModal'
+import TimerCountdown from 'pages/KyberDAO/TimerCountdown'
+import { HARDCODED_OPTION_TITLE } from 'pages/KyberDAO/constants'
 import { useWalletModalToggle } from 'state/application/hooks'
+import { escapeScriptHtml } from 'utils/string'
 
-import { readableTime } from '..'
 import VoteConfirmModal from '../VoteConfirmModal'
 import OptionButton from './OptionButton'
 import Participants from './Participants'
@@ -176,7 +178,7 @@ const VoteButton = ({
           </ButtonPrimary>
         ) : (
           <ButtonLight width={isMobile ? '100%' : '200px'} onClick={toggleWalletModal}>
-            <Trans>Connect Wallet</Trans>
+            <Trans>Connect</Trans>
           </ButtonLight>
         )
       ) : (
@@ -185,6 +187,8 @@ const VoteButton = ({
     </>
   )
 }
+
+const FORCED_TO_BINARY_OPTION_PROPOSALS = [14, 15, 17, 18, 19, 20]
 
 function ProposalItem({
   proposal,
@@ -242,7 +246,7 @@ function ProposalItem({
   }
   const { switchToEthereum } = useSwitchToEthereum()
   const handleVote = useCallback(() => {
-    switchToEthereum().then(() => {
+    switchToEthereum(t`This action`).then(() => {
       selectedOptions.length > 0 && setShowConfirmModal(true)
     })
   }, [switchToEthereum, setShowConfirmModal, selectedOptions])
@@ -253,9 +257,13 @@ function ProposalItem({
       voteCallback?.(
         proposal.proposal_id,
         selectedOptions.map(i => i + 1).reduce((acc, item) => (acc += 1 << (item - 1)), 0),
-      ).then(() => {
-        setSelectedOptions([])
-      })
+      )
+        .then(() => {
+          setSelectedOptions([])
+        })
+        .catch(error => {
+          setErrorMessage(error.message)
+        })
   }, [selectedOptions, proposal.proposal_id, voteCallback])
 
   const votedOfCurrentProposal = useMemo(
@@ -266,12 +274,15 @@ function ProposalItem({
   useEffect(() => {
     setSelectedOptions([])
   }, [votedOfCurrentProposal])
+
+  // Proposals is Generic but force to be Binary option
+  const isForcedBinaryOption = FORCED_TO_BINARY_OPTION_PROPOSALS.includes(proposal.proposal_id)
+
   const handleOptionClick = useCallback(
     (option: number) => {
-      if (proposal.proposal_type === ProposalType.BinaryProposal) {
+      if (proposal.proposal_type === ProposalType.BinaryProposal || isForcedBinaryOption) {
         setSelectedOptions([option])
-      }
-      if (proposal.proposal_type === ProposalType.GenericProposal) {
+      } else if (proposal.proposal_type === ProposalType.GenericProposal) {
         if (selectedOptions.length === 0) {
           setSelectedOptions([option])
         } else {
@@ -286,7 +297,7 @@ function ProposalItem({
         }
       }
     },
-    [proposal.proposal_type, setSelectedOptions, selectedOptions],
+    [proposal.proposal_type, setSelectedOptions, selectedOptions, isForcedBinaryOption],
   )
   const isActive = proposal.status === ProposalStatus.Active
 
@@ -317,14 +328,15 @@ function ProposalItem({
                   ? 'Active'
                   : 'Finished'
               }
-              isCheckBox={proposal.proposal_type === ProposalType.GenericProposal}
+              isCheckBox={proposal.proposal_type === ProposalType.GenericProposal && !isForcedBinaryOption}
+              proposalId={proposal.proposal_id}
               id={index}
             />
           )
         })}
       </OptionsWrapper>
     )
-  }, [proposal, selectedOptions, votedOfCurrentProposal?.options, handleOptionClick, isActive])
+  }, [proposal, selectedOptions, votedOfCurrentProposal?.options, handleOptionClick, isActive, isForcedBinaryOption])
 
   return (
     <ProposalItemWrapper>
@@ -353,9 +365,7 @@ function ProposalItem({
                 <Text color={theme.subText} fontSize={12}>
                   <Trans>Voting ends in: </Trans>
                 </Text>
-                <StatusBadged color={theme.primary}>
-                  {readableTime(proposal.end_timestamp - Date.now() / 1000)}
-                </StatusBadged>
+                <TimerCountdown endTime={proposal.end_timestamp} />
               </RowFit>
             )}
           </RowBetween>
@@ -376,9 +386,7 @@ function ProposalItem({
               <Text color={theme.subText} fontSize={12}>
                 <Trans>Voting starts in: </Trans>
               </Text>
-              <StatusBadged color={theme.primary}>
-                {readableTime(proposal.start_timestamp - Date.now() / 1000)}
-              </StatusBadged>
+              <TimerCountdown endTime={proposal.start_timestamp} />
             </RowFit>
           ) : (
             <Text color={theme.subText} fontSize={12}>
@@ -398,9 +406,7 @@ function ProposalItem({
                   <Text color={theme.subText} fontSize={12}>
                     <Trans>Voting ends in: </Trans>
                   </Text>
-                  <StatusBadged color={theme.primary}>
-                    {readableTime(proposal.end_timestamp - Date.now() / 1000)}
-                  </StatusBadged>
+                  <TimerCountdown endTime={proposal.end_timestamp} />
                 </Row>
               )}
             </Column>
@@ -431,7 +437,9 @@ function ProposalItem({
                 lineHeight={isMobile ? '18px' : '22px'}
                 color={theme.subText}
                 marginBottom="20px"
-                dangerouslySetInnerHTML={{ __html: proposal.desc.replaceAll('\\n', '').replaceAll('\\r', '') }}
+                dangerouslySetInnerHTML={{
+                  __html: escapeScriptHtml(proposal.desc.replaceAll('\\n', '').replaceAll('\\r', '')),
+                }}
                 style={{ wordBreak: 'break-word' }}
               ></Text>
               {isMobile && <VoteInformation proposal={proposal} />}
@@ -450,7 +458,13 @@ function ProposalItem({
           isShow={showConfirmModal}
           title={proposal.title}
           toggle={() => setShowConfirmModal(false)}
-          options={selectedOptions.length > 0 ? selectedOptions.map(option => proposal.options[option]).join(', ') : ''}
+          options={
+            selectedOptions.length > 0
+              ? selectedOptions
+                  .map(option => HARDCODED_OPTION_TITLE[proposal.proposal_id]?.[option] || proposal.options[option])
+                  .join(', ')
+              : ''
+          }
           onVoteConfirm={handleVoteConfirm}
         />
       )}

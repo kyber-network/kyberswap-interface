@@ -18,10 +18,13 @@ export const TableRow = styled.div`
     border-bottom-right-radius: 20px;
     border-bottom-left-radius: 20px;
   }
+  ${({ theme }) => theme.mediaWidth.upToLarge`
+    grid-template-columns: 3fr 120px 1fr 1fr 1fr 1fr 1fr;
+  `};
 `
 
 export const DataText = styled(Flex)`
-  color: ${({ theme }) => theme.text7};
+  color: ${({ theme }) => theme.text5};
   flex-direction: column;
 `
 
@@ -91,7 +94,7 @@ export const TokenRatioPercent = styled.div`
 
 export const TabContainer = styled.div`
   width: 100%;
-  background: ${({ theme }) => theme.tabBackgound};
+  background: ${({ theme }) => theme.tabBackground};
   border-radius: 20px;
   display: flex;
   padding: 2px;

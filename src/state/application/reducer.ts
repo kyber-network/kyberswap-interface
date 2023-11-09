@@ -1,6 +1,6 @@
 import { ChainId } from '@kyberswap/ks-sdk-core'
 import { createReducer, nanoid } from '@reduxjs/toolkit'
-import ksSettingApi from 'services/ksSetting'
+import ksSettingApi, { KyberSwapConfigResponse } from 'services/ksSetting'
 
 import { AnnouncementTemplatePopup, PopupItemType } from 'components/Announcement/type'
 import { NETWORKS_INFO, isEVM } from 'constants/networks'
@@ -13,15 +13,23 @@ import {
   closeModal,
   removePopup,
   setAnnouncementDetail,
+  setConfirmData,
   setLoadingNotification,
   setOpenModal,
   setSubscribedNotificationTopic,
   updateBlockNumber,
   updateETHPrice,
-  updateKNCPrice,
   updatePrommETHPrice,
   updateServiceWorker,
 } from './actions'
+import { ModalParams } from './types'
+
+export type PopupItemType2<T extends PopupContent> = {
+  key: string
+  content: T
+  removeAfterMs: number | null
+  popupType: PopupType
+}
 
 type ETHPrice = {
   currentPrice?: string
@@ -29,21 +37,28 @@ type ETHPrice = {
   pricePercentChange?: number
 }
 
+export type ConfirmModalState = {
+  isOpen: boolean
+  cancelText?: string
+  confirmText: string
+  title?: string
+  content: string | React.ReactNode
+  onConfirm?: () => void
+  onCancel?: () => void
+}
+
 interface ApplicationState {
   readonly blockNumber: { readonly [chainId: number]: number }
   readonly popupList: PopupItemType[]
   readonly openModal: ApplicationModal | null
+  readonly openModalParams: { [key in ApplicationModal]?: ModalParams[key] }
   readonly ethPrice: ETHPrice
   readonly prommEthPrice: ETHPrice
-  readonly kncPrice?: string
   readonly serviceWorkerRegistration: ServiceWorkerRegistration | null
+
   readonly notification: {
     isLoading: boolean
     topicGroups: Topic[]
-    userInfo: {
-      email: string
-      telegram: string
-    }
     announcementDetail: {
       selectedIndex: number | null // current announcement
       announcements: AnnouncementTemplatePopup[]
@@ -51,35 +66,41 @@ interface ApplicationState {
     }
   }
   readonly config: {
-    [chainId in ChainId]?: {
-      rpc: string
-      prochart: boolean
-      blockSubgraph: string
-      classicSubgraph: string
-      elasticSubgraph: string
-    }
+    [chainId in ChainId]?: KyberSwapConfigResponse
   }
+  readonly confirmModal: ConfirmModalState
 }
 const initialStateNotification = {
   isLoading: false,
   topicGroups: [],
-  userInfo: { email: '', telegram: '' },
   announcementDetail: {
     selectedIndex: null,
     announcements: [],
     hasMore: false,
   },
 }
+
+export const initialStateConfirmModal = {
+  isOpen: false,
+  cancelText: '',
+  confirmText: '',
+  content: '',
+  title: '',
+  onConfirm: undefined,
+  onCancel: undefined,
+}
+
 const initialState: ApplicationState = {
   blockNumber: {},
   popupList: [],
   openModal: null,
+  openModalParams: {},
   ethPrice: {},
   prommEthPrice: {},
-  kncPrice: '',
   serviceWorkerRegistration: null,
   notification: initialStateNotification,
   config: {},
+  confirmModal: initialStateConfirmModal,
 }
 
 export default createReducer(initialState, builder =>
@@ -93,14 +114,15 @@ export default createReducer(initialState, builder =>
       }
     })
     .addCase(setOpenModal, (state, action) => {
-      state.openModal = action.payload
+      state.openModal = action.payload.modal
+      if (action.payload.modal) state.openModalParams[action.payload.modal] = action.payload.params as any
     })
     .addCase(closeModal, (state, action) => {
       if (state.openModal === action.payload) {
         state.openModal = null
       }
     })
-    .addCase(addPopup, (state, { payload: { content, key, removeAfterMs = 15000, popupType } }) => {
+    .addCase(addPopup, (state, { payload: { content, key, removeAfterMs = 15000, popupType, account } }) => {
       const { popupList } = state
       state.popupList = (key ? popupList.filter(popup => popup.key !== key) : popupList).concat([
         {
@@ -108,6 +130,7 @@ export default createReducer(initialState, builder =>
           content,
           removeAfterMs,
           popupType,
+          account,
         },
       ])
     })
@@ -125,11 +148,12 @@ export default createReducer(initialState, builder =>
       state.ethPrice.oneDayBackPrice = oneDayBackPrice
       state.ethPrice.pricePercentChange = pricePercentChange
     })
-    .addCase(updateKNCPrice, (state, { payload: kncPrice }) => {
-      state.kncPrice = kncPrice
-    })
+
     .addCase(updateServiceWorker, (state, { payload }) => {
       state.serviceWorkerRegistration = payload
+    })
+    .addCase(setConfirmData, (state, { payload }) => {
+      state.confirmModal = payload
     })
 
     // ------ notification subscription ------
@@ -137,12 +161,11 @@ export default createReducer(initialState, builder =>
       const notification = state.notification ?? initialStateNotification
       state.notification = { ...notification, isLoading }
     })
-    .addCase(setSubscribedNotificationTopic, (state, { payload: { topicGroups, userInfo } }) => {
+    .addCase(setSubscribedNotificationTopic, (state, { payload: { topicGroups } }) => {
       const notification = state.notification ?? initialStateNotification
       state.notification = {
         ...notification,
         topicGroups: topicGroups ?? notification.topicGroups,
-        userInfo: userInfo ?? notification.userInfo,
       }
     })
     .addCase(setAnnouncementDetail, (state, { payload }) => {
@@ -153,11 +176,14 @@ export default createReducer(initialState, builder =>
         announcementDetail,
       }
     })
+
     .addMatcher(ksSettingApi.endpoints.getKyberswapConfiguration.matchFulfilled, (state, action) => {
-      const { chainId } = action.meta.arg.originalArgs
+      const chainId = action.meta.arg.originalArgs
       const evm = isEVM(chainId)
       const data = action.payload.data.config
       const rpc = data?.rpc || NETWORKS_INFO[chainId].defaultRpcUrl
+      const isEnableBlockService = data?.isEnableBlockService ?? false
+      const isEnableKNProtocol = data?.isEnableKNProtocol ?? false
 
       const blockSubgraph = evm
         ? data?.blockSubgraph || NETWORKS_INFO[chainId].defaultBlockSubgraph
@@ -176,10 +202,12 @@ export default createReducer(initialState, builder =>
         ...state.config,
         [chainId]: {
           rpc,
-          prochart: data?.prochart || false,
+          isEnableBlockService,
+          isEnableKNProtocol,
           blockSubgraph,
           elasticSubgraph,
           classicSubgraph,
+          commonTokens: data.commonTokens,
         },
       }
     }),

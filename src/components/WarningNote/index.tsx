@@ -4,6 +4,7 @@ import { Box, Flex } from 'rebass'
 import styled, { useTheme } from 'styled-components'
 
 import { ReactComponent as DropdownSVG } from 'assets/svg/down.svg'
+import Row from 'components/Row'
 
 type SeverityLevel = 'warning' | 'serious'
 
@@ -12,6 +13,7 @@ const DropdownIcon = styled(DropdownSVG)`
   height: 24px;
   transition: transform 300ms;
   color: ${({ theme }) => theme.text};
+
   &[data-flip='true'] {
     transform: rotate(180deg);
   }
@@ -27,6 +29,7 @@ const Wrapper = styled.div<{ $level: SeverityLevel }>`
   font-size: 12px;
   line-height: 16px;
   padding: 12px 16px;
+  width: 100%;
 `
 
 type Props = {
@@ -78,7 +81,7 @@ const WarningNote: React.FC<Props> = ({ className, level = 'warning', shortText,
           </Flex>
         )}
       </Flex>
-      {expanded && longText}
+      {expanded && <Row padding="0 0 0 24px">{longText}</Row>}
     </Wrapper>
   )
 }

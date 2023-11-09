@@ -1,33 +1,31 @@
 import { Trans, t } from '@lingui/macro'
 import { rgba } from 'polished'
-import React from 'react'
-import { ArrowLeft } from 'react-feather'
+import React, { RefObject, useRef, useState } from 'react'
+import { ChevronLeft } from 'react-feather'
 import { Box, Flex, Text } from 'rebass'
 import styled from 'styled-components'
 
 import { AutoColumn } from 'components/Column'
-import QuestionHelper from 'components/QuestionHelper'
 import { RowBetween, RowFixed } from 'components/Row'
 import Toggle from 'components/Toggle'
-import useTopTrendingSoonTokensInCurrentNetwork from 'components/TopTrendingSoonTokensInCurrentNetwork/useTopTrendingSoonTokensInCurrentNetwork'
+import { MouseoverTooltip, TextDashed } from 'components/Tooltip'
 import { TutorialIds } from 'components/Tutorial/TutorialSwap/constant'
+import { APP_PATHS } from 'constants/index'
 import useMixpanel, { MIXPANEL_TYPE } from 'hooks/useMixpanel'
+import { useOnClickOutside } from 'hooks/useOnClickOutside'
 import useTheme from 'hooks/useTheme'
 import {
+  useShowKyberAIBanner,
   useShowLiveChart,
-  useShowTokenInfo,
-  useShowTopTrendingSoonTokens,
   useShowTradeRoutes,
+  useToggleKyberAIBanner,
   useToggleLiveChart,
-  useToggleTokenInfo,
-  useToggleTopTrendingTokens,
   useToggleTradeRoutes,
 } from 'state/user/hooks'
 
 import DegenModeSetting from './DegenModeSetting'
 import GasPriceTrackerSetting from './GasPriceTrackerSetting'
 import LiquiditySourcesSetting from './LiquiditySourcesSetting'
-import SettingLabel from './SettingLabel'
 import SlippageSetting from './SlippageSetting'
 import TransactionTimeLimitSetting from './TransactionTimeLimitSetting'
 
@@ -36,60 +34,45 @@ type Props = {
   onBack: () => void
   onClickGasPriceTracker: () => void
   onClickLiquiditySources: () => void
-  isLimitOrder: boolean
+  isLimitOrder?: boolean
+  isSwapPage?: boolean
+  isCrossChainPage?: boolean
+  swapActionsRef: RefObject<HTMLDivElement>
 }
-const BackIconWrapper = styled(ArrowLeft)`
-  height: 20px;
-  width: 20px;
-  margin-right: 10px;
-  cursor: pointer;
-  path {
-    stroke: ${({ theme }) => theme.text} !important;
-  }
-`
 
 const BackText = styled.span`
-  font-size: 18px;
+  font-size: 20px;
   font-weight: 500;
   color: ${({ theme }) => theme.text};
 `
 
 const SettingsPanel: React.FC<Props> = ({
   isLimitOrder,
+  isSwapPage,
+  isCrossChainPage,
   className,
   onBack,
   onClickLiquiditySources,
   onClickGasPriceTracker,
+  swapActionsRef,
 }) => {
   const theme = useTheme()
 
-  const { data: topTrendingSoonTokens } = useTopTrendingSoonTokensInCurrentNetwork()
-  const shouldShowTrendingSoonSetting = topTrendingSoonTokens.length > 0
-
   const { mixpanelHandler } = useMixpanel()
   const isShowTradeRoutes = useShowTradeRoutes()
-  const isShowTokenInfo = useShowTokenInfo()
-
   const isShowLiveChart = useShowLiveChart()
+  const isShowKyberAIBanner = useShowKyberAIBanner()
   const toggleLiveChart = useToggleLiveChart()
   const toggleTradeRoutes = useToggleTradeRoutes()
-  const toggleTokenInfo = useToggleTokenInfo()
-
-  const isShowTrendingSoonTokens = useShowTopTrendingSoonTokens()
-  const toggleTopTrendingTokens = useToggleTopTrendingTokens()
+  const toggleKyberAIBanner = useToggleKyberAIBanner()
 
   const handleToggleLiveChart = () => {
     mixpanelHandler(MIXPANEL_TYPE.LIVE_CHART_ON_OFF, { live_chart_on_or_off: !isShowLiveChart })
-    isLimitOrder
-      ? mixpanelHandler(MIXPANEL_TYPE.LO_DISPLAY_SETTING_CLICK, {
-          display_setting: isShowLiveChart ? 'Live Chart Off' : 'Live Chart On',
-        })
-      : mixpanelHandler(MIXPANEL_TYPE.SWAP_DISPLAY_SETTING_CLICK, {
-          display_setting: isShowLiveChart ? 'Live Chart Off' : 'Live Chart On',
-        })
+    mixpanelHandler(isLimitOrder ? MIXPANEL_TYPE.LO_DISPLAY_SETTING_CLICK : MIXPANEL_TYPE.SWAP_DISPLAY_SETTING_CLICK, {
+      display_setting: isShowLiveChart ? 'Live Chart Off' : 'Live Chart On',
+    })
     toggleLiveChart()
   }
-
   const handleToggleTradeRoute = () => {
     mixpanelHandler(MIXPANEL_TYPE.TRADING_ROUTE_ON_OFF, {
       trading_route_on_or_off: !isShowTradeRoutes,
@@ -100,17 +83,18 @@ const SettingsPanel: React.FC<Props> = ({
     toggleTradeRoutes()
   }
 
+  const [showConfirmation, setShowConfirmation] = useState(false)
+
+  const containerRef = useRef<HTMLDivElement>(null)
+  useOnClickOutside([containerRef, swapActionsRef], () => !showConfirmation && onBack())
+
+  const isPartnerSwap = window.location.pathname.includes(APP_PATHS.PARTNER_SWAP)
+
   return (
-    <Box width="100%" className={className} id={TutorialIds.TRADING_SETTING_CONTENT}>
+    <Box width="100%" className={className} id={TutorialIds.TRADING_SETTING_CONTENT} ref={containerRef}>
       <Flex width={'100%'} flexDirection={'column'} marginBottom="4px">
-        <Flex
-          alignItems="center"
-          sx={{
-            // this is to make the arrow stay exactly where it stays in Info panel
-            marginTop: '5px',
-          }}
-        >
-          <BackIconWrapper onClick={onBack}></BackIconWrapper>
+        <Flex alignItems="center" sx={{ gap: '4px' }}>
+          <ChevronLeft onClick={onBack} color={theme.subText} cursor={'pointer'} size={26} />
           <BackText>{t`Settings`}</BackText>
         </Flex>
 
@@ -122,17 +106,21 @@ const SettingsPanel: React.FC<Props> = ({
             width: '100%',
           }}
         >
-          {!isLimitOrder && (
+          {(isSwapPage || isCrossChainPage) && (
             <>
               <span className="settingTitle">
                 <Trans>Advanced Settings</Trans>
               </span>
 
-              <SlippageSetting />
-              <TransactionTimeLimitSetting />
-              <DegenModeSetting />
-              <GasPriceTrackerSetting onClick={onClickGasPriceTracker} />
-              <LiquiditySourcesSetting onClick={onClickLiquiditySources} />
+              <SlippageSetting isCrossChain={isCrossChainPage} />
+              {isSwapPage && <TransactionTimeLimitSetting />}
+              <DegenModeSetting showConfirmation={showConfirmation} setShowConfirmation={setShowConfirmation} />
+              {isSwapPage && (
+                <>
+                  <GasPriceTrackerSetting onClick={onClickGasPriceTracker} />
+                  <LiquiditySourcesSetting onClick={onClickLiquiditySources} />
+                </>
+              )}
             </>
           )}
           <Flex
@@ -153,65 +141,41 @@ const SettingsPanel: React.FC<Props> = ({
               <Trans>Display Settings</Trans>
             </Text>
             <AutoColumn gap="md">
-              {shouldShowTrendingSoonSetting && (
+              {!isPartnerSwap && (
                 <RowBetween>
                   <RowFixed>
-                    <SettingLabel>
-                      <Trans>Trending Soon</Trans>
-                    </SettingLabel>
-                    <QuestionHelper text={t`Turn on to display tokens that could be trending soon`} />
+                    <TextDashed fontSize={12} fontWeight={400} color={theme.subText} underlineColor={theme.border}>
+                      <MouseoverTooltip text={<Trans>Turn on to display KyberAI banner.</Trans>} placement="right">
+                        <Trans>KyberAI Banner</Trans>
+                      </MouseoverTooltip>
+                    </TextDashed>
                   </RowFixed>
-                  <Toggle
-                    isActive={isShowTrendingSoonTokens}
-                    toggle={() => {
-                      toggleTopTrendingTokens()
-                      isLimitOrder
-                        ? mixpanelHandler(MIXPANEL_TYPE.LO_DISPLAY_SETTING_CLICK, {
-                            display_setting: isShowTrendingSoonTokens ? 'Trending Soon Off' : 'Trending Soon On',
-                          })
-                        : mixpanelHandler(MIXPANEL_TYPE.SWAP_DISPLAY_SETTING_CLICK, {
-                            display_setting: isShowTrendingSoonTokens ? 'Trending Soon Off' : 'Trending Soon On',
-                          })
-                    }}
-                  />
+                  <Toggle isActive={isShowKyberAIBanner} toggle={toggleKyberAIBanner} />
                 </RowBetween>
               )}
-              <RowBetween>
-                <RowFixed>
-                  <SettingLabel>
-                    <Trans>Live Chart</Trans>
-                  </SettingLabel>
-                  <QuestionHelper text={t`Turn on to display live chart`} />
-                </RowFixed>
-                <Toggle isActive={isShowLiveChart} toggle={handleToggleLiveChart} />
-              </RowBetween>
-              {!isLimitOrder && (
+              {!isPartnerSwap && (
+                <RowBetween>
+                  <RowFixed>
+                    <TextDashed fontSize={12} fontWeight={400} color={theme.subText} underlineColor={theme.border}>
+                      <MouseoverTooltip text={<Trans>Turn on to display live chart.</Trans>} placement="right">
+                        <Trans>Live Chart</Trans>
+                      </MouseoverTooltip>
+                    </TextDashed>
+                  </RowFixed>
+                  <Toggle isActive={isShowLiveChart} toggle={handleToggleLiveChart} />
+                </RowBetween>
+              )}
+              {(isSwapPage || isCrossChainPage) && (
                 <>
                   <RowBetween>
                     <RowFixed>
-                      <SettingLabel>
-                        <Trans>Trade Route</Trans>
-                      </SettingLabel>
-                      <QuestionHelper text={t`Turn on to display trade route`} />
+                      <TextDashed fontSize={12} fontWeight={400} color={theme.subText} underlineColor={theme.border}>
+                        <MouseoverTooltip text={<Trans>Turn on to display trade route.</Trans>} placement="right">
+                          <Trans>Trade Route</Trans>
+                        </MouseoverTooltip>
+                      </TextDashed>
                     </RowFixed>
                     <Toggle isActive={isShowTradeRoutes} toggle={handleToggleTradeRoute} />
-                  </RowBetween>
-                  <RowBetween>
-                    <RowFixed>
-                      <SettingLabel>
-                        <Trans>Token Info</Trans>
-                      </SettingLabel>
-                      <QuestionHelper text={t`Turn on to display token info`} />
-                    </RowFixed>
-                    <Toggle
-                      isActive={isShowTokenInfo}
-                      toggle={() => {
-                        mixpanelHandler(MIXPANEL_TYPE.SWAP_DISPLAY_SETTING_CLICK, {
-                          display_setting: isShowTokenInfo ? 'Token Info Off' : 'Token Info On',
-                        })
-                        toggleTokenInfo()
-                      }}
-                    />
                   </RowBetween>
                 </>
               )}

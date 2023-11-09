@@ -1,9 +1,9 @@
-import { Currency } from '@kyberswap/ks-sdk-core'
+import { ChainId, Currency } from '@kyberswap/ks-sdk-core'
 import { Trans } from '@lingui/macro'
 import { darken, lighten, rgba } from 'polished'
 import { ReactNode, useCallback, useEffect, useRef, useState } from 'react'
 import { Box, Flex, Text } from 'rebass'
-import styled, { css } from 'styled-components'
+import styled, { CSSProperties, css } from 'styled-components'
 
 import { ReactComponent as DropdownSVG } from 'assets/svg/down.svg'
 import { ReactComponent as Lock } from 'assets/svg/ic_lock.svg'
@@ -45,14 +45,13 @@ export const CurrencySelect = styled.button<{
   font-size: 20px;
   font-weight: 500;
   background-color: ${({ theme, hideInput }) => (hideInput ? theme.buttonBlack : theme.background)};
-  border: 1px solid ${({ theme, selected }) => (selected ? 'transparent' : theme.primary)} !important;
+  border: 1px solid ${({ theme, selected }) => (selected ? 'transparent' : theme.primary)};
   color: ${({ selected, theme }) => (selected ? theme.subText : theme.primary)};
   border-radius: 999px;
   box-shadow: ${({ selected }) => (selected ? 'none' : '0px 6px 10px rgba(0, 0, 0, 0.075)')};
   outline: none;
   cursor: pointer;
   user-select: none;
-  border: none;
   padding: 6px 8px;
   padding-right: ${({ hideInput, tight }) => (hideInput && !tight ? '8px' : 0)};
   cursor: ${({ isDisable: disabled }) => (disabled ? 'default' : 'pointer')};
@@ -98,14 +97,15 @@ export const Container = styled.div<{ selected: boolean; hideInput: boolean; err
   border-radius: 16px;
   background-color: ${({ theme, hideInput }) => (hideInput ? 'transparent' : theme.buttonBlack)};
   padding: ${({ hideInput }) => (hideInput ? 0 : '0.75rem')};
+  border: 1px solid transparent;
   ${({ error, theme, $outline }) =>
     error
       ? css`
-          border: 1px solid ${theme.red};
+          border-color: ${theme.red};
         `
       : $outline
       ? css`
-          border: 1px solid ${theme.border};
+          border-color: ${theme.border};
         `
       : ''}
 `
@@ -186,6 +186,7 @@ interface CurrencyInputPanelProps {
   disabledInput?: boolean
   otherCurrency?: Currency | null
   id: string
+  dataTestId?: string
   showCommonBases?: boolean
   customBalanceText?: string
   hideLogo?: boolean
@@ -202,6 +203,8 @@ interface CurrencyInputPanelProps {
   loadingText?: string
   lockIcon?: boolean
   tight?: boolean
+  styleSelect?: CSSProperties
+  customChainId?: ChainId
 }
 
 export default function CurrencyInputPanel({
@@ -224,6 +227,7 @@ export default function CurrencyInputPanel({
   disabledInput = false,
   otherCurrency,
   id,
+  dataTestId,
   showCommonBases,
   customBalanceText,
   hideLogo = false,
@@ -239,6 +243,8 @@ export default function CurrencyInputPanel({
   lockIcon = false, // lock when need approve
   tight: tightProp,
   loadingText,
+  styleSelect = {},
+  customChainId,
 }: CurrencyInputPanelProps) {
   const tight = Boolean(tightProp && !currency)
   const [modalOpen, setModalOpen] = useState(false)
@@ -276,7 +282,7 @@ export default function CurrencyInputPanel({
           </Flex>
         </StyledCard>
       )}
-      <InputPanel id={id} hideInput={hideInput}>
+      <InputPanel id={id} hideInput={hideInput} data-testid={dataTestId}>
         {locked && PoolLockContent}
         <Container hideInput={hideInput} selected={disableCurrencySelect} error={error} $outline={outline}>
           {!hideBalance && (
@@ -301,7 +307,7 @@ export default function CurrencyInputPanel({
               )}
               <Flex onClick={onMax ?? undefined} style={{ cursor: onMax ? 'pointer' : undefined }} alignItems="center">
                 <Wallet color={theme.subText} />
-                <Text fontWeight={500} color={theme.subText} marginLeft="4px">
+                <Text fontWeight={500} color={theme.subText} marginLeft="4px" data-testid="balance">
                   {customBalanceText || selectedCurrencyBalance?.toSignificant(10) || balanceRef.current || 0}
                 </Text>
               </Flex>
@@ -313,6 +319,7 @@ export default function CurrencyInputPanel({
                 <NumericalInput
                   error={error}
                   className="token-amount-input"
+                  data-testid="token-amount-input"
                   value={value}
                   disabled={disabledInput}
                   maxLength={maxLength}
@@ -352,6 +359,7 @@ export default function CurrencyInputPanel({
                   onClickSelect?.()
                 }}
                 tight={tight}
+                style={styleSelect}
               >
                 <Aligner>
                   <RowFixed>
@@ -359,6 +367,7 @@ export default function CurrencyInputPanel({
                     <StyledTokenName
                       tight={tight}
                       className="token-symbol-container"
+                      data-testid="token-symbol-container"
                       active={Boolean(currency && currency.symbol)}
                       fontSize={tight ? '14px' : fontSize}
                       style={{ paddingRight: disableCurrencySelect ? '8px' : 0 }}
@@ -387,6 +396,7 @@ export default function CurrencyInputPanel({
             otherSelectedCurrency={otherCurrency}
             showCommonBases={showCommonBases}
             filterWrap={filterWrap}
+            customChainId={customChainId}
           />
         )}
       </InputPanel>
