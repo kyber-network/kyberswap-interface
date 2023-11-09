@@ -143,7 +143,7 @@ export function useDerivedMintInfo(
     const { [Field.CURRENCY_A]: currencyAAmount, [Field.CURRENCY_B]: currencyBAmount } = parsedAmounts
     const [tokenAmountA, tokenAmountB] = [currencyAAmount?.wrapped, currencyBAmount?.wrapped]
 
-    if (pair && totalSupply && tokenAmountA && tokenAmountB) {
+    if (pair && totalSupply && tokenAmountA && tokenAmountB && !tokenAmountA.equalTo(0) && !tokenAmountB.equalTo(0)) {
       try {
         return pair.getLiquidityMinted(totalSupply, tokenAmountA, tokenAmountB)
       } catch (e) {
@@ -320,6 +320,7 @@ export function useDerivedZapInInfo(
   const independentAmount: CurrencyAmount<Currency> | undefined = tryParseAmount(
     zapInAmounts.amounts.tokenInAmount.toString(),
     currencies[independentField]?.wrapped,
+    false,
   )
 
   const dependentAmount: CurrencyAmount<Currency> | undefined = useMemo(() => {
@@ -332,6 +333,7 @@ export function useDerivedZapInInfo(
         const dependentTokenAmount = tryParseAmount(
           zapInAmounts.amounts.tokenOutAmount.toString(),
           currencies[dependentField]?.wrapped,
+          false,
         )
 
         return dependentTokenAmount
@@ -360,7 +362,7 @@ export function useDerivedZapInInfo(
     const { [Field.CURRENCY_A]: currencyAAmount, [Field.CURRENCY_B]: currencyBAmount } = parsedAmounts
     const [tokenAmountA, tokenAmountB] = [currencyAAmount?.wrapped, currencyBAmount?.wrapped]
 
-    if (pair && totalSupply && tokenAmountA && tokenAmountB) {
+    if (pair && totalSupply && tokenAmountA && tokenAmountB && !tokenAmountA.equalTo(0) && !tokenAmountB.equalTo(0)) {
       try {
         return pair.getLiquidityMinted(totalSupply, tokenAmountA, tokenAmountB)
       } catch (e) {

@@ -742,6 +742,7 @@ const LimitOrderForm = forwardRef<LimitOrderFormHandle, Props>(function LimitOrd
           <InputWrapper>
             <Flex justifyContent={'space-between'} alignItems="center">
               <DeltaRate
+                invert={rateInfo.invert}
                 symbol={(rateInfo.invert ? currencyOut?.symbol : currencyIn?.symbol) ?? ''}
                 marketPrice={tradeInfo}
                 rateInfo={rateInfo}
@@ -764,7 +765,7 @@ const LimitOrderForm = forwardRef<LimitOrderFormHandle, Props>(function LimitOrd
               {currencyIn && currencyOut && (
                 <Flex style={{ gap: 6, cursor: 'pointer' }} onClick={() => onInvertRate(!rateInfo.invert)}>
                   <CurrencyLogo size={'18px'} currency={rateInfo.invert ? currencyIn : currencyOut} />
-                  <Text fontSize={14} color={theme.subText}>
+                  <Text fontSize={14} color={theme.subText} sx={{ userSelect: 'none' }}>
                     {rateInfo.invert ? currencyIn?.symbol : currencyOut?.symbol}
                   </Text>
                   <div>
@@ -823,6 +824,36 @@ const LimitOrderForm = forwardRef<LimitOrderFormHandle, Props>(function LimitOrd
             style={{ width: 25, height: 25, padding: 4, background: theme.buttonGray }}
           />
         </RowBetween>
+
+        <Tooltip text={outPutError} show={!!outPutError} placement="top" style={styleTooltip} width="fit-content">
+          <CurrencyInputPanel
+            maxLength={16}
+            value={outputAmount}
+            error={!!outPutError}
+            currency={currencyOut}
+            onUserInput={onSetOutput}
+            otherCurrency={currencyIn}
+            onMax={null}
+            onHalf={null}
+            estimatedUsd={estimateUSD.output}
+            onFocus={trackingTouchInput}
+            id="create-limit-order-input-tokenb"
+            onCurrencySelect={handleOutputSelect}
+            positionMax="top"
+            showCommonBases
+            maxCurrencySymbolLength={6}
+            filterWrap
+            onClickSelect={trackingTouchSelectToken}
+            disableCurrencySelect={isEdit}
+            label={
+              <Label>
+                <Trans>You Buy</Trans>
+              </Label>
+            }
+            positionLabel="in"
+          />
+        </Tooltip>
+
 
         {warningMessage.map((mess, i) => (
           <ErrorWarningPanel type="warn" key={i} title={mess} />

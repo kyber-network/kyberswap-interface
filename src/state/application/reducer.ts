@@ -22,6 +22,14 @@ import {
   updatePrommETHPrice,
   updateServiceWorker,
 } from './actions'
+import { ModalParams } from './types'
+
+export type PopupItemType2<T extends PopupContent> = {
+  key: string
+  content: T
+  removeAfterMs: number | null
+  popupType: PopupType
+}
 
 type ETHPrice = {
   currentPrice?: string
@@ -43,6 +51,7 @@ interface ApplicationState {
   readonly blockNumber: { readonly [chainId: number]: number }
   readonly popupList: PopupItemType[]
   readonly openModal: ApplicationModal | null
+  readonly openModalParams: { [key in ApplicationModal]?: ModalParams[key] }
   readonly ethPrice: ETHPrice
   readonly prommEthPrice: ETHPrice
   readonly serviceWorkerRegistration: ServiceWorkerRegistration | null
@@ -85,6 +94,7 @@ const initialState: ApplicationState = {
   blockNumber: {},
   popupList: [],
   openModal: null,
+  openModalParams: {},
   ethPrice: {},
   prommEthPrice: {},
   serviceWorkerRegistration: null,
@@ -104,7 +114,8 @@ export default createReducer(initialState, builder =>
       }
     })
     .addCase(setOpenModal, (state, action) => {
-      state.openModal = action.payload
+      state.openModal = action.payload.modal
+      if (action.payload.modal) state.openModalParams[action.payload.modal] = action.payload.params as any
     })
     .addCase(closeModal, (state, action) => {
       if (state.openModal === action.payload) {
@@ -172,7 +183,7 @@ export default createReducer(initialState, builder =>
       const data = action.payload.data.config
       const rpc = data?.rpc || NETWORKS_INFO[chainId].defaultRpcUrl
       const isEnableBlockService = data?.isEnableBlockService ?? false
-      const isEnableKNProtocol = data?.isEnableKNProtocol ?? false
+      const isEnableKNProtocol = false // data?.isEnableKNProtocol ?? false
 
       const blockSubgraph = evm
         ? data?.blockSubgraph || NETWORKS_INFO[chainId].defaultBlockSubgraph

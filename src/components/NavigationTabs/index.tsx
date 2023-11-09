@@ -14,6 +14,7 @@ import { ShareButtonWithModal } from 'components/ShareModal'
 import TransactionSettings from 'components/TransactionSettings'
 import Tutorial, { TutorialType } from 'components/Tutorial'
 import { useActiveWeb3React } from 'hooks'
+import useGetBackUrl from 'hooks/useGetBackUrl'
 import useTheme from 'hooks/useTheme'
 import { shortenAddress } from 'utils'
 
@@ -147,15 +148,31 @@ export function AddRemoveTabs({
   const navigate = useNavigate()
   const location = useLocation()
   const below768 = useMedia('(max-width: 768px)')
+  const getBackUrl = useGetBackUrl()
   const goBack = () => {
     // https://github.com/remix-run/react-router/discussions/9922
     if (location.key === 'default') navigate('/')
     else navigate(-1)
   }
 
+  const handleClickBack = () => {
+    const backUrl = getBackUrl()
+    if (backUrl) {
+      navigate(backUrl.pathname + backUrl.search)
+      return
+    }
+
+    if (onBack) {
+      onBack()
+      return
+    }
+
+    goBack()
+  }
+
   const theme = useTheme()
   const arrow = (
-    <ButtonBack width="fit-content" padding="0" onClick={!!onBack ? onBack : goBack}>
+    <ButtonBack width="fit-content" padding="0" onClick={handleClickBack}>
       {alignTitle === 'left' ? <ChevronLeft color={theme.subText} /> : <StyledArrowLeft />}
     </ButtonBack>
   )

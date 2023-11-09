@@ -106,6 +106,8 @@ const queryFarms = gql`
 export default function ElasticFarmV2Updater({ interval = true }: { interval?: boolean }) {
   const dispatch = useAppDispatch()
   const { networkInfo, isEVM, chainId, account } = useActiveWeb3React()
+sticFarm = useAppSelector(state => state.elasticFarmV2[chainId] || defaultChainData)
+
   const { elasticClient, isEnableKNProtocol } = useKyberSwapConfig()
 
   const multicallContract = useMulticallContract()

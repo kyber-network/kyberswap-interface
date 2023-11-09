@@ -2,8 +2,14 @@ import { Currency, CurrencyAmount, Price, Token } from '@kyberswap/ks-sdk-core'
 import { Position } from '@kyberswap/ks-sdk-elastic'
 import { Trans, t } from '@lingui/macro'
 import { BigNumber } from 'ethers'
+
+import html2canvas from 'html2canvas'
+import { stringify } from 'qs'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
+
+import mixpanel from 'mixpanel-browser'
 import { stringify } from 'querystring'
-import React, { useEffect, useMemo, useState } from 'react'
+
 import { Link } from 'react-router-dom'
 import { Flex, Text } from 'rebass'
 import styled from 'styled-components'
@@ -11,6 +17,7 @@ import styled from 'styled-components'
 import { ButtonEmpty, ButtonOutlined, ButtonPrimary } from 'components/Button'
 import { LightCard } from 'components/Card'
 import Divider from 'components/Divider'
+import QuickZap, { QuickZapButton } from 'components/ElasticZap/QuickZap'
 import ProAmmFee from 'components/ProAmm/ProAmmFee'
 import ProAmmPoolInfo from 'components/ProAmm/ProAmmPoolInfo'
 import ProAmmPooledTokens from 'components/ProAmm/ProAmmPooledTokens'
@@ -160,7 +167,11 @@ function PositionListItem({
   } = positionDetails
 
   const { farms } = useElasticFarms()
+
+  const cardRef = useRef<HTMLDivElement>()
+
   const { farms: farmV2s, userInfo } = useElasticFarmsV2()
+
 
   let farmAddress = ''
   let pid = ''
@@ -303,16 +314,26 @@ function PositionListItem({
     return ''
   })()
 
+
+  const [showQuickZap, setShowQuickZap] = useState(false)
+
   if (!position || !priceLower || !priceUpper) return <ContentLoader />
 
   return (
     <StyledPositionCard>
+      <QuickZap
+        poolAddress={positionDetails.poolId}
+        tokenId={positionDetails.tokenId.toString()}
+        isOpen={showQuickZap}
+        onDismiss={() => setShowQuickZap(false)}
+      />
       <>
         <ProAmmPoolInfo
           position={position}
           tokenId={positionDetails.tokenId.toString()}
           isFarmActive={hasActiveFarm}
           isFarmV2Active={hasActiveFarmV2}
+
         />
         <TabContainer style={{ marginTop: '1rem' }}>
           <Tab isActive={activeTab === TAB.MY_LIQUIDITY} padding="0" onClick={() => setActiveTab(TAB.MY_LIQUIDITY)}>
@@ -473,6 +494,17 @@ function PositionListItem({
                   <Trans>Increase Liquidity</Trans>
                 </Text>
               </ButtonPrimary>
+
+              <QuickZapButton
+                onClick={() => {
+                  setShowQuickZap(true)
+                  mixpanel.track('Zap - Click Quick Zap', {
+                    token0: token0?.symbol || '',
+                    token1: token1?.symbol || '',
+                    source: 'my_pool_page',
+                  })
+                }}
+              />
             </ButtonGroup>
           )}
           <Divider sx={{ marginBottom: '20px' }} />

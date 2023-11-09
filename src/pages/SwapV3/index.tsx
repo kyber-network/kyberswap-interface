@@ -27,7 +27,9 @@ import {
   PageWrapper,
   RoutesWrapper,
   SwapFormWrapper,
+
   highlight,
+
 } from 'components/swapv2/styleds'
 import { APP_PATHS, TYPE_AND_SWAP_NOT_SUPPORTED_CHAINS } from 'constants/index'
 import { useActiveWeb3React } from 'hooks'
@@ -35,6 +37,11 @@ import { useAllTokens, useIsLoadedTokenDefault } from 'hooks/Tokens'
 import useParsedQueryString from 'hooks/useParsedQueryString'
 import useTheme from 'hooks/useTheme'
 import { BodyWrapper } from 'pages/AppBody'
+
+import Tabs from 'pages/SwapV3/Tabs'
+import { TAB } from 'pages/SwapV3/consts'
+import { useLimitActionHandlers, useLimitState } from 'state/limit/hooks'
+
 import CrossChain from 'pages/CrossChain'
 import CrossChainLink from 'pages/CrossChain/CrossChainLink'
 import CrossChainTransfersHistory from 'pages/CrossChain/TransfersHistory'
@@ -42,6 +49,7 @@ import Header from 'pages/SwapV3/Header'
 import useCurrenciesByPage from 'pages/SwapV3/useCurrenciesByPage'
 import useTokenNotInDefault from 'pages/SwapV3/useTokenNotInDefault'
 import { useLimitActionHandlers } from 'state/limit/hooks'
+
 import { Field } from 'state/swap/actions'
 import { useDefaultsFromURLSearch, useSwapActionHandlers } from 'state/swap/hooks'
 import { useTutorialSwapGuide } from 'state/tutorial/hooks'
@@ -55,6 +63,21 @@ import PopulatedSwapForm from './PopulatedSwapForm'
 const TradeRouting = lazy(() => import('components/TradeRouting'))
 
 const LiveChart = lazy(() => import('components/LiveChart'))
+
+
+const TutorialIcon = styled(TutorialSvg)`
+  width: 22px;
+  height: 22px;
+  path {
+    fill: ${({ theme }) => theme.subText};
+    stroke: ${({ theme }) => theme.subText};
+  }
+`
+
+const highlight = (theme: DefaultTheme) => keyframes`
+  0% {
+    box-shadow: 0 0 0 0 ${theme.primary};
+  }
 
 const KyberAITokenBanner = lazy(() => import('components/KyberAITokenBanner'))
 
@@ -74,6 +97,7 @@ export enum TAB {
 
 export const isSettingTab = (tab: TAB) =>
   [TAB.INFO, TAB.SETTINGS, TAB.GAS_PRICE_TRACKER, TAB.LIQUIDITY_SOURCES].includes(tab)
+
 
 export const AppBodyWrapped = styled(BodyWrapper)`
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04);
@@ -102,7 +126,11 @@ export const RoutingIconWrapper = styled(RoutingIcon)`
 `
 
 export default function Swap() {
-  const { chainId } = useActiveWeb3React()
+
+  const { chainId, networkInfo, isSolana } = useActiveWeb3React()
+
+
+
   const isShowLiveChart = useShowLiveChart()
   const isShowTradeRoutes = useShowTradeRoutes()
   const isShowKyberAIBanner = useShowKyberAIBanner()
@@ -195,7 +223,7 @@ export default function Swap() {
   const onBackToSwapTab = () => setActiveTab(getDefaultTab())
 
   const isShowModalImportToken =
-    !isCrossChainPage && isLoadedTokenDefault && importTokensNotInDefault.length > 0 && showingPairSuggestionImport
+
 
   const tradeRouteComposition = useMemo(() => {
     return getTradeComposition(chainId, routeSummary?.parsedAmountIn, undefined, routeSummary?.route, defaultTokens)
@@ -214,7 +242,76 @@ export default function Swap() {
         <Banner />
         <Container>
           <SwapFormWrapper isShowTutorial={isShowTutorial}>
+
+            <RowBetween>
+              <Tabs />
+
+              <SwapFormActions>
+                <Tutorial
+                  type={TutorialType.SWAP}
+                  customIcon={
+                    <StyledActionButtonSwapForm onClick={() => mixpanelHandler(MIXPANEL_TYPE.SWAP_TUTORIAL_CLICK)}>
+                      <TutorialIcon />
+                    </StyledActionButtonSwapForm>
+                  }
+                />
+                <MobileTokenInfo
+                  currencies={isSwapPage ? currencies : currenciesLimit}
+                  onClick={() => {
+                    mixpanelHandler(MIXPANEL_TYPE.SWAP_TOKEN_INFO_CLICK)
+                    onToggleActionTab(TAB.INFO)
+                  }}
+                />
+                <ShareButtonWithModal
+                  title={t`Share this with your friends!`}
+                  url={shareUrl}
+                  onShared={() => {
+                    mixpanelHandler(MIXPANEL_TYPE.TOKEN_SWAP_LINK_SHARED)
+                  }}
+                />
+                <StyledActionButtonSwapForm
+                  active={activeTab === TAB.SETTINGS}
+                  onClick={() => {
+                    onToggleActionTab(TAB.SETTINGS)
+                    mixpanelHandler(MIXPANEL_TYPE.SWAP_SETTINGS_CLICK)
+                  }}
+                  aria-label="Swap Settings"
+                >
+                  <MouseoverTooltip
+                    text={!isDegenMode ? <Trans>Settings</Trans> : <Trans>Degen mode is on!</Trans>}
+                    placement="top"
+                    width="fit-content"
+                  >
+                    <span id={TutorialIds.BUTTON_SETTING_SWAP_FORM}>
+                      <TransactionSettingsIcon fill={isDegenMode ? theme.warning : theme.subText} />
+                    </span>
+                  </MouseoverTooltip>
+                </StyledActionButtonSwapForm>
+              </SwapFormActions>
+            </RowBetween>
+
+            <RowBetween>
+              <Text fontSize={12} color={theme.subText}>
+                {isLimitPage ? (
+                  <Trans>Buy or sell any token at a specific price</Trans>
+                ) : (
+                  <Trans>Buy or sell any token instantly at the best price</Trans>
+                )}
+              </Text>
+            </RowBetween>
+
+            {!isSolana && (
+              <RowBetween>
+                <PairSuggestion
+                  ref={refSuggestPair}
+                  onSelectSuggestedPair={onSelectSuggestedPair}
+                  setShowModalImportToken={setShowingPairSuggestionImport}
+                />
+              </RowBetween>
+            )}
+
             <Header activeTab={activeTab} setActiveTab={setActiveTab} swapActionsRef={swapActionsRef} />
+
 
             {(isLimitPage || isSwapPage) && !TYPE_AND_SWAP_NOT_SUPPORTED_CHAINS.includes(chainId) && (
               <PairSuggestion
