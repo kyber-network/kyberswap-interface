@@ -486,6 +486,11 @@ export const isChristmasTime = () => {
   return currentTime.month() === 11 && currentTime.date() >= 15
 }
 
+
+export const getLimitOrderContract = (chainId: ChainId) => {
+  const { production, development } = NETWORKS_INFO_CONFIG[chainId]?.limitOrder ?? {}
+  return [ENV_TYPE.PROD, ENV_TYPE.STG, ENV_TYPE.ADPR].includes(ENV_LEVEL) ? production : development
+
 export const isSupportLimitOrder = (chainId: ChainId): boolean => {
   if (!SUPPORTED_NETWORKS.includes(chainId)) return false
   const limitOrder = NETWORKS_INFO[chainId]?.limitOrder
@@ -536,4 +541,5 @@ export function buildFlagsForFarmV21({
   if (isSyncFee) flags = flags | (1 << 2)
   if (isClaimReward) flags = flags | (1 << 1)
   return flags
+
 }
