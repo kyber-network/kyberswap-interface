@@ -1,10 +1,8 @@
 import { ChainId } from '@kyberswap/ks-sdk-core'
 
-import AVAX from 'assets/networks/avax-network.png'
-import { KS_SETTING_API } from 'constants/env'
+import avalancheIcon from 'assets/networks/avalanche.svg'
 import { EVMNetworkInfo } from 'constants/networks/type'
 
-const EMPTY = ''
 const NOT_SUPPORT = null
 
 const avaxInfo: EVMNetworkInfo = {
@@ -15,19 +13,17 @@ const avaxInfo: EVMNetworkInfo = {
   poolFarmRoute: 'avalanche',
   aggregatorRoute: 'avalanche',
   name: 'Avalanche',
-  icon: AVAX,
-  iconDark: NOT_SUPPORT,
+  icon: avalancheIcon,
   iconSelected: NOT_SUPPORT,
-  iconDarkSelected: NOT_SUPPORT,
+
   defaultBlockSubgraph: 'https://api.thegraph.com/subgraphs/name/ducquangkstn/avalache-blocks',
   etherscanUrl: 'https://snowtrace.io',
   etherscanName: 'Snowtrace',
-  tokenListUrl: `${KS_SETTING_API}/v1/tokens?chainIds=${ChainId.AVAXMAINNET}&isWhitelisted=${true}`,
-  bridgeURL: EMPTY,
+  bridgeURL: 'https://core.app/bridge',
   nativeToken: {
     symbol: 'AVAX',
     name: 'AVAX',
-    logo: AVAX,
+    logo: 'https://storage.googleapis.com/ks-setting-1d682dca/e72081b5-cb5f-4fb6-b771-ac189bdfd7c81699420213175.png',
     decimal: 18,
     minForGas: 10 ** 16,
   },
@@ -64,25 +60,34 @@ const avaxInfo: EVMNetworkInfo = {
   },
   elastic: {
     defaultSubgraph: 'https://api.thegraph.com/subgraphs/name/kybernetwork/kyberswap-elastic-avalanche',
-    startBlock: 15795578,
-    coreFactory: '0x5F1dddbf348aC2fbe22a163e30F99F9ECE3DD50a',
-    nonfungiblePositionManager: '0x2B1c7b41f6A8F2b2bc45C3233a5d5FB3cD6dC9A8',
-    tickReader: '0x165c68077ac06c83800d19200e6E2B08D02dE75D',
-    initCodeHash: '0xc597aba1bb02db42ba24a8878837965718c032f8b46be94a6e46452a9f89ca01',
-    quoter: '0x0D125c15D54cA1F8a813C74A81aEe34ebB508C1f',
-    routers: '0xC1e7dFE73E1598E3910EF4C7845B68A9Ab6F4c83',
-    farms: ['0xBdEc4a045446F583dc564C0A227FFd475b329bf0', '0x5C503D4b7DE0633f031229bbAA6A5e4A31cc35d8'],
+    startBlock: 30206201,
+    coreFactory: '0xC7a590291e07B9fe9E64b86c58fD8fC764308C4A',
+    nonfungiblePositionManager: '0xe222fBE074A436145b255442D919E4E3A6c6a480',
+    tickReader: '0x8Fd8Cb948965d9305999D767A02bf79833EADbB3',
+    initCodeHash: '0x00e263aaa3a2c06a89b53217a9e7aad7e15613490a72e0f95f303c4de2dc7045',
+    quoter: '0x4d47fd5a29904Dae0Ef51b1c450C9750F15D7856',
+    routers: '0xF9c2b5746c946EF883ab2660BbbB1f10A5bdeAb4',
+    farms: ['0x7D5ba536ab244aAA1EA42aB88428847F25E3E676'],
+    farmv2Quoter: '0x6AFeb9EDd6Cf44fA8E89b1eee28284e6dD7705C8',
+    farmV2S: [
+      '0xA70a1Ad0F91c52c79e177c5A18a7C9E1C4360e0e',
+      '0x3d6afe2fb73ffed2e3dd00c501a174554e147a43',
+      '0xf2BcDf38baA52F6b0C1Db5B025DfFf01Ae1d6dBd',
+    ],
+    zap: {
+      router: '0x30C5322E4e08AD500c348007f92f120ab4E2b79e',
+      validator: '0xf0096e5B4AAfeEA1DF557264091569ba125c1172',
+      executor: '0x4f097F7074D52952006a0763312724929Ff95Cf0',
+      helper: '0x4E8419EFa0b0A149Dad77b689D37AF17f762f20A',
+    },
   },
-  limitOrder: {
-    development: '0x1877Ec0770901cc6886FDA7E7525a78c2Ed4e975',
-    production: '0x227B0c196eA8db17A665EA6824D972A64202E936',
-  },
+  limitOrder: '*',
   averageBlockTimeInSeconds: 1.85,
   coingeckoNetworkId: 'avalanche',
   coingeckoNativeTokenId: 'avalanche-2',
   deBankSlug: 'avax',
-  trueSightId: 'avax',
   dexToCompare: 'traderjoe',
+  geckoTermialId: 'avax',
 }
 
 export default avaxInfo

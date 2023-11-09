@@ -1,4 +1,4 @@
-import { Currency, CurrencyAmount, Percent, Token, TokenAmount } from '@kyberswap/ks-sdk-core'
+import { Currency, CurrencyAmount, Percent, TokenAmount } from '@kyberswap/ks-sdk-core'
 import { Position } from '@kyberswap/ks-sdk-elastic'
 import { Trans } from '@lingui/macro'
 import { ReactNode, useCallback, useMemo } from 'react'
@@ -65,11 +65,27 @@ export function useDerivedProAmmBurnInfo(
   )
 
   const liquidityValues: {
-    [Field.CURRENCY_A]?: CurrencyAmount<Token>
-    [Field.CURRENCY_B]?: CurrencyAmount<Token>
+    [Field.CURRENCY_A]?: CurrencyAmount<Currency>
+    [Field.CURRENCY_B]?: CurrencyAmount<Currency>
   } = {
-    [Field.CURRENCY_A]: positionSDK && positionSDK.amount0,
-    [Field.CURRENCY_B]: positionSDK && positionSDK.amount1,
+    [Field.CURRENCY_A]:
+      (positionSDK &&
+        (asWETH
+          ? positionSDK.amount0
+          : CurrencyAmount.fromRawAmount(
+              unwrappedToken(positionSDK.amount0.currency),
+              positionSDK.amount0.quotient.toString(),
+            ))) ||
+      undefined,
+    [Field.CURRENCY_B]:
+      (positionSDK &&
+        (asWETH
+          ? positionSDK.amount1
+          : CurrencyAmount.fromRawAmount(
+              unwrappedToken(positionSDK.amount1.currency),
+              positionSDK.amount1.quotient.toString(),
+            ))) ||
+      undefined,
   }
   let liquidityPercentage: Percent = new Percent('0', '100')
   if (independentField === Field.LIQUIDITY_PERCENT) {
@@ -106,7 +122,7 @@ export function useDerivedProAmmBurnInfo(
     pool && position ? pool.tickCurrent < position.tickLower || pool.tickCurrent >= position.tickUpper : false
   let error: ReactNode | undefined
   if (!account) {
-    error = <Trans>Connect Wallet</Trans>
+    error = <Trans>Connect</Trans>
   }
   // if (percent === 0) {
   //   error = error ?? <Trans>Enter a percent</Trans>

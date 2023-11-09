@@ -6,8 +6,9 @@ export type BuildRoutePayload = {
   slippageTolerance: number
   sender: string
   recipient: string
-  source: 'kyberswap'
+  source: string
   skipSimulateTx: boolean
+  permit?: string
 }
 
 export type BuildRouteData = {
@@ -16,10 +17,9 @@ export type BuildRouteData = {
   amountInUsd: string
   amountOut: string
   amountOutUsd: string
+  feeUsd: string
   outputChange?: {
-    amount: string
     percent: number
-    level: number
   }
   gas: string
   gasUsd: string

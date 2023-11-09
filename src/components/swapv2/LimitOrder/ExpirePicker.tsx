@@ -1,5 +1,6 @@
 import { Trans } from '@lingui/macro'
 import dayjs from 'dayjs'
+import { rgba } from 'polished'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Calendar, X } from 'react-feather'
 import { Flex, Text } from 'rebass'
@@ -11,7 +12,7 @@ import Modal from 'components/Modal'
 import Select from 'components/Select'
 import useTheme from 'hooks/useTheme'
 
-import { EXPIRED_OPTIONS, MIN_TIME_MINUTES } from './const'
+import { MIN_TIME_MINUTES, getExpireOptions } from './const'
 
 const HOURS = Array.from({ length: 24 }, (_, i) => ({ label: i, value: i }))
 const MINS = Array.from({ length: 60 }, (_, i) => ({ label: i, value: i }))
@@ -44,8 +45,8 @@ const DefaultOptionContainer = styled.div`
 `
 
 const ResultContainer = styled.div`
-  border: ${({ theme }) => `1px solid ${theme.warning}`};
-  padding: 10px;
+  background-color: ${({ theme }) => rgba(theme.warning, 0.2)};
+  padding: 12px;
   border-radius: 20px;
   width: 100%;
   display: flex;
@@ -132,11 +133,10 @@ export default function DateTimePicker({
     menuStyle: {
       height: 250,
       overflow: 'scroll',
-      top: 'unset',
-      right: 'unset',
       textAlign: 'center',
       width: 'fit-content',
     } as CSSProperties,
+    placement: 'left',
   }
 
   const expireResult = defaultExpire ? Date.now() + defaultExpire * 1000 : date
@@ -168,7 +168,7 @@ export default function DateTimePicker({
             <Text color={theme.border}>
               <Trans>Default Options</Trans>
             </Text>
-            {EXPIRED_OPTIONS.map(opt => (
+            {getExpireOptions().map(opt => (
               <Text
                 style={{ cursor: 'pointer' }}
                 color={opt.value === defaultExpire ? theme.primary : theme.subText}

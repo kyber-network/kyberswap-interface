@@ -14,6 +14,7 @@ import { isAddress, shortenAddress } from 'utils'
 import { Aggregator } from 'utils/aggregator'
 import { formatCurrencyAmount } from 'utils/formatCurrencyAmount'
 import { sendEVMTransaction, sendSolanaTransactions } from 'utils/sendTransaction'
+import { ErrorName } from 'utils/sentry'
 
 import useProvider from './solana/useProvider'
 
@@ -23,25 +24,18 @@ enum SwapCallbackState {
   VALID,
 }
 
-export interface FeeConfig {
-  chargeFeeBy: 'currency_in' | 'currency_out'
-  feeReceiver: string
-  isInBps: boolean
-  feeAmount: string
-}
-
 // returns a function that will execute a swap, if the parameters are all valid
 // and the user has approved the slippage adjusted input amount for the trade
 export function useSwapV2Callback(
   trade: Aggregator | undefined, // trade to execute, required
 ): { state: SwapCallbackState; callback: null | (() => Promise<string>); error: string | null } {
-  const { account, chainId, isEVM, isSolana, walletSolana } = useActiveWeb3React()
+  const { account, chainId, isEVM, isSolana, walletSolana, walletKey } = useActiveWeb3React()
   const { library } = useWeb3React()
   const { connection } = useWeb3Solana()
   const provider = useProvider()
   const [encodeSolana] = useEncodeSolana()
 
-  const { typedValue, feeConfig, saveGas, recipient: recipientAddressOrName } = useSwapState()
+  const { saveGas, recipient: recipientAddressOrName } = useSwapState()
 
   const [allowedSlippage] = useUserSlippageTolerance()
 
@@ -65,9 +59,6 @@ export function useSwapV2Callback(
     const inputAmount = formatCurrencyAmount(trade.inputAmount, 6)
     const outputAmount = formatCurrencyAmount(trade.outputAmount, 6)
 
-    const inputAmountFormat =
-      feeConfig && feeConfig.chargeFeeBy === 'currency_in' && feeConfig.isInBps ? typedValue : inputAmount
-
     const withRecipient =
       recipient === account
         ? undefined
@@ -81,7 +72,7 @@ export function useSwapV2Callback(
       hash: '',
       type: TRANSACTION_TYPE.SWAP,
       extraInfo: {
-        tokenAmountIn: inputAmountFormat,
+        tokenAmountIn: inputAmount,
         tokenAmountOut: outputAmount,
         tokenSymbolIn: inputSymbol,
         tokenSymbolOut: outputSymbol,
@@ -102,7 +93,7 @@ export function useSwapV2Callback(
         },
       } as TransactionExtraInfo2Token,
     }
-  }, [account, allowedSlippage, chainId, feeConfig, recipient, recipientAddressOrName, saveGas, trade, typedValue])
+  }, [account, allowedSlippage, chainId, recipient, recipientAddressOrName, saveGas, trade])
 
   return useMemo(() => {
     if (!trade || !account) {
@@ -125,17 +116,20 @@ export function useSwapV2Callback(
     }
 
     const value = BigNumber.from(trade.inputAmount.currency.isNative ? trade.inputAmount.quotient.toString() : 0)
+    // swap v2 is unused anymore
+    // todo: remove this
     const onSwapWithBackendEncode = async (): Promise<string> => {
-      const response = await sendEVMTransaction(
+      const response = await sendEVMTransaction({
         account,
         library,
-        trade.routerAddress,
-        trade.encodedSwapData,
+        contractAddress: trade.routerAddress,
+        encodedData: trade.encodedSwapData,
         value,
-        onHandleSwapResponse,
+        sentryInfo: { name: ErrorName.SwapError, wallet: walletKey },
         chainId,
-      )
+      })
       if (response?.hash === undefined) throw new Error('sendTransaction returned undefined.')
+      onHandleSwapResponse(response)
       return response?.hash
     }
     const onSwapSolana = async (): Promise<string> => {
@@ -175,5 +169,6 @@ export function useSwapV2Callback(
     addTransactionWithType,
     extractSwapData,
     connection,
+    walletKey,
   ])
 }

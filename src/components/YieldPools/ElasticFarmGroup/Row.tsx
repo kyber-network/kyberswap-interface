@@ -1,10 +1,9 @@
-import { ChainId, CurrencyAmount, Fraction } from '@kyberswap/ks-sdk-core'
-import { computePoolAddress } from '@kyberswap/ks-sdk-elastic'
+import { CurrencyAmount, Fraction } from '@kyberswap/ks-sdk-core'
 import { Trans, t } from '@lingui/macro'
 import dayjs from 'dayjs'
 import { BigNumber } from 'ethers'
-import { useEffect, useState } from 'react'
-import { Minus, Plus, Share2 } from 'react-feather'
+import React, { useEffect, useState } from 'react'
+import { Info, Minus, Plus, Share2 } from 'react-feather'
 import { Link } from 'react-router-dom'
 import { useMedia } from 'react-use'
 import { Flex, Text } from 'rebass'
@@ -18,14 +17,18 @@ import { MoneyBag, Swap2 as SwapIcon } from 'components/Icons'
 import Harvest from 'components/Icons/Harvest'
 import InfoHelper from 'components/InfoHelper'
 import { MouseoverTooltip, MouseoverTooltipDesktopOnly } from 'components/Tooltip'
+import { PartnerFarmTag } from 'components/YieldPools/PartnerFarmTag'
 import { APP_PATHS, ELASTIC_BASE_FEE_UNIT } from 'constants/index'
-import { NETWORKS_INFO, isEVM } from 'constants/networks'
 import { TOBE_EXTENDED_FARMING_POOLS } from 'constants/v2'
 import { useActiveWeb3React } from 'hooks'
-import { useProMMFarmContract } from 'hooks/useContract'
+import { useAllTokens } from 'hooks/Tokens'
+import { useProMMFarmReadingContract } from 'hooks/useContract'
+import { useProAmmPositions } from 'hooks/useProAmmPositions'
 import useTheme from 'hooks/useTheme'
-import { useElasticFarms } from 'state/farms/elastic/hooks'
+import { useShareFarmAddress } from 'state/farms/classic/hooks'
+import { useDepositedNftsByFarm, usePositionFilter, useUserInfoByFarm } from 'state/farms/elastic/hooks'
 import { FarmingPool, NFTPosition } from 'state/farms/elastic/types'
+import { getPoolAddress } from 'state/mint/proamm/utils'
 import { useViewMode } from 'state/user/hooks'
 import { VIEW_MODE } from 'state/user/reducer'
 import { shortenAddress } from 'utils'
@@ -34,13 +37,12 @@ import { formatDollarAmount } from 'utils/numbers'
 import { getTokenSymbolWithHardcode } from 'utils/tokenInfo'
 
 import { APRTooltipContent } from '../FarmingPoolAPRCell'
-import { useSharePoolContext } from '../SharePoolContext'
 import { ProMMFarmTableRow } from '../styleds'
 import FarmCard from './FarmCard'
 import FeeTarget from './FeeTarget'
 import PositionDetail from './PostionDetail'
 import { ButtonColorScheme, MinimalActionButton } from './buttons'
-import { FeeTag, NFTListWrapper, RowWrapper } from './styleds'
+import { FeeTag, NFTListWrapper, Range, RowWrapper } from './styleds'
 
 export interface Pool extends FarmingPool {
   tvl: number
@@ -56,10 +58,8 @@ const Row = ({
   pool: farmingPool,
   onOpenModal,
   onHarvest,
-  isUserAffectedByFarmIssue,
   tokenPrices,
 }: {
-  isUserAffectedByFarmIssue: boolean
   isApprovedForAll: boolean
   fairlaunchAddress: string
   pool: Pool
@@ -67,31 +67,30 @@ const Row = ({
   onHarvest: () => void
   tokenPrices: { [key: string]: number }
 }) => {
-  const { chainId } = useActiveWeb3React()
+  const allTokens = useAllTokens()
+  const { chainId, networkInfo, account } = useActiveWeb3React()
   const theme = useTheme()
   const currentTimestamp = Math.floor(Date.now() / 1000)
   const [viewMode] = useViewMode()
   const above1000 = useMedia('(min-width: 1000px)')
 
   const [isRevertPrice, setIsRevertPrice] = useState(false)
-  const { userFarmInfo } = useElasticFarms()
-  const joinedPositions = userFarmInfo?.[fairlaunchAddress]?.joinedPositions[farmingPool.pid] || []
+  const userInfo = useUserInfoByFarm(fairlaunchAddress)
+
+  const joinedPositions = userInfo?.joinedPositions[farmingPool.pid] || []
+
+  const depositedPositionsByFarm = useDepositedNftsByFarm(fairlaunchAddress)
+
   const depositedPositions =
-    userFarmInfo?.[fairlaunchAddress]?.depositedPositions.filter(pos => {
+    depositedPositionsByFarm.filter(pos => {
       return (
-        farmingPool.poolAddress.toLowerCase() ===
-        computePoolAddress({
-          factoryAddress: NETWORKS_INFO[isEVM(chainId) ? chainId : ChainId.MAINNET].elastic.coreFactory,
-          tokenA: pos.pool.token0,
-          tokenB: pos.pool.token1,
-          fee: pos.pool.fee,
-          initCodeHashManualOverride: NETWORKS_INFO[isEVM(chainId) ? chainId : ChainId.MAINNET].elastic.initCodeHash,
-        }).toLowerCase()
+        pos.liquidity.toString() !== '0' &&
+        farmingPool.poolAddress.toLowerCase() === getPoolAddress(pos.pool).toLowerCase()
       )
     }) || []
 
   const rewardPendings =
-    userFarmInfo?.[fairlaunchAddress]?.rewardPendings[farmingPool.pid] ||
+    userInfo?.rewardPendings[farmingPool.pid] ||
     farmingPool.rewardTokens.map(token => CurrencyAmount.fromRawAmount(token, 0))
 
   const rewardValue = rewardPendings.reduce(
@@ -99,7 +98,7 @@ const Row = ({
     0,
   )
 
-  const contract = useProMMFarmContract(fairlaunchAddress)
+  const contract = useProMMFarmReadingContract(fairlaunchAddress)
   const [targetPercent, setTargetPercent] = useState('')
   const [targetPercentByNFT, setTargetPercentByNFT] = useState<{ [key: string]: string }>({})
   const [rowOpen, setRowOpen] = useState(false)
@@ -107,7 +106,7 @@ const Row = ({
   useEffect(() => {
     const getFeeTargetInfo = async () => {
       if (!contract || farmingPool.feeTarget === '0') return
-      const userJoinedPos = userFarmInfo?.[fairlaunchAddress].joinedPositions[farmingPool.pid] || []
+      const userJoinedPos = userInfo.joinedPositions[farmingPool.pid] || []
 
       if (!userJoinedPos.length) {
         setTargetPercent('')
@@ -142,47 +141,37 @@ const Row = ({
     }
 
     getFeeTargetInfo()
-  }, [contract, farmingPool.feeTarget, fairlaunchAddress, farmingPool.pid, userFarmInfo])
+  }, [contract, farmingPool.feeTarget, fairlaunchAddress, farmingPool.pid, userInfo])
 
-  const canStake =
-    farmingPool.endTime > currentTimestamp &&
-    depositedPositions.some(pos => {
-      const stakedPos = joinedPositions.find(j => j.nftId.toString() === pos.nftId.toString())
-      return !stakedPos
-        ? true
-        : BigNumber.from(pos.liquidity.toString()).gt(BigNumber.from(stakedPos.liquidity.toString()))
-    })
+  const { positions } = useProAmmPositions(account)
 
+  const { eligiblePositions } = usePositionFilter(positions || [], [farmingPool.poolAddress.toLowerCase()])
+
+  const canUpdateLiquidity = depositedPositions.some(pos => {
+    const stakedPos = joinedPositions.find(j => j.nftId.toString() === pos.nftId.toString())
+    return !stakedPos
+      ? true
+      : BigNumber.from(pos.liquidity.toString()).gt(BigNumber.from(stakedPos.liquidity.toString()))
+  })
+  const canStake = farmingPool.endTime > currentTimestamp && (eligiblePositions.length > 0 || canUpdateLiquidity)
   const canHarvest = rewardPendings.some(amount => amount.greaterThan(0))
 
   const canUnstake = !!joinedPositions.length
   const isFarmStarted = farmingPool.startTime <= currentTimestamp
 
-  const setSharePoolAddress = useSharePoolContext()
+  const numberOutRangePos = depositedPositions.filter(
+    pos => pos.pool.tickCurrent < pos.tickLower || pos.pool.tickCurrent >= pos.tickUpper,
+  ).length
+
+  const numberInRangePos = depositedPositions.filter(
+    pos => pos.pool.tickCurrent >= pos.tickLower && pos.pool.tickCurrent < pos.tickUpper,
+  ).length
+
+  const [, setFarmAddress] = useShareFarmAddress()
 
   const amountCanStaked = farmingPool.endTime < currentTimestamp ? 0 : farmingPool.depositedUsd - farmingPool.stakedUsd
 
   const renderStakeButton = () => {
-    if (isUserAffectedByFarmIssue) {
-      return (
-        <MouseoverTooltipDesktopOnly
-          text={t`This farm is currently under maintenance. You can deposit your liquidity into the new farms instead. Your withdrawals are not affected.`}
-          placement="top"
-          width="300px"
-        >
-          <MinimalActionButton
-            style={{
-              cursor: 'not-allowed',
-              backgroundColor: theme.buttonGray,
-              opacity: 0.4,
-            }}
-          >
-            <Plus size={16} />
-          </MinimalActionButton>
-        </MouseoverTooltipDesktopOnly>
-      )
-    }
-
     if (!isApprovedForAll || !canStake) {
       return (
         <MinimalActionButton disabled>
@@ -209,11 +198,11 @@ const Row = ({
 
     return (
       <MouseoverTooltipDesktopOnly
-        text={t`Stake your liquidity positions (i.e. your NFT tokens) into the farm to start earning rewards`}
+        text={t`Stake your liquidity positions (i.e. your NFT tokens) into the farm to start earning rewards.`}
         placement="top"
         width="300px"
       >
-        <MinimalActionButton onClick={() => onOpenModal('stake', farmingPool)}>
+        <MinimalActionButton id="stake-button" onClick={() => onOpenModal('stake', farmingPool)}>
           <Plus size={16} />
         </MinimalActionButton>
       </MouseoverTooltipDesktopOnly>
@@ -231,7 +220,7 @@ const Row = ({
 
     return (
       <MouseoverTooltipDesktopOnly
-        text={t`Unstake your liquidity positions (i.e. your NFT tokens) from the farm`}
+        text={t`Unstake your liquidity positions (i.e. your NFT tokens) from the farm.`}
         placement="top"
         width="300px"
       >
@@ -287,29 +276,86 @@ const Row = ({
     )
   }
 
+  const inOutRangeInfo = (
+    <Flex sx={{ gap: '4px' }}>
+      {!!numberOutRangePos && (
+        <MouseoverTooltip
+          text={
+            <Text fontSize="12px" fontStyle="italic">
+              <Trans>You have {numberOutRangePos} out-of-range position(s).</Trans>
+            </Text>
+          }
+        >
+          <Range>
+            {numberOutRangePos} <Info size={12} />
+          </Range>
+        </MouseoverTooltip>
+      )}
+
+      {!!numberInRangePos && (
+        <MouseoverTooltip
+          text={
+            <Text fontSize="12px" fontStyle="italic">
+              <Trans>You have {numberInRangePos} in-range position(s)</Trans>
+            </Text>
+          }
+        >
+          <Range inrange>
+            {numberInRangePos} <Info size={12} />
+          </Range>
+        </MouseoverTooltip>
+      )}
+    </Flex>
+  )
+
+  const symbol0 = getTokenSymbolWithHardcode(
+    chainId,
+    farmingPool.token0.wrapped.address,
+    farmingPool.token0.isNative
+      ? farmingPool.token0.symbol
+      : allTokens[farmingPool.token0.wrapped.address]?.symbol || farmingPool.token0.symbol,
+  )
+  const symbol1 = getTokenSymbolWithHardcode(
+    chainId,
+    farmingPool.token1.wrapped.address,
+    farmingPool.token1.isNative
+      ? farmingPool.token1.symbol
+      : allTokens[farmingPool.token1.wrapped.address]?.symbol || farmingPool.token1.symbol,
+  )
+
   return (
-    <RowWrapper isOpen={rowOpen && !!depositedPositions.length}>
+    <RowWrapper isOpen={rowOpen && !!depositedPositions.length} data-testid={farmingPool.id}>
       <ProMMFarmTableRow isOpen={rowOpen && !!depositedPositions.length}>
         <div>
           <Flex alignItems="center">
             <DoubleCurrencyLogo currency0={farmingPool.token0} currency1={farmingPool.token1} />
-            <Link
-              to={`${APP_PATHS.ELASTIC_CREATE_POOL}/${
-                farmingPool.token0.isNative ? farmingPool.token0.symbol : farmingPool.token0.address
-              }/${farmingPool.token1.isNative ? farmingPool.token1.symbol : farmingPool.token1.address}/${
-                farmingPool.pool.fee
-              }`}
-              style={{
-                textDecoration: 'none',
-              }}
-            >
-              <Text fontSize={14} fontWeight={500}>
-                {getTokenSymbolWithHardcode(chainId, farmingPool.token0.wrapped.address, farmingPool.token0.symbol)} -{' '}
-                {getTokenSymbolWithHardcode(chainId, farmingPool.token1.wrapped.address, farmingPool.token1.symbol)}
-              </Text>
-            </Link>
-
-            <FeeTag>FEE {(farmingPool.pool.fee * 100) / ELASTIC_BASE_FEE_UNIT}%</FeeTag>
+            <Text fontSize={14} fontWeight={500} flex={1} maxWidth="fit-content">
+              <Link
+                to={`/${networkInfo.route}${APP_PATHS.ELASTIC_CREATE_POOL}/${
+                  farmingPool.token0.isNative ? farmingPool.token0.symbol : farmingPool.token0.address
+                }/${farmingPool.token1.isNative ? farmingPool.token1.symbol : farmingPool.token1.address}/${
+                  farmingPool.pool.fee
+                }`}
+                style={{
+                  textDecoration: 'none',
+                }}
+              >
+                <MouseoverTooltip
+                  text={`${symbol0} - ${symbol1}`}
+                  width="fit-content"
+                  containerStyle={{ maxWidth: '100%' }}
+                  placement="top"
+                >
+                  <Text sx={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {symbol0} - {symbol1}
+                  </Text>
+                </MouseoverTooltip>
+              </Link>
+            </Text>
+            <Flex flexDirection="column" sx={{ gap: '8px' }}>
+              <FeeTag>FEE {(farmingPool.pool.fee * 100) / ELASTIC_BASE_FEE_UNIT}%</FeeTag>
+              <PartnerFarmTag farmPoolAddress={farmingPool.poolAddress} />
+            </Flex>
           </Flex>
 
           <Flex
@@ -329,7 +375,7 @@ const Row = ({
             <Flex
               marginLeft="12px"
               onClick={() => {
-                setSharePoolAddress(farmingPool.poolAddress)
+                setFarmAddress(farmingPool.poolAddress)
               }}
               sx={{
                 cursor: 'pointer',
@@ -392,41 +438,45 @@ const Row = ({
 
         <div>
           {amountCanStaked ? (
-            <Flex justifyContent="flex-start" color={theme.warning}>
-              {formatDollarAmount(farmingPool.depositedUsd)}
-              <InfoHelper
-                placement="top"
-                color={theme.warning}
-                width={'270px'}
-                text={
-                  <Flex
-                    sx={{
-                      flexDirection: 'column',
-                      gap: '6px',
-                      fontSize: '12px',
-                      lineHeight: '16px',
-                      fontWeight: 400,
-                    }}
-                  >
-                    <Text as="span" color={theme.subText}>
-                      <Trans>
-                        You still have {formatDollarAmount(amountCanStaked)} in liquidity to stake to earn even more
-                        farming rewards
-                      </Trans>
-                    </Text>
-                    <Text as="span" color={theme.text}>
-                      Staked: {formatDollarAmount(farmingPool.stakedUsd)}
-                    </Text>
-                    <Text as="span" color={theme.warning}>
-                      Not staked: {formatDollarAmount(amountCanStaked)}
-                    </Text>
-                  </Flex>
-                }
-              />
+            <Flex justifyContent="space-between" color={theme.text} alignItems="center">
+              <Flex justifyContent="flex-start" color={theme.warning}>
+                {formatDollarAmount(farmingPool.depositedUsd)}
+                <InfoHelper
+                  placement="top"
+                  color={theme.warning}
+                  width={'270px'}
+                  text={
+                    <Flex
+                      sx={{
+                        flexDirection: 'column',
+                        gap: '6px',
+                        fontSize: '12px',
+                        lineHeight: '16px',
+                        fontWeight: 400,
+                      }}
+                    >
+                      <Text as="span" color={theme.subText}>
+                        <Trans>
+                          You still have {formatDollarAmount(amountCanStaked)} in liquidity to stake to earn even more
+                          farming rewards
+                        </Trans>
+                      </Text>
+                      <Text as="span" color={theme.text}>
+                        Staked: {formatDollarAmount(farmingPool.stakedUsd)}
+                      </Text>
+                      <Text as="span" color={theme.warning}>
+                        Not staked: {formatDollarAmount(amountCanStaked)}
+                      </Text>
+                    </Flex>
+                  }
+                />
+              </Flex>
+              {inOutRangeInfo}
             </Flex>
           ) : (
-            <Flex justifyContent="flex-start" color={theme.text}>
+            <Flex justifyContent="space-between" color={theme.text} alignItems="center">
               {farmingPool.depositedUsd ? formatDollarAmount(farmingPool.depositedUsd) : '--'}
+              {inOutRangeInfo}
             </Flex>
           )}
 
@@ -499,4 +549,4 @@ const Row = ({
   )
 }
 
-export default Row
+export default React.memo(Row)

@@ -1,21 +1,30 @@
 import { ApolloClient, NormalizedCacheObject } from '@apollo/client'
 import { BigNumber } from '@ethersproject/bignumber'
 import { ChainId, Currency, CurrencyAmount, Percent, Token, WETH } from '@kyberswap/ks-sdk-core'
+import { WalletReadyState } from '@solana/wallet-adapter-base'
 import { PublicKey } from '@solana/web3.js'
 import dayjs from 'dayjs'
 import JSBI from 'jsbi'
 import Numeral from 'numeral'
+import blockServiceApi from 'services/blockService'
 
-import { GET_BLOCK, GET_BLOCKS } from 'apollo/queries'
-import { ENV_LEVEL } from 'constants/env'
-import { DEFAULT_GAS_LIMIT_MARGIN, ZERO_ADDRESS } from 'constants/index'
-import { NETWORKS_INFO, NETWORKS_INFO_CONFIG, isEVM } from 'constants/networks'
-import { KNC, KNCL_ADDRESS } from 'constants/tokens'
-import { ENV_TYPE } from 'constants/type'
-import { EVMWalletInfo, SUPPORTED_WALLET, SolanaWalletInfo, WalletInfo } from 'constants/wallets'
+import { GET_BLOCKS } from 'apollo/queries'
+import { ENV_KEY } from 'constants/env'
+import { DEFAULT_GAS_LIMIT_MARGIN, ETHER_ADDRESS, ZERO_ADDRESS } from 'constants/index'
+import { NETWORKS_INFO, SUPPORTED_NETWORKS, isEVM } from 'constants/networks'
+import { KNCL_ADDRESS, KNC_ADDRESS } from 'constants/tokens'
+import {
+  EVMWalletInfo,
+  INJECTED_KEY,
+  INJECTED_KEYS,
+  SUPPORTED_WALLET,
+  SUPPORTED_WALLETS,
+  SolanaWalletInfo,
+  WalletInfo,
+} from 'constants/wallets'
 import store from 'state'
 import { GroupedTxsByHash, TransactionDetails } from 'state/transactions/type'
-import checkForBraveBrowser from 'utils/checkForBraveBrowser'
+import { chunk } from 'utils/array'
 
 export const isWalletAddressSolana = async (addr: string) => {
   try {
@@ -56,6 +65,7 @@ export function getEtherscanLink(
       return `${prefix}/tx/${data}`
     }
     case 'token': {
+      if (chainId === ChainId.ZKSYNC) return `${prefix}/address/${data}`
       return `${prefix}/token/${data}`
     }
     case 'block': {
@@ -142,7 +152,9 @@ const formatDollarSignificantAmount = (num: number, minDigits: number, maxDigits
   })
   return formatter.format(num)
 }
-
+/** @deprecated use formatDisplayNumber instead
+ * @example formatDisplayNumber(number, { style: 'decimal', significantDigits: 2 })
+ */
 export function formatNumberWithPrecisionRange(number: number, minPrecision = 2, maxPrecision = 2) {
   const options = {
     minimumFractionDigits: minPrecision,
@@ -165,12 +177,15 @@ const truncateFloatNumber = (num: number, maximumFractionDigits = 6) => {
   return `${wholePart}.${fractionalPart.slice(0, maximumFractionDigits)}`
 }
 
-export function formattedNum(number: string, usd = false, fractionDigits = 5) {
-  if (number === '' || number === undefined) {
-    return usd ? '$0' : 0
+/** @deprecated use formatDisplayNumber instead
+ * @example formatDisplayNumber(number, { style: 'currency' | 'decimal', significantDigits: 6 })
+ */
+export function formattedNum(number: string | number, usd = false, fractionDigits = 5): string {
+  if (number === 0 || number === '' || number === undefined) {
+    return usd ? '$0' : '0'
   }
 
-  const num = parseFloat(number)
+  const num = parseFloat(String(number))
 
   if (num > 500000000) {
     return (usd ? '$' : '') + toK(num.toFixed(0))
@@ -184,7 +199,7 @@ export function formattedNum(number: string, usd = false, fractionDigits = 5) {
     if (usd) {
       return '$0'
     }
-    return 0
+    return '0'
   }
 
   if (num < 0.0001) {
@@ -206,6 +221,9 @@ export function formattedNum(number: string, usd = false, fractionDigits = 5) {
   return truncateFloatNumber(num, fractionDigits)
 }
 
+/** @deprecated use formatDisplayNumber instead
+ * @example formatDisplayNumber(number, { style: 'currency' | 'decimal', significantDigits: 6 })
+ */
 export function formattedNumLong(num: number, usd = false) {
   if (num === 0) {
     if (usd) {
@@ -288,65 +306,70 @@ export async function splitQuery<ResultType, T, U>(
 }
 
 /**
- * @notice Fetches first block after a given timestamp
- * @dev Query speed is optimized by limiting to a 600-second period
- * @param {Int} timestamp in seconds
- */
-export async function getBlockFromTimestamp(
-  timestamp: number,
-  chainId: ChainId,
-  blockClient: ApolloClient<NormalizedCacheObject>,
-) {
-  if (!isEVM(chainId)) return
-  const result = await blockClient.query({
-    query: GET_BLOCK,
-    variables: {
-      timestampFrom: timestamp,
-      timestampTo: timestamp + 600,
-    },
-    fetchPolicy: 'cache-first',
-  })
-
-  return result?.data?.blocks?.[0]?.number
-}
-
-/**
  * @notice Fetches block objects for an array of timestamps.
  * @dev blocks are returned in chronological order (ASC) regardless of input.
  * @dev blocks are returned at string representations of Int
  * @dev timestamps are returns as they were provided; not the block time.
  * @param {Array} timestamps
  */
-export async function getBlocksFromTimestamps(
+async function getBlocksFromTimestampsSubgraph(
   blockClient: ApolloClient<NormalizedCacheObject>,
   timestamps: number[],
   chainId: ChainId,
-  skipCount = 500,
-): Promise<{ timestamp: string; number: number }[]> {
+): Promise<{ timestamp: number; number: number }[]> {
   if (!isEVM(chainId)) return []
   if (timestamps?.length === 0) {
     return []
   }
 
-  const fetchedData = await splitQuery<{ number: number }[], number, any>(
-    GET_BLOCKS,
-    blockClient,
-    timestamps,
-    [],
-    skipCount,
-  )
-  const blocks: { timestamp: string; number: number }[] = []
+  const fetchedData = await splitQuery<{ number: string }[], number, any>(GET_BLOCKS, blockClient, timestamps, [])
+  const blocks: { timestamp: number; number: number }[] = []
   if (fetchedData) {
     for (const t in fetchedData) {
       if (fetchedData[t].length > 0) {
         blocks.push({
-          timestamp: t.split('t')[1],
-          number: fetchedData[t][0]['number'],
+          timestamp: Number(t.split('t')[1]),
+          number: Number(fetchedData[t][0]['number']),
         })
       }
     }
   }
+
   return blocks
+}
+
+async function getBlocksFromTimestampsBlockService(
+  timestamps: number[],
+  chainId: ChainId,
+): Promise<{ timestamp: number; number: number }[]> {
+  if (!isEVM(chainId)) return []
+  if (timestamps?.length === 0) {
+    return []
+  }
+
+  const allChunkResult = (
+    await Promise.all(
+      chunk(timestamps, 50).map(
+        async timestampsChunk =>
+          await store.dispatch(blockServiceApi.endpoints.getBlocks.initiate({ chainId, timestamps: timestampsChunk })),
+      ),
+    )
+  )
+    .map(chunk => chunk.data?.data || [])
+    .flat()
+    .sort((a, b) => a.number - b.number)
+
+  return allChunkResult
+}
+
+export async function getBlocksFromTimestamps(
+  isEnableBlockService: boolean,
+  blockClient: ApolloClient<NormalizedCacheObject>,
+  timestamps: number[],
+  chainId: ChainId,
+): Promise<{ timestamp: number; number: number }[]> {
+  if (isEnableBlockService) return getBlocksFromTimestampsBlockService(timestamps, chainId)
+  return getBlocksFromTimestampsSubgraph(blockClient, timestamps, chainId)
 }
 
 /**
@@ -364,13 +387,20 @@ export const get24hValue = (valueNow: string, value24HoursAgo: string | undefine
   return currentChange
 }
 
+export const getNativeTokenLogo = (chainId: ChainId) => {
+  return (
+    store.getState()?.lists?.mapWhitelistTokens?.[chainId]?.[ETHER_ADDRESS]?.logoURI ||
+    (chainId ? NETWORKS_INFO[chainId].nativeToken.logo : '')
+  )
+}
+
 export const getTokenLogoURL = (inputAddress: string, chainId: ChainId): string => {
   let address = inputAddress
   if (address === ZERO_ADDRESS) {
     address = WETH[chainId].address
   }
 
-  if (address.toLowerCase() === KNC[chainId].address.toLowerCase()) {
+  if (address.toLowerCase() === KNC_ADDRESS) {
     return 'https://raw.githubusercontent.com/KyberNetwork/kyberswap-interface/develop/src/assets/images/KNC.svg'
   }
 
@@ -412,34 +442,17 @@ export const deleteUnique = <T>(array: T[] | undefined, element: T): T[] => {
   return array
 }
 
-export const isEVMWallet = (wallet: WalletInfo): wallet is EVMWalletInfo =>
-  !!(wallet as EVMWalletInfo).connector || !!(wallet as EVMWalletInfo).href
-export const isSolanaWallet = (wallet: WalletInfo): wallet is SolanaWalletInfo => !!(wallet as SolanaWalletInfo).adapter
+export const isEVMWallet = (wallet?: WalletInfo): wallet is EVMWalletInfo => !!wallet && 'connector' in wallet
+export const isSolanaWallet = (wallet?: WalletInfo): wallet is SolanaWalletInfo => !!wallet && 'adapter' in wallet
 
 // https://docs.metamask.io/guide/ethereum-provider.html#basic-usage
 // https://docs.cloud.coinbase.com/wallet-sdk/docs/injected-provider#properties
 // Coin98 and Brave wallet is overriding Metamask. So at a time, there is only 1 exists
-export const detectInjectedType = (): 'COIN98' | 'BRAVE' | 'METAMASK' | 'COINBASE' | 'TRUST_WALLET' | null => {
-  const { ethereum } = window
-  // When Coinbase wallet connected will inject selectedProvider property and some others props
-  if (ethereum?.selectedProvider) {
-    if (ethereum?.selectedProvider?.isMetaMask) return 'METAMASK'
-    if (ethereum?.selectedProvider?.isCoinbaseWallet) return 'COINBASE'
-  }
-
-  if (ethereum?.isCoinbaseWallet) return 'COINBASE'
-
-  if (ethereum?.isTrustWallet) return 'TRUST_WALLET'
-
-  if (checkForBraveBrowser() && ethereum?.isBraveWallet) return 'BRAVE'
-
-  if (ethereum?.isMetaMask) {
-    if (ethereum?.isCoin98) {
-      return 'COIN98'
-    }
-    return 'METAMASK'
-  }
-  return null
+export const detectInjectedType = (): INJECTED_KEY | undefined => {
+  return INJECTED_KEYS.find(walletKey => {
+    const wallet = SUPPORTED_WALLETS[walletKey]
+    return wallet.readyState() === WalletReadyState.Installed
+  })
 }
 
 export const isOverriddenWallet = (wallet: SUPPORTED_WALLET) => {
@@ -473,7 +486,60 @@ export const isChristmasTime = () => {
   return currentTime.month() === 11 && currentTime.date() >= 15
 }
 
+
 export const getLimitOrderContract = (chainId: ChainId) => {
   const { production, development } = NETWORKS_INFO_CONFIG[chainId]?.limitOrder ?? {}
-  return [ENV_TYPE.PROD, ENV_TYPE.STG].includes(ENV_LEVEL) ? production : development
+  return [ENV_TYPE.PROD, ENV_TYPE.STG, ENV_TYPE.ADPR].includes(ENV_LEVEL) ? production : development
+
+export const isSupportLimitOrder = (chainId: ChainId): boolean => {
+  if (!SUPPORTED_NETWORKS.includes(chainId)) return false
+  const limitOrder = NETWORKS_INFO[chainId]?.limitOrder
+  return limitOrder === '*' || (limitOrder || []).includes(ENV_KEY)
+}
+
+export function openFullscreen(elem: any) {
+  if (elem.requestFullscreen) {
+    elem.requestFullscreen()
+  } else if (elem.webkitRequestFullScreen) {
+    /* Old webkit */
+    elem.webkitRequestFullScreen()
+  } else if (elem.webkitRequestFullscreen) {
+    /* New webkit */
+    elem.webkitRequestFullscreen()
+  } else if (elem.mozRequestFullScreen) {
+    elem.mozRequestFullScreen()
+  } else if (elem.msRequestFullscreen) {
+    /* IE11 */
+    elem.msRequestFullscreen()
+  }
+}
+
+export const downloadImage = (data: Blob | string | undefined, filename: string) => {
+  if (!data) return
+  const link = document.createElement('a')
+  link.download = filename
+  link.href = typeof data === 'string' ? data : URL.createObjectURL(data)
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+}
+
+export function buildFlagsForFarmV21({
+  isClaimFee,
+  isSyncFee,
+  isClaimReward,
+  isReceiveNative,
+}: {
+  isClaimFee: boolean
+  isSyncFee: boolean
+  isClaimReward: boolean
+  isReceiveNative: boolean
+}) {
+  let flags = 1
+  if (isReceiveNative) flags = 1
+  if (isClaimFee) flags = flags | (1 << 3)
+  if (isSyncFee) flags = flags | (1 << 2)
+  if (isClaimReward) flags = flags | (1 << 1)
+  return flags
+
 }

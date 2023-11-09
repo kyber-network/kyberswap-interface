@@ -46,7 +46,7 @@ import {
   typeStartPriceInput,
 } from './actions'
 import { Bound, Field, Point, RANGE, TimeframeOptions } from './type'
-import { getRangeTicks, tryParseTick } from './utils'
+import { getRecommendedRangeTicks, tryParseTick } from './utils'
 
 export function useProAmmMintState(): AppState['mintV2'] {
   return useAppSelector(state => state.mintV2)
@@ -128,7 +128,9 @@ export function useProAmmMintActionHandlers(
   }
 }
 
-const ENHANCED_TICK_SPACINGS: {
+// Must be high enough to cover reccommend range
+// But must be low enough to not matching wrong ranges
+const MAX_DIFF_DETECT_TICK_RANGE: {
   [amount in FeeAmount]: number
 } = {
   [FeeAmount.VERY_STABLE]: TICK_SPACINGS[FeeAmount.VERY_STABLE],
@@ -515,20 +517,20 @@ export function useProAmmDerivedMintInfo(
   const currencyBalanceB = currencyBalances?.[Field.CURRENCY_B]
   const errorMessage: ReactNode | undefined = useMemo(() => {
     if (!account) {
-      return <Trans>Connect Wallet</Trans>
+      return <Trans>Connect</Trans>
     }
 
     if (poolState === PoolState.INVALID) {
-      return errorMessage ?? <Trans>Invalid pair</Trans>
+      return <Trans>Invalid pair</Trans>
     }
 
     if (invalidPrice) {
-      return errorMessage ?? <Trans>Invalid price input</Trans>
+      return <Trans>Invalid price input</Trans>
     }
     const { [Field.CURRENCY_A]: currencyAAmount, [Field.CURRENCY_B]: currencyBAmount } = parsedAmounts
 
     if ((!currencyAAmount && !depositADisabled) || (!currencyBAmount && !depositBDisabled)) {
-      return errorMessage ?? <Trans>Enter an amount</Trans>
+      return <Trans>Enter an amount</Trans>
     }
 
     if (
@@ -626,26 +628,38 @@ export function useProAmmDerivedMintInfo(
   const activeRange: RANGE | null = useMemo(() => {
     if (feeAmount && tokenA && tokenB && currentTick !== undefined && tickLower && tickUpper) {
       if (ticksAtLimit[Bound.LOWER] && ticksAtLimit[Bound.UPPER]) return RANGE.FULL_RANGE
-      const rangeValue = RANGE_LIST.find(range => {
-        if (range === RANGE.FULL_RANGE) return false
-        let [rangeTickLower, rangeTickUpper] = getRangeTicks(range, tokenA, tokenB, currentTick, pairFactor)
-        // if (range === RANGE.COMMON) {
-        //   console.group()
-        //   console.log('invertPrice', invertPrice)
-        //   console.log({ currentTick })
-        //   console.log({ rangeTickLower, tickLower })
-        //   console.log({ rangeTickUpper, tickUpper })
-        //   console.groupEnd()
-        // }
-        if (invertPrice) [rangeTickLower, rangeTickUpper] = [rangeTickUpper, rangeTickLower]
-        if (
-          Math.abs(rangeTickLower - tickLower) < ENHANCED_TICK_SPACINGS[feeAmount] &&
-          Math.abs(rangeTickUpper - tickUpper) < ENHANCED_TICK_SPACINGS[feeAmount]
+      const rangeValues: { range: RANGE; maxDiff: number }[] = RANGE_LIST.map(range => {
+        if (range === RANGE.FULL_RANGE) return { range, maxDiff: Infinity }
+        let [recommendedRangeTickLower, recommendedRangeTickUpper] = getRecommendedRangeTicks(
+          range,
+          tokenA,
+          tokenB,
+          currentTick,
+          pairFactor,
         )
-          return true
-        return false
+
+        if (invertPrice)
+          [recommendedRangeTickLower, recommendedRangeTickUpper] = [
+            recommendedRangeTickUpper,
+            recommendedRangeTickLower,
+          ]
+
+        const diffUpper = Math.abs(recommendedRangeTickLower - tickLower)
+        const diffLower = Math.abs(recommendedRangeTickUpper - tickUpper)
+
+        return {
+          range,
+          maxDiff: Math.max(diffUpper, diffLower),
+        }
       })
-      if (rangeValue) return rangeValue
+
+      const filterRange = rangeValues
+        .filter(range => range.maxDiff <= MAX_DIFF_DETECT_TICK_RANGE[feeAmount])
+        .map(range => range.maxDiff)
+      if (!filterRange.length) return null
+      const minDiff = Math.min(...filterRange)
+
+      return rangeValues.find(range => range.maxDiff === minDiff)?.range ?? null
     }
     return null
   }, [currentTick, feeAmount, invertPrice, pairFactor, tickLower, tickUpper, ticksAtLimit, tokenA, tokenB])
@@ -1068,7 +1082,7 @@ export function useProAmmDerivedAllMintInfo(
 
   const errorMessage: ReactNode | undefined = useMemo(() => {
     if (!account) {
-      return <Trans>Connect Wallet</Trans>
+      return <Trans>Connect</Trans>
     }
 
     if (poolState === PoolState.INVALID) {
@@ -1309,7 +1323,6 @@ export function useRangeHopCallbacks(
   tickUpper: number | undefined,
   positionIndex: number,
   pool?: Pool | undefined | null,
-  price?: Price<Token, Token> | undefined | null,
 ) {
   const dispatch = useAppDispatch()
 
@@ -1386,7 +1399,7 @@ export function useRangeHopCallbacks(
       if (range === RANGE.FULL_RANGE) {
         dispatch(setRange({ leftRangeTypedValue: true, rightRangeTypedValue: true, positionIndex }))
       } else if (initTick !== undefined && baseToken && quoteToken && feeAmount) {
-        const [tickLower, tickUpper] = getRangeTicks(range, baseToken, quoteToken, initTick, pairFactor)
+        const [tickLower, tickUpper] = getRecommendedRangeTicks(range, baseToken, quoteToken, initTick, pairFactor)
 
         const parsedLower = tickToPrice(baseToken, quoteToken, tickLower)
         const parsedUpper = tickToPrice(baseToken, quoteToken, tickUpper)
@@ -1412,9 +1425,9 @@ export function useHourlyRateData(
   const dispatch = useAppDispatch()
   const { chainId } = useActiveWeb3React()
   const [ratesData, setRatesData] = useState<[PoolRatesEntry[], PoolRatesEntry[]] | null>(null)
-  const { elasticClient, blockClient } = useKyberSwapConfig()
+  const { elasticClient, blockClient, isEnableBlockService } = useKyberSwapConfig()
+
   useEffect(() => {
-    const controller = new AbortController()
     const currentTime = dayjs.utc()
     let startTime: number
 
@@ -1452,20 +1465,19 @@ export function useHourlyRateData(
       if (isEVM(chainId) && poolAddress) {
         setRatesData(null)
         const ratesData = await getHourlyRateData(
+          isEnableBlockService,
           poolAddress,
           startTime,
           frequency,
           NETWORKS_INFO[chainId],
           elasticClient,
           blockClient,
-          controller.signal,
         )
-        !controller.signal.aborted && ratesData && setRatesData(ratesData)
+        ratesData && setRatesData(ratesData)
       }
     }
     fetch()
-    return () => controller.abort()
-  }, [timeWindow, poolAddress, dispatch, chainId, elasticClient, blockClient])
+  }, [timeWindow, poolAddress, dispatch, chainId, elasticClient, blockClient, isEnableBlockService])
 
   return ratesData
 }

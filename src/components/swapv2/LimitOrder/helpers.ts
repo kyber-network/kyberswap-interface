@@ -6,7 +6,8 @@ import JSBI from 'jsbi'
 import { RESERVE_USD_DECIMALS } from 'constants/index'
 import { tryParseAmount } from 'state/swap/hooks'
 import { formatNumberWithPrecisionRange, formattedNum } from 'utils'
-import { toFixed } from 'utils/numbers'
+import { friendlyError } from 'utils/errorMessage'
+import { uint256ToFraction } from 'utils/numbers'
 
 import { CreateOrderParam, LimitOrder, LimitOrderStatus } from './type'
 
@@ -14,7 +15,7 @@ export const isActiveStatus = (status: LimitOrderStatus) =>
   [LimitOrderStatus.ACTIVE, LimitOrderStatus.OPEN, LimitOrderStatus.PARTIALLY_FILLED].includes(status)
 
 // js number to fraction
-function parseFraction(value: string, decimals = RESERVE_USD_DECIMALS) {
+export function parseFraction(value: string, decimals = RESERVE_USD_DECIMALS) {
   try {
     return new Fraction(
       ethers.utils.parseUnits(value, decimals).toString(),
@@ -26,15 +27,19 @@ function parseFraction(value: string, decimals = RESERVE_USD_DECIMALS) {
 }
 
 // 1.00010000 => 1.0001
-export const removeTrailingZero = (value: string) => parseFloat(value).toString()
+export const removeTrailingZero = (num: string) => {
+  if (num === undefined || num === null) return ''
+  num = String(num)
+  /**
+   * 15.23000: $1 is 15, $2 is ., $3 is 23000 => '$1$2$3' => 15.23
+   */
+  return num.replace(/^([\d,]+)$|^([\d,]+)\.0*$|^([\d,]+\.[0-9]*?)0*$/, '$1$2$3')
+}
 
-const uint256ToFraction = (value: string, decimals = RESERVE_USD_DECIMALS) =>
-  new Fraction(value, JSBI.exponentiate(JSBI.BigInt(10), JSBI.BigInt(decimals)))
-
-export function calcOutput(input: string, rate: string, decimalsOut: number) {
+export function calcOutput(input: string, rate: string | Fraction, decimalsOut: number) {
   try {
-    const value = parseFraction(input).multiply(parseFraction(rate))
-    return toFixed(parseFloat(value.toFixed(decimalsOut)))
+    const value = parseFraction(input).multiply(typeof rate === 'string' ? parseFraction(rate) : rate)
+    return removeTrailingZero(value.toFixed(decimalsOut))
   } catch (error) {
     return ''
   }
@@ -44,7 +49,7 @@ export function calcRate(input: string, output: string, decimalsOut: number) {
   try {
     if (input && input === output) return '1'
     const rate = parseFraction(output, decimalsOut).divide(parseFraction(input))
-    return toFixed(parseFloat(rate.toFixed(16)))
+    return removeTrailingZero(rate.toFixed(16))
   } catch (error) {
     return ''
   }
@@ -54,7 +59,7 @@ export function calcRate(input: string, output: string, decimalsOut: number) {
 export function calcInvert(value: string) {
   try {
     if (parseFloat(value) === 1) return '1'
-    return toFixed(parseFloat(new Fraction(1).divide(parseFraction(value)).toFixed(16)))
+    return removeTrailingZero(new Fraction(1).divide(parseFraction(value)).toFixed(16))
   } catch (error) {
     return ''
   }
@@ -112,7 +117,8 @@ export const formatRateLimitOrder = (order: LimitOrder, invert: boolean) => {
   } catch (error) {
     console.log(error)
   }
-  return formatNumberWithPrecisionRange(parseFloat(rateValue.toFixed(16)), 0, 8)
+  const float = parseFloat(rateValue.toFixed(16))
+  return formatNumberWithPrecisionRange(float, 0, float < 1e-8 ? 16 : 8)
 }
 
 export const calcPercentFilledOrder = (value: string, total: string, decimals: number) => {
@@ -134,10 +140,9 @@ export const getErrorMessage = (error: any) => {
     4001: t`User denied message signature`,
     4002: t`You don't have sufficient fund for this transaction.`,
     4004: t`Invalid signature`,
-    '-32603': t`Error occurred. Please check your device.`,
   }
   const msg = mapErrorMessageByErrCode[errorCode]
-  return msg?.toString?.() || error?.message || 'Error occur. Please try again.'
+  return msg?.toString?.() || friendlyError(error)
 }
 
 export const getPayloadCreateOrder = (params: CreateOrderParam) => {
@@ -151,5 +156,17 @@ export const getPayloadCreateOrder = (params: CreateOrderParam) => {
     makingAmount: parseInputAmount?.quotient?.toString(),
     takingAmount: tryParseAmount(outputAmount, currencyOut)?.quotient?.toString(),
     expiredAt: Math.floor(expiredAt / 1000),
+  }
+}
+
+export const getPayloadTracking = (order: LimitOrder, networkName: string, payload = {}) => {
+  const { makerAssetSymbol, takerAssetSymbol, makingAmount, makerAssetDecimals, id } = order
+  return {
+    ...payload,
+    from_token: makerAssetSymbol,
+    to_token: takerAssetSymbol,
+    from_network: networkName,
+    trade_qty: formatAmountOrder(makingAmount, makerAssetDecimals),
+    order_id: id,
   }
 }

@@ -4,8 +4,10 @@ import styled from 'styled-components'
 
 import CenterPopup from 'components/Announcement/Popups/CenterPopup'
 import SnippetPopup from 'components/Announcement/Popups/SnippetPopup'
-import { PopupType } from 'components/Announcement/type'
+import { PopupType, PrivateAnnouncementType } from 'components/Announcement/type'
 import { ButtonEmpty } from 'components/Button'
+import useNotificationLimitOrder from 'components/swapv2/LimitOrder/useNotificationLimitOrder'
+import { TIMES_IN_SECS } from 'constants/index'
 import { Z_INDEXS } from 'constants/styles'
 import { useActiveWeb3React } from 'hooks'
 import {
@@ -14,10 +16,15 @@ import {
   useRemoveAllPopupByType,
   useToggleNotificationCenter,
 } from 'state/application/hooks'
+import { useSessionInfo } from 'state/authen/hooks'
 import { useTutorialSwapGuide } from 'state/tutorial/hooks'
-import { subscribeAnnouncement } from 'utils/firebase'
+import {
+  subscribeAnnouncement,
+  subscribePrivateAnnouncement,
+  subscribePrivateAnnouncementProfile,
+} from 'utils/firebase'
 
-import PopupItem from './TopRightPopup'
+import TopRightPopup from './TopRightPopup'
 
 const FixedPopupColumn = styled.div<{ hasTopbarPopup: boolean }>`
   position: fixed;
@@ -64,6 +71,7 @@ export default function Popups() {
   const { topRightPopups, centerPopups, snippetPopups, topPopups } = useActivePopups()
   const centerPopup = centerPopups[centerPopups.length - 1]
   const { account, chainId } = useActiveWeb3React()
+  const { userInfo } = useSessionInfo()
 
   const toggleNotificationCenter = useToggleNotificationCenter()
   const [{ show: isShowTutorial = false }] = useTutorialSwapGuide()
@@ -84,15 +92,65 @@ export default function Popups() {
         const { popupType } = item.templateBody
         if ((!isInit.current && popupType === PopupType.CENTER) || popupType !== PopupType.CENTER) {
           // only show PopupType.CENTER when the first visit app
-          addPopup(item, popupType, item.metaMessageId, null)
+          addPopup({
+            content: item,
+            popupType,
+            key: item.metaMessageId,
+            removeAfterMs: null,
+          })
         }
       })
       isInit.current = true
     })
 
-    return () => unsubscribe?.()
-  }, [account, isShowTutorial, addPopup, chainId])
+    const unsubscribePrivate = subscribePrivateAnnouncement(account, data => {
+      data.forEach(item => {
+        switch (item.templateType) {
+          case PrivateAnnouncementType.CROSS_CHAIN:
+            addPopup({
+              content: item,
+              popupType: PopupType.TOP_RIGHT,
+              key: item.metaMessageId,
+              removeAfterMs: 15_000,
+            })
+            break
+          case PrivateAnnouncementType.DIRECT_MESSAGE: {
+            const { templateBody, metaMessageId } = item
+            addPopup({
+              content: item,
+              popupType: templateBody.popupType,
+              key: metaMessageId,
+              account,
+            })
+            break
+          }
+        }
+      })
+    })
+    const unsubscribePrivateProfile = subscribePrivateAnnouncementProfile(userInfo?.identityId, data => {
+      data.forEach(item => {
+        switch (item.templateType) {
+          case PrivateAnnouncementType.PRICE_ALERT:
+            const mins = (Date.now() / 1000 - item.createdAt) / TIMES_IN_SECS.ONE_MIN
+            if (mins <= 5)
+              addPopup({
+                content: item,
+                popupType: PopupType.TOP_RIGHT,
+                key: item.metaMessageId,
+                removeAfterMs: 15_000,
+              })
+            break
+        }
+      })
+    })
+    return () => {
+      unsubscribe?.()
+      unsubscribePrivate?.()
+      unsubscribePrivateProfile?.()
+    }
+  }, [account, isShowTutorial, addPopup, chainId, userInfo?.identityId])
 
+  useNotificationLimitOrder()
   const totalTopRightPopup = topRightPopups.length
 
   return (
@@ -113,7 +171,7 @@ export default function Popups() {
           </ActionWrapper>
 
           {topRightPopups.slice(0, MAX_NOTIFICATION).map((item, i) => (
-            <PopupItem key={item.key} popup={item} hasOverlay={i === MAX_NOTIFICATION - 1} />
+            <TopRightPopup key={item.key} popup={item} hasOverlay={i === MAX_NOTIFICATION - 1} />
           ))}
         </FixedPopupColumn>
       )}

@@ -221,7 +221,7 @@ function ProMMDepositNFTModal({
     <Select role="button" onClick={() => setShowMenu(prev => !prev)}>
       {filterOptions.find(item => item.code === activeFilter)?.value}
 
-      <DropdownIcon rotate={showMenu} />
+      <DropdownIcon isRotate={showMenu} />
 
       {showMenu && (
         <SelectMenu ref={ref}>
@@ -336,6 +336,7 @@ function ProMMDepositNFTModal({
             <Flex justifyContent="space-between" marginTop="24px">
               <div></div>
               <ButtonPrimary
+                id="deposit-selected-button"
                 fontSize="14px"
                 padding="10px 24px"
                 width="fit-content"

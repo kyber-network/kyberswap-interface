@@ -22,10 +22,14 @@ const WETH_ONLY: ChainTokenList = {
   [ChainId.AURORA]: [WETH[ChainId.AURORA]],
   [ChainId.BTTC]: [WETH[ChainId.BTTC]],
   [ChainId.ARBITRUM]: [WETH[ChainId.ARBITRUM]],
-  [ChainId.VELAS]: [WETH[ChainId.VELAS]],
-  [ChainId.OASIS]: [WETH[ChainId.OASIS]],
   [ChainId.OPTIMISM]: [WETH[ChainId.OPTIMISM]],
+  [ChainId.ZKSYNC]: [WETH[ChainId.ZKSYNC]],
   [ChainId.SOLANA]: [WETH[ChainId.SOLANA]],
+  [ChainId.LINEA]: [WETH[ChainId.LINEA]],
+  [ChainId.ZKEVM]: [WETH[ChainId.ZKEVM]],
+  [ChainId.BASE]: [WETH[ChainId.BASE]],
+  [ChainId.SCROLL]: [WETH[ChainId.SCROLL]],
+  [ChainId.SOLANA_DEVNET]: [WETH[ChainId.SOLANA_DEVNET]],
 }
 
 // used to construct intermediary pairs for trading
@@ -76,8 +80,6 @@ export const BASES_TO_CHECK_TRADES_AGAINST: ChainTokenList = {
   [ChainId.FANTOM]: [...WETH_ONLY[ChainId.FANTOM], DAI[ChainId.FANTOM], USDC[ChainId.FANTOM], USDT[ChainId.FANTOM]],
   [ChainId.CRONOS]: [...WETH_ONLY[ChainId.CRONOS], DAI[ChainId.CRONOS], USDC[ChainId.CRONOS], USDT[ChainId.CRONOS]],
   [ChainId.AURORA]: [...WETH_ONLY[ChainId.AURORA], DAI[ChainId.AURORA], USDC[ChainId.AURORA], USDT[ChainId.AURORA]],
-  [ChainId.VELAS]: [...WETH_ONLY[ChainId.VELAS], USDC[ChainId.VELAS], USDT[ChainId.VELAS]],
-  [ChainId.OASIS]: [...WETH_ONLY[ChainId.OASIS], USDC[ChainId.OASIS], USDT[ChainId.OASIS]],
   [ChainId.BTTC]: [
     ...WETH_ONLY[ChainId.BTTC],
     DAI[ChainId.BTTC],
@@ -146,22 +148,37 @@ export const SUGGESTED_BASES: ChainTokenList = {
   ],
   [ChainId.ARBITRUM]: [
     ...WETH_ONLY[ChainId.ARBITRUM],
+    new Token(ChainId.ARBITRUM, '0xaf88d065e77c8cC2239327C5EDb3A432268e5831', 6, 'USDC', 'USDC'),
     DAI[ChainId.ARBITRUM],
-    USDC[ChainId.ARBITRUM],
+    USDC[ChainId.ARBITRUM], // USDC.e
     USDT[ChainId.ARBITRUM],
     WBTC_ARBITRUM,
     new Token(ChainId.ARBITRUM, '0x5979D7b546E38E414F7E9822514be443A4800529', 18, 'wstETH', 'Lido Wrapped Staked ETH'),
   ],
   [ChainId.BTTC]: [...WETH_ONLY[ChainId.BTTC], DAI[ChainId.BTTC], USDC[ChainId.BTTC], USDT[ChainId.BTTC]],
-  [ChainId.VELAS]: [...WETH_ONLY[ChainId.VELAS], USDC[ChainId.VELAS], USDT[ChainId.VELAS]],
-  [ChainId.OASIS]: [...WETH_ONLY[ChainId.OASIS], USDC[ChainId.OASIS], USDT[ChainId.OASIS]],
   [ChainId.OPTIMISM]: [
     ...WETH_ONLY[ChainId.OPTIMISM],
     USDC[ChainId.OPTIMISM],
     new Token(ChainId.OPTIMISM, '0x4200000000000000000000000000000000000042', 18, 'OP', 'Optimism'),
     USDT[ChainId.OPTIMISM],
     DAI[ChainId.OPTIMISM],
-    new Token(ChainId.OPTIMISM, '0x1F32b1c2345538c0c6f582fCB022739c4A194Ebb', 18, 'wstETH', 'Lido Wrapped Staked ETH"'),
+    new Token(ChainId.OPTIMISM, '0x1F32b1c2345538c0c6f582fCB022739c4A194Ebb', 18, 'wstETH', 'Lido Wrapped Staked ETH'),
   ],
   [ChainId.SOLANA]: [...WETH_ONLY[ChainId.SOLANA], USDC[ChainId.SOLANA], USDT[ChainId.SOLANA]],
+  [ChainId.ZKSYNC]: [
+    ...WETH_ONLY[ChainId.ZKSYNC],
+    USDC[ChainId.ZKSYNC],
+    USDT[ChainId.ZKSYNC],
+    new Token(ChainId.ZKSYNC, '0xfC7E56298657B002b3e656400E746b7212912757', 6, 'zkUSD', 'zkUSD'),
+    new Token(ChainId.ZKSYNC, '0x8e86e46278518efc1c5ced245cba2c7e3ef11557', 6, 'USD+', 'USD+'),
+    new Token(ChainId.ZKSYNC, '0x503234f203fc7eb888eec8513210612a43cf6115', 18, 'LUSD', 'LUSD'),
+    new Token(ChainId.ZKSYNC, '0xbbeb516fb02a01611cbbe0453fe3c580d7281011', 8, 'wBTC', 'wBTC'),
+  ],
+  [ChainId.ZKEVM]: [...WETH_ONLY[ChainId.ZKEVM], USDC[ChainId.ZKEVM], USDT[ChainId.ZKEVM], DAI[ChainId.ZKEVM]],
+  [ChainId.LINEA]: [
+    ...WETH_ONLY[ChainId.LINEA],
+    new Token(ChainId.LINEA, '0x7d43aabc515c356145049227cee54b608342c0ad', 18, 'BUSD', 'BUSD'),
+  ],
+  [ChainId.BASE]: [...WETH_ONLY[ChainId.BASE], USDC[ChainId.BASE], DAI[ChainId.BASE]],
+  [ChainId.SCROLL]: [...WETH_ONLY[ChainId.SCROLL], USDT[ChainId.SCROLL], USDC[ChainId.SCROLL], DAI[ChainId.SCROLL]],
 }

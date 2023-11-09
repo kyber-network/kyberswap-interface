@@ -15,6 +15,7 @@ import TransactionConfirmationModal, { TransactionErrorContent } from 'component
 import CurrencyListHasBalance from 'components/WalletPopup/SendToken/CurrencyListSelect'
 import WarningBrave from 'components/WalletPopup/SendToken/WarningBrave'
 import useSendToken from 'components/WalletPopup/SendToken/useSendToken'
+import { TRANSACTION_STATE_DEFAULT } from 'constants/index'
 import { useActiveWeb3React } from 'hooks'
 import useENS from 'hooks/useENS'
 import { useOnClickOutside } from 'hooks/useOnClickOutside'
@@ -23,9 +24,9 @@ import { tryParseAmount } from 'state/swap/hooks'
 import { useTokenPrices } from 'state/tokenPrices/hooks'
 import { useCurrencyBalance } from 'state/wallet/hooks'
 import { useCheckAddressSolana } from 'state/wallet/solanaHooks'
-import { TRANSACTION_STATE_DEFAULT, TransactionFlowState } from 'types'
+import { TransactionFlowState } from 'types/TransactionFlowState'
 import { formattedNum, shortenAddress } from 'utils'
-import { errorFriendly } from 'utils/dmm'
+import { friendlyError } from 'utils/errorMessage'
 import { maxAmountSpend } from 'utils/maxAmountSpend'
 
 const Label = styled.label<{ color?: string }>`
@@ -141,7 +142,7 @@ export default function SendToken({
       setFlowState(state => ({
         ...state,
         attemptingTxn: false,
-        errorMessage: errorFriendly(error?.message ?? 'Error occur, please try again'),
+        errorMessage: friendlyError(error),
       }))
     }
   }

@@ -1,6 +1,7 @@
 import { Currency, CurrencyAmount, Token } from '@kyberswap/ks-sdk-core'
 import { t } from '@lingui/macro'
 import { useCallback, useEffect, useState } from 'react'
+import { useDispatch } from 'react-redux'
 
 import Modal from 'components/Modal'
 import { useSwapFormContext } from 'components/SwapForm/SwapFormContext'
@@ -11,6 +12,8 @@ import {
   TransactionSubmittedContent,
 } from 'components/TransactionConfirmationModal'
 import { useActiveWeb3React } from 'hooks'
+import { permitError } from 'state/user/actions'
+import { captureSwapError } from 'utils/sentry'
 
 import ConfirmSwapModalContent from './ConfirmSwapModalContent'
 
@@ -22,13 +25,13 @@ type Props = {
 
   onDismiss: () => void
   swapCallback: (() => Promise<string>) | undefined
-  onRetryBuild: () => void
 }
 
 const SwapModal: React.FC<Props> = props => {
-  const { isOpen, tokenAddToMetaMask, onDismiss, swapCallback, buildResult, isBuildingRoute, onRetryBuild } = props
-  const { chainId } = useActiveWeb3React()
+  const { isOpen, tokenAddToMetaMask, onDismiss, swapCallback, buildResult, isBuildingRoute } = props
+  const { chainId, account } = useActiveWeb3React()
 
+  const dispatch = useDispatch()
   // modal and loading
   const [{ error, isAttemptingTx, txHash }, setSwapState] = useState<{
     error: string
@@ -46,7 +49,7 @@ const SwapModal: React.FC<Props> = props => {
 
   const amountOut = currencyOut && CurrencyAmount.fromRawAmount(currencyOut, buildResult?.data?.amountOut || '0')
   // text to show while loading
-  const pendingText = `Swapping ${routeSummary?.parsedAmountIn?.toSignificant(6)} ${
+  const pendingText = t`Swapping ${routeSummary?.parsedAmountIn?.toSignificant(6)} ${
     currencyIn?.symbol
   } for ${amountOut?.toSignificant(6)} ${currencyOut?.symbol}`
 
@@ -83,6 +86,18 @@ const SwapModal: React.FC<Props> = props => {
     })
   }
 
+  const handleErrorDismiss = () => {
+    if (
+      ((buildResult?.error && buildResult.error.toLowerCase().includes('permit')) ||
+        (error && error.toLowerCase().includes('permit'))) &&
+      routeSummary &&
+      account
+    ) {
+      dispatch(permitError({ chainId, address: routeSummary.parsedAmountIn.currency.wrapped.address, account }))
+    }
+    handleDismiss()
+  }
+
   const handleConfirmSwap = async () => {
     if (!swapCallback) {
       return
@@ -93,7 +108,8 @@ const SwapModal: React.FC<Props> = props => {
       const hash = await swapCallback()
       handleTxSubmitted(hash)
     } catch (e) {
-      handleError(e.message || t`Something went wrong. Please try again`)
+      captureSwapError(e)
+      handleError(e.message)
     }
   }
 
@@ -115,16 +131,15 @@ const SwapModal: React.FC<Props> = props => {
     }
 
     if (error) {
-      return <TransactionErrorContent onDismiss={handleDismiss} message={error} />
+      return <TransactionErrorContent onDismiss={handleErrorDismiss} message={error} />
     }
 
     return (
       <ConfirmSwapModalContent
         isBuildingRoute={isBuildingRoute}
         errorWhileBuildRoute={buildResult?.error}
-        onDismiss={handleDismiss}
+        onDismiss={handleErrorDismiss}
         onSwap={handleConfirmSwap}
-        onRetry={onRetryBuild}
         buildResult={buildResult}
       />
     )

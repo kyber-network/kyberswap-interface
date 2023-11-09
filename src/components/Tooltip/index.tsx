@@ -1,68 +1,109 @@
 import { ReactNode, useCallback, useRef, useState } from 'react'
 import { isMobile } from 'react-device-detect'
-import { Flex, Text } from 'rebass'
+import { Text } from 'rebass'
 import styled from 'styled-components'
 
 import Popover, { PopoverProps } from 'components/Popover'
+import Row from 'components/Row'
 
-const TooltipContainer = styled.div<{ width?: string; size?: number }>`
+const TooltipContainer = styled.div<{ width?: string; maxWidth?: string; size?: number }>`
   width: ${({ width }) => width || '228px'};
+  max-width: ${({ maxWidth }) => maxWidth || ''};
   padding: 0.5rem 0.75rem;
   line-height: 150%;
   font-weight: 400;
   font-size: ${({ size }) => size || 12}px;
 `
 
-export const TextDashed = styled(Text)`
-  border-bottom: 1px dashed ${({ theme }) => theme.border};
+export const TextDashed = styled(Text)<{ color?: string; underlineColor?: string }>`
   width: fit-content;
+  border-bottom: 1px dotted ${({ theme, underlineColor }) => underlineColor || theme.border};
+`
+
+export const TextDotted = styled(Text)<{ $underlineColor?: string }>`
+  width: fit-content;
+  border-bottom: 1px dotted ${({ theme, $underlineColor }) => $underlineColor || theme.border};
 `
 
 interface TooltipProps extends Omit<PopoverProps, 'content'> {
   text: string | ReactNode
+  delay?: number
   width?: string
+  maxWidth?: string
   size?: number
   disableTooltip?: boolean
   onMouseEnter?: React.MouseEventHandler<HTMLDivElement>
   onMouseLeave?: React.MouseEventHandler<HTMLDivElement>
   children?: React.ReactNode
+  dataTestId?: string
 }
 
-export default function Tooltip({ text, width, size, onMouseEnter, onMouseLeave, ...rest }: TooltipProps) {
+export default function Tooltip({
+  text,
+  width,
+  maxWidth,
+  size,
+  onMouseEnter,
+  onMouseLeave,
+  show,
+  dataTestId,
+  ...rest
+}: TooltipProps) {
   return (
     <Popover
       content={
         text ? (
-          <TooltipContainer width={width} size={size} onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave}>
+          <TooltipContainer
+            width={width}
+            maxWidth={maxWidth}
+            size={size}
+            onMouseEnter={onMouseEnter}
+            onMouseLeave={onMouseLeave}
+            data-testid={dataTestId}
+          >
             {text}
           </TooltipContainer>
         ) : null
       }
+      show={!!text && show}
       {...rest}
     />
   )
 }
 
-export function MouseoverTooltip({ children, disableTooltip, ...rest }: Omit<TooltipProps, 'show'>) {
+export function MouseoverTooltip({ children, disableTooltip, delay, ...rest }: Omit<TooltipProps, 'show'>) {
   const [show, setShow] = useState(false)
   const [closeTimeout, setCloseTimeout] = useState<NodeJS.Timeout | null>(null)
-  const ref = useRef(null)
+  const hovering = useRef(false)
   const open = useCallback(() => {
     if (!!rest.text) {
-      setShow(true)
+      hovering.current = true
+      setTimeout(() => {
+        if (hovering.current) setShow(true)
+      }, delay || 50)
+
       if (closeTimeout) {
         clearTimeout(closeTimeout)
         setCloseTimeout(null)
       }
     }
-  }, [rest.text, closeTimeout])
-  const close = useCallback(() => setCloseTimeout(setTimeout(() => setShow(false), 50)), [])
+  }, [rest.text, closeTimeout, delay])
+  const close = useCallback(
+    () =>
+      setCloseTimeout(
+        setTimeout(() => {
+          hovering.current = false
+          setShow(false)
+        }, 50),
+      ),
+    [],
+  )
   if (disableTooltip) return <>{children}</>
   return (
     <Tooltip {...rest} show={show} onMouseEnter={open} onMouseLeave={close}>
-      <Flex ref={ref} onMouseOver={open} onMouseLeave={close} alignItems="center">
+      <Row onMouseOver={open} onMouseLeave={close}>
         {children}
-      </Flex>
+      </Row>
     </Tooltip>
   )
 }

@@ -87,44 +87,7 @@ export interface UserPosition {
 
 const PROMM_USER_POSITIONS = gql`
   query positions($owner: Bytes!) {
-    depositedPositions(where: { user: $owner }) {
-      id
-      position {
-        id
-        owner
-        liquidity
-        tickLower {
-          tickIdx
-        }
-        tickUpper {
-          tickIdx
-        }
-        pool {
-          id
-          feeTier
-          tick
-          liquidity
-          reinvestL
-          sqrtPrice
-          token0 {
-            id
-            derivedETH
-            symbol
-            decimals
-          }
-          token1 {
-            id
-            derivedETH
-            symbol
-            decimals
-          }
-        }
-      }
-    }
-    bundles {
-      ethPriceUSD
-    }
-    positions(where: { owner: $owner, liquidity_gt: 0 }) {
+    positions(where: { ownerOriginal: $owner, liquidity_gt: 0 }) {
       id
       owner
       liquidity
@@ -170,7 +133,7 @@ export interface UserPositionResult {
 /**
  * Get my liquidity for all pools
  */
-export function useUserProMMPositions(): UserPositionResult {
+export function useUserProMMPositions(prices: { [address: string]: number }): UserPositionResult {
   const { chainId, account, isEVM } = useActiveWeb3React()
   const { elasticClient } = useKyberSwapConfig()
 
@@ -183,42 +146,41 @@ export function useUserProMMPositions(): UserPositionResult {
     skip: !isEVM,
   })
 
-  const ethPriceUSD = Number(data?.bundles?.[0]?.ethPriceUSD)
-
   const positions = useMemo(() => {
-    const farmPositions = data?.depositedPositions?.map((p: any) => p.position) || []
-    return farmPositions.concat(data?.positions || []).map((p: UserPosition) => {
-      const token0 = new Token(chainId, p.pool.token0.id, Number(p.pool.token0.decimals), p.pool.token0.symbol)
-      const token1 = new Token(chainId, p.pool.token1.id, Number(p.pool.token1.decimals), p.pool.token1.symbol)
+    return (
+      data?.positions.map((p: UserPosition) => {
+        const token0 = new Token(chainId, p.pool.token0.id, Number(p.pool.token0.decimals), p.pool.token0.symbol)
+        const token1 = new Token(chainId, p.pool.token1.id, Number(p.pool.token1.decimals), p.pool.token1.symbol)
 
-      const pool = new Pool(
-        token0,
-        token1,
-        Number(p.pool.feeTier),
-        JSBI.BigInt(p.pool.sqrtPrice),
-        JSBI.BigInt(p.pool.liquidity),
-        JSBI.BigInt(p.pool.reinvestL),
-        Number(p.pool.tick),
-      )
+        const pool = new Pool(
+          token0,
+          token1,
+          Number(p.pool.feeTier),
+          JSBI.BigInt(p.pool.sqrtPrice),
+          JSBI.BigInt(p.pool.liquidity),
+          JSBI.BigInt(p.pool.reinvestL),
+          Number(p.pool.tick),
+        )
 
-      const position = new Position({
-        pool,
-        liquidity: p.liquidity,
-        tickLower: Number(p.tickLower.tickIdx),
-        tickUpper: Number(p.tickUpper.tickIdx),
-      })
+        const position = new Position({
+          pool,
+          liquidity: p.liquidity,
+          tickLower: Number(p.tickLower.tickIdx),
+          tickUpper: Number(p.tickUpper.tickIdx),
+        })
 
-      const token0Amount = CurrencyAmount.fromRawAmount(position.pool.token0, position.amount0.quotient)
-      const token1Amount = CurrencyAmount.fromRawAmount(position.pool.token1, position.amount1.quotient)
+        const token0Amount = CurrencyAmount.fromRawAmount(position.pool.token0, position.amount0.quotient)
+        const token1Amount = CurrencyAmount.fromRawAmount(position.pool.token1, position.amount1.quotient)
 
-      const token0Usd = parseFloat(token0Amount.toFixed()) * ethPriceUSD * parseFloat(p.pool.token0.derivedETH)
-      const token1Usd = parseFloat(token1Amount.toFixed()) * ethPriceUSD * parseFloat(p.pool.token1.derivedETH)
+        const token0Usd = parseFloat(token0Amount.toFixed()) * (prices[token0.address] || 0)
+        const token1Usd = parseFloat(token1Amount.toFixed()) * (prices[token1.address] || 0)
 
-      const userPositionUSD = token0Usd + token1Usd
+        const userPositionUSD = token0Usd + token1Usd
 
-      return { tokenId: p.id, address: p.pool.id, valueUSD: userPositionUSD }
-    })
-  }, [data, chainId, ethPriceUSD])
+        return { tokenId: p.id, address: p.pool.id, valueUSD: userPositionUSD }
+      }) || []
+    )
+  }, [data, chainId, prices])
 
   const userLiquidityUsdByPool = useMemo(
     () =>
@@ -239,25 +201,23 @@ export function useUserProMMPositions(): UserPositionResult {
 
 export const usePoolBlocks = () => {
   const { chainId } = useActiveWeb3React()
-  const { blockClient } = useKyberSwapConfig()
+  const { blockClient, isEnableBlockService } = useKyberSwapConfig()
 
   const utcCurrentTime = dayjs()
   const last24h = utcCurrentTime.subtract(1, 'day').startOf('minute').unix()
 
-  const [blocks, setBlocks] = useState<{ number: number }[]>([])
+  const [block, setBlock] = useState<number | undefined>(undefined)
 
   useEffect(() => {
     const getBlocks = async () => {
-      const blocks = await getBlocksFromTimestamps(blockClient, [last24h], chainId)
-      setBlocks(blocks)
+      const [block] = await getBlocksFromTimestamps(isEnableBlockService, blockClient, [last24h], chainId)
+      setBlock(block?.number)
     }
 
     getBlocks()
-  }, [chainId, last24h, blockClient])
+  }, [chainId, last24h, blockClient, isEnableBlockService])
 
-  const [blockLast24h] = blocks ?? []
-
-  return { blockLast24h: blockLast24h?.number }
+  return { blockLast24h: block }
 }
 
 export function useSelectedPool() {

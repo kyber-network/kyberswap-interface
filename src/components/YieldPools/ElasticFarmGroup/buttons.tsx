@@ -75,6 +75,7 @@ export const DepositButton: React.FC<React.ComponentPropsWithoutRef<'button'>> =
   const renderButton = () => {
     return (
       <ButtonOutlined
+        id="deposit-button"
         disabled={disabled}
         onClick={onClick}
         style={{
@@ -99,7 +100,7 @@ export const DepositButton: React.FC<React.ComponentPropsWithoutRef<'button'>> =
 
   return (
     <MouseoverTooltipDesktopOnly
-      text={t`Deposit your liquidity positions (i.e. your NFT tokens) into the farming contract. Then stake them into the farm`}
+      text={t`Deposit your liquidity positions (i.e. your NFT tokens) into the farming contract. Then stake them into the farm.`}
       style={{ flex: 1 }}
     >
       {renderButton()}
@@ -113,8 +114,6 @@ export const WithdrawButton: React.FC<React.ComponentPropsWithoutRef<'button'>> 
   style,
   ...others
 }) => {
-  const upToExtraSmall = useMedia(`(max-width: ${MEDIA_WIDTHS.upToExtraSmall}px)`)
-
   const renderButton = () => {
     return (
       <ButtonOutlined
@@ -122,7 +121,7 @@ export const WithdrawButton: React.FC<React.ComponentPropsWithoutRef<'button'>> 
         onClick={onClick}
         disabled={disabled}
         style={{
-          width: upToExtraSmall ? '100%' : 'max-content',
+          width: 'max-content',
           height: '38px',
           padding: '12px',
           ...style,
@@ -143,7 +142,7 @@ export const WithdrawButton: React.FC<React.ComponentPropsWithoutRef<'button'>> 
 
   return (
     <MouseoverTooltipDesktopOnly
-      text={t`Withdraw your liquidity positions (i.e. your NFT tokens) from the farming contract`}
+      text={t`Withdraw your liquidity positions (i.e. your NFT tokens) from the farming contract.`}
       style={{ flex: 1 }}
     >
       {renderButton()}
@@ -157,8 +156,6 @@ export const HarvestAllButton: React.FC<React.ComponentPropsWithoutRef<'button'>
   style,
   ...others
 }) => {
-  const upToExtraSmall = useMedia(`(max-width: ${MEDIA_WIDTHS.upToExtraSmall}px)`)
-
   return (
     <ButtonPrimary
       onClick={onClick}
@@ -166,7 +163,7 @@ export const HarvestAllButton: React.FC<React.ComponentPropsWithoutRef<'button'>
       style={{
         boxShadow: '0px 4px 4px rgba(0, 0, 0, 0.16)',
         whiteSpace: 'nowrap',
-        width: upToExtraSmall ? '100%' : 'max-content',
+        width: 'max-content',
         height: '38px',
         ...style,
       }}

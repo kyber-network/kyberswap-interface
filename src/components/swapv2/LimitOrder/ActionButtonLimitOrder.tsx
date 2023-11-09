@@ -1,4 +1,4 @@
-import { Currency } from '@kyberswap/ks-sdk-core'
+import { Currency, WETH } from '@kyberswap/ks-sdk-core'
 import { Trans, t } from '@lingui/macro'
 import { Text } from 'rebass'
 
@@ -12,14 +12,17 @@ import {
 } from 'components/Button'
 import ProgressSteps from 'components/ProgressSteps'
 import { RowBetween } from 'components/Row'
+import { EditOrderInfo } from 'components/swapv2/LimitOrder/type'
 import { useActiveWeb3React } from 'hooks'
 import { ApprovalState } from 'hooks/useApproveCallback'
 import { useWalletModalToggle } from 'state/application/hooks'
+import { isTokenNative } from 'utils/tokenInfo'
 
 export default function ActionButtonLimitOrder({
   showWrap,
   approval,
   currencyIn,
+  currencyOut,
   isWrappingEth,
   wrapInputError,
   approveCallback,
@@ -32,8 +35,10 @@ export default function ActionButtonLimitOrder({
   approvalSubmitted,
   showApproveFlow,
   showWarning,
+  editOrderInfo,
 }: {
   currencyIn: Currency | undefined
+  currencyOut: Currency | undefined
   approval: ApprovalState
   showWrap: boolean
   isWrappingEth: boolean
@@ -48,10 +53,13 @@ export default function ActionButtonLimitOrder({
   approveCallback: () => Promise<void>
   onWrapToken: () => Promise<void>
   showPreview: () => void
+  editOrderInfo?: EditOrderInfo
 }) {
+  const { isEdit, renderCancelButtons } = editOrderInfo || {}
   const disableBtnApproved =
     approval === ApprovalState.PENDING ||
-    ((approval !== ApprovalState.NOT_APPROVED || approvalSubmitted || !!hasInputError) && enoughAllowance)
+    !!hasInputError ||
+    ((approval !== ApprovalState.NOT_APPROVED || approvalSubmitted) && enoughAllowance)
 
   const disableBtnReview =
     checkingAllowance ||
@@ -59,14 +67,15 @@ export default function ActionButtonLimitOrder({
     !!hasInputError ||
     approval !== ApprovalState.APPROVED ||
     isWrappingEth ||
-    (showWrap && !isWrappingEth)
+    (showWrap && !isWrappingEth) ||
+    (currencyIn?.equals(WETH[currencyIn.chainId]) && isTokenNative(currencyOut, currencyOut?.chainId))
 
   const { account } = useActiveWeb3React()
   const toggleWalletModal = useWalletModalToggle()
   if (!account)
     return (
       <ButtonLight onClick={toggleWalletModal}>
-        <Trans>Connect Wallet</Trans>
+        <Trans>Connect</Trans>
       </ButtonLight>
     )
 
@@ -92,7 +101,7 @@ export default function ActionButtonLimitOrder({
               approval={approval}
             />
           )}
-          <ButtonError width="48%" id="swap-button" disabled={disableBtnReview} onClick={showPreview}>
+          <ButtonError width="48%" id="review-order-button" disabled={disableBtnReview} onClick={showPreview}>
             <Text fontSize={16} fontWeight={500}>
               <Trans>Review Order</Trans>
             </Text>
@@ -107,9 +116,15 @@ export default function ActionButtonLimitOrder({
       {checkingAllowance ? <Trans>Checking Allowance...</Trans> : <Trans>Review Order</Trans>}
     </Text>
   )
+
+  if (isEdit) {
+    return checkingAllowance ? <ButtonPrimary disabled>{contentButton}</ButtonPrimary> : renderCancelButtons?.() || null
+  }
+
   if (showWarning && !disableBtnReview) return <ButtonWarning onClick={showPreview}>{contentButton}</ButtonWarning>
+
   return (
-    <ButtonPrimary onClick={showPreview} disabled={disableBtnReview}>
+    <ButtonPrimary id="review-order-button" onClick={showPreview} disabled={disableBtnReview}>
       {contentButton}
     </ButtonPrimary>
   )

@@ -6,7 +6,6 @@ import styled from 'styled-components'
 
 import NotificationImage from 'assets/images/notification_default.png'
 import CtaButton from 'components/Announcement/Popups/CtaButton'
-import { useNavigateCtaPopup } from 'components/Announcement/helper'
 import { AnnouncementTemplatePopup } from 'components/Announcement/type'
 import Modal from 'components/Modal'
 import Row from 'components/Row'
@@ -14,6 +13,7 @@ import { Z_INDEXS } from 'constants/styles'
 import useTheme from 'hooks/useTheme'
 import { useDetailAnnouncement } from 'state/application/hooks'
 import { MEDIA_WIDTHS } from 'theme'
+import { useNavigateToUrl } from 'utils/redirect'
 import { escapeScriptHtml } from 'utils/string'
 
 const PaginationButton = styled.div`
@@ -132,11 +132,16 @@ const Desc = styled.div`
   font-size: 14px;
   line-height: 20px;
   > * {
-    margin: 0;
+    :first-child {
+      margin-top: 0;
+    }
+    :last-child {
+      margin-bottom: 0;
+    }
   }
 `
 
-const formatCtaName = (ctaName: string, ctaUrl: string) => {
+export const formatCtaName = (ctaName: string, ctaUrl: string) => {
   const formatName = ctaName.replace('{{.ctaName}}', '') // fallback backend return empty data
   if (!ctaUrl) return formatName || t`Close`
   return formatName || t`Detail`
@@ -151,7 +156,7 @@ export default function DetailAnnouncementPopup({
   const isMobile = useMedia(`(max-width: ${MEDIA_WIDTHS.upToMedium}px)`)
   const [{ selectedIndex, announcements = [], hasMore }, setAnnouncementDetail] = useDetailAnnouncement()
 
-  const navigate = useNavigateCtaPopup()
+  const navigate = useNavigateToUrl()
 
   const onDismiss = () => setAnnouncementDetail({ selectedIndex: null, announcements: [], hasMore: false })
   const onNext = async () => {
@@ -207,7 +212,7 @@ export default function DetailAnnouncementPopup({
               <StyledCtaButton
                 key={item.url}
                 data={item}
-                color={item.name === t`Close` ? 'outline' : 'primary'}
+                color={!item.url ? 'outline' : 'primary'}
                 onClick={() => onClickCta(item.url)}
               />
             ))}

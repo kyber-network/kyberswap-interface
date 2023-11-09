@@ -28,8 +28,7 @@ import invariant from 'tiny-invariant'
 
 import { AbortedError, ETHER_ADDRESS, KYBERSWAP_SOURCE, ZERO_ADDRESS_SOLANA, sentryRequestId } from 'constants/index'
 import { NETWORKS_INFO, isEVM } from 'constants/networks'
-import { FeeConfig } from 'hooks/useSwapV2Callback'
-import { AggregationComparer, SolanaEncode } from 'state/swap/types'
+import { SolanaEncode } from 'state/swap/types'
 
 import fetchWaiting from './fetchWaiting'
 import {
@@ -38,6 +37,26 @@ import {
   createUnwrapSOLInstruction,
 } from './solanaInstructions'
 import { convertToVersionedTx } from './versionedTx'
+
+const toCurrencyAmount = function (value: string, currency: Currency): CurrencyAmount<Currency> {
+  try {
+    return TokenAmount.fromRawAmount(currency, JSBI.BigInt(value))
+  } catch (e) {
+    return TokenAmount.fromRawAmount(currency, 0)
+  }
+}
+
+const isResultInvalid = (result: any) => {
+  return (
+    !result ||
+    !result.inputAmount ||
+    !result.outputAmount ||
+    typeof result.swaps?.[0]?.[0].pool !== 'string' ||
+    !result.tokens ||
+    result.inputAmount === '0' ||
+    result.outputAmount === '0'
+  )
+}
 
 type Swap = {
   pool: string
@@ -203,7 +222,6 @@ export class Aggregator {
    * @param slippageTolerance
    * @param deadline
    * @param to
-   * @param feeConfig
    * @param signal
    * @param minimumLoadingTime
    */
@@ -216,9 +234,9 @@ export class Aggregator {
     slippageTolerance: number,
     deadline: number | undefined,
     to: string,
-    feeConfig: FeeConfig | undefined,
     signal: AbortSignal,
     minimumLoadingTime: number,
+    permit?: string | null,
   ): Promise<Aggregator | null> {
     const programState = new Keypair()
     const amountIn = currencyAmountIn
@@ -234,7 +252,6 @@ export class Aggregator {
         ? ETHER_ADDRESS
         : WETH[currencyOut.chainId].address
       : tokenOut.address
-
     if (tokenInAddress && tokenOutAddress) {
       const search = new URLSearchParams({
         // Trade config
@@ -248,16 +265,11 @@ export class Aggregator {
         deadline: deadline?.toString() ?? '',
         to,
 
-        // Fee config
-        chargeFeeBy: feeConfig?.chargeFeeBy ?? '',
-        feeReceiver: feeConfig?.feeReceiver ?? '',
-        isInBps: feeConfig?.isInBps !== undefined ? (feeConfig.isInBps ? '1' : '0') : '',
-        feeAmount: feeConfig?.feeAmount ?? '',
-
         programState: programState.publicKey.toBase58() ?? '',
 
         // Client data
         clientData: KYBERSWAP_SOURCE,
+        permit: permit ?? '',
       })
       try {
         const response = await fetchWaiting(
@@ -273,30 +285,14 @@ export class Aggregator {
         )
         if (Math.round(response.status / 100) !== 2) throw new Error('Aggregator status fail: ' + response.status)
         const result = await response.json()
-        if (
-          !result ||
-          !result.inputAmount ||
-          !result.outputAmount ||
-          typeof result.swaps?.[0]?.[0].pool !== 'string' ||
-          !result.tokens ||
-          result.inputAmount === '0' ||
-          result.outputAmount === '0'
-        ) {
+        if (isResultInvalid(result)) {
           return null
-        }
-
-        const toCurrencyAmount = function (value: string, currency: Currency): CurrencyAmount<Currency> {
-          try {
-            return TokenAmount.fromRawAmount(currency, JSBI.BigInt(value))
-          } catch (e) {
-            return TokenAmount.fromRawAmount(currency, 0)
-          }
         }
 
         const outputAmount = toCurrencyAmount(result?.outputAmount, currencyOut)
 
         const priceImpact = !result.amountOutUsd
-          ? -1
+          ? NaN
           : ((-result.amountOutUsd + result.amountInUsd) * 100) / result.amountInUsd
 
         return new Aggregator(
@@ -331,114 +327,59 @@ export class Aggregator {
     return null
   }
 
-  /**
-   * @param baseURL
-   * @param currencyAmountIn exact amount of input currency to spend
-   * @param currencyOut the desired currency out
-   * @param slippageTolerance
-   * @param deadline
-   * @param to
-   * @param feeConfig
-   * @param signal
-   * @param minimumLoadingTime
-   */
-  public static async compareDex(
-    baseURL: string,
-    currencyAmountIn: CurrencyAmount<Currency>,
-    currencyOut: Currency,
-    slippageTolerance: number,
-    deadline: number | undefined,
-    to: string,
-    feeConfig: FeeConfig | undefined,
-    signal: AbortSignal,
-    minimumLoadingTime: number,
-  ): Promise<AggregationComparer | null> {
+  public static async baseTradeSolana({
+    aggregatorAPI,
+    currencyAmountIn,
+    currencyOut,
+    to,
+    signal,
+  }: {
+    aggregatorAPI: string
+    currencyAmountIn: CurrencyAmount<Currency>
+    currencyOut: Currency
+    to: string
+    signal: AbortSignal
+  }): Promise<Price<Currency, Currency> | null> {
+    const programState = new Keypair()
     const amountIn = currencyAmountIn
     const tokenOut = currencyOut.wrapped
 
-    const tokenInAddress = currencyAmountIn.currency.isNative
-      ? isEVM(currencyAmountIn.currency.chainId)
-        ? ETHER_ADDRESS
-        : WETH[currencyAmountIn.currency.chainId].address
-      : amountIn.currency.wrapped.address
-    const tokenOutAddress = currencyOut.isNative
-      ? isEVM(currencyOut.chainId)
-        ? ETHER_ADDRESS
-        : WETH[currencyOut.chainId].address
-      : tokenOut.address
+    const tokenInAddress = amountIn.currency.wrapped.address
+    const tokenOutAddress = tokenOut.address
+    if (!tokenInAddress || !tokenOutAddress) return null
 
-    const comparedDex = NETWORKS_INFO[currencyAmountIn.currency.chainId].dexToCompare
-
-    if (tokenInAddress && tokenOutAddress && comparedDex) {
-      const search = new URLSearchParams({
-        // Trade config
-        tokenIn: tokenInAddress,
-        tokenOut: tokenOutAddress,
-        amountIn: currencyAmountIn.quotient?.toString(),
-        saveGas: '0',
-        gasInclude: '1',
-        dexes: comparedDex,
-        slippageTolerance: slippageTolerance?.toString() ?? '',
-        deadline: deadline?.toString() ?? '',
-        to,
-        programState: ZERO_ADDRESS_SOLANA,
-
-        // Fee config
-        chargeFeeBy: feeConfig?.chargeFeeBy ?? '',
-        feeReceiver: feeConfig?.feeReceiver ?? '',
-        isInBps: feeConfig?.isInBps !== undefined ? (feeConfig.isInBps ? '1' : '0') : '',
-        feeAmount: feeConfig?.feeAmount ?? '',
-
-        // Client data
-        clientData: KYBERSWAP_SOURCE,
+    const search = new URLSearchParams({
+      tokenIn: tokenInAddress,
+      tokenOut: tokenOutAddress,
+      amountIn: currencyAmountIn.quotient?.toString(),
+      to,
+      programState: programState.publicKey.toBase58() ?? '',
+      clientData: KYBERSWAP_SOURCE,
+    })
+    try {
+      const response = await fetchWaiting(`${aggregatorAPI}?${search}`, {
+        signal,
+        headers: {
+          'X-Request-Id': sentryRequestId,
+          'Accept-Version': 'Latest',
+        },
       })
-      try {
-        const response = await fetchWaiting(
-          `${baseURL}?${search}`,
-          {
-            signal,
-            headers: {
-              'X-Request-Id': sentryRequestId,
-              'Accept-Version': 'Latest',
-            },
-          },
-          minimumLoadingTime,
-        )
-        const swapData = await response.json()
-
-        if (!swapData?.inputAmount || !swapData?.outputAmount) {
-          return null
-        }
-
-        const toCurrencyAmount = function (value: string, currency: Currency): CurrencyAmount<Currency> {
-          return TokenAmount.fromRawAmount(currency, JSBI.BigInt(value))
-        }
-
-        const inputAmount = toCurrencyAmount(swapData.inputAmount, currencyAmountIn.currency)
-        const outputAmount = toCurrencyAmount(swapData.outputAmount, currencyOut)
-        const amountInUsd = swapData.amountInUsd
-        const amountOutUsd = swapData.amountOutUsd
-        const receivedUsd = swapData.receivedUsd
-
-        // const outputPriceUSD = priceData.data[tokenOutAddress] || Object.values(priceData.data[0]) || '0'
-        return {
-          inputAmount,
-          outputAmount,
-          amountInUsd,
-          amountOutUsd,
-          receivedUsd,
-          // outputPriceUSD: parseFloat(outputPriceUSD),
-          comparedDex,
-        }
-      } catch (e) {
-        // ignore aborted request error
-        if (!e?.message?.includes('Fetch is aborted') && !e?.message?.includes('The user aborted a request')) {
-          console.error('Aggregator comparedDex error:', e?.stack || e)
-          const sentryError = new Error('Aggregator API (comparedDex) call failed', { cause: e })
-          sentryError.name = 'AggregatorAPIError'
-          captureException(sentryError, { level: 'error' })
-        }
+      if (Math.round(response.status / 100) !== 2) throw new Error('Aggregator status fail: ' + response.status)
+      const result = await response.json()
+      if (isResultInvalid(result)) {
+        return null
       }
+
+      const outputAmount = toCurrencyAmount(result?.outputAmount, currencyOut)
+
+      return new Price(
+        currencyAmountIn.currency,
+        outputAmount.currency,
+        currencyAmountIn.quotient,
+        outputAmount.quotient,
+      )
+    } catch (e) {
+      console.error('Base trade error:', e?.stack || e)
     }
 
     return null

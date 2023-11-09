@@ -1,6 +1,8 @@
 import { rgba } from 'polished'
-import React, { CSSProperties } from 'react'
+import React, { CSSProperties, ReactNode } from 'react'
 import styled from 'styled-components'
+
+import { highlight } from 'components/swapv2/styleds'
 
 export interface ToggleProps {
   id?: string
@@ -8,6 +10,8 @@ export interface ToggleProps {
   isActive: boolean
   toggle: () => void
   style?: CSSProperties
+  icon?: ReactNode
+  highlight?: boolean
 }
 
 const Dot = styled.div`
@@ -23,21 +27,25 @@ const Dot = styled.div`
 
   transform: translateY(-50%);
   transition: all 0.2s ease-in-out;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
 `
 
-const Toggle: React.FC<ToggleProps> = ({ id, isActive, toggle, style, className }) => {
+const Toggle: React.FC<ToggleProps> = ({ id, isActive, toggle, style, className, icon, highlight }) => {
   return (
-    <div id={id} onClick={toggle} style={style} data-active={isActive} className={className}>
-      <Dot />
+    <div id={id} onClick={toggle} style={style} data-active={isActive} className={className} data-highlight={highlight}>
+      <Dot>{isActive && icon}</Dot>
     </div>
   )
 }
 
-export default styled(Toggle)`
+export default styled(Toggle)<{ backgroundColor?: string }>`
   position: relative;
   width: 56px;
   height: 28px;
-  background: ${({ theme }) => theme.background};
+  background: ${({ theme, backgroundColor }) => backgroundColor || theme.background};
   border-radius: 999px;
   transition: all 0.2s ease-in-out;
   cursor: pointer;
@@ -49,5 +57,9 @@ export default styled(Toggle)`
       background: ${({ theme }) => theme.primary};
       left: 32px;
     }
+  }
+
+  &[data-highlight='true'] {
+    animation: ${({ theme }) => highlight(theme)} 2s 2 alternate ease-in-out;
   }
 `

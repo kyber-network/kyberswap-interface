@@ -1,11 +1,8 @@
 import { Trans, t } from '@lingui/macro'
-import dayjs from 'dayjs'
-import RelativeTime from 'dayjs/plugin/relativeTime'
 import { transparentize } from 'polished'
 import { useCallback, useMemo, useState } from 'react'
 import { isMobile } from 'react-device-detect'
-import { Clock } from 'react-feather'
-import { Box, Text } from 'rebass'
+import { Text } from 'rebass'
 import styled, { css } from 'styled-components'
 
 import bgimg from 'assets/images/about_background.png'
@@ -18,22 +15,20 @@ import { AutoRow, RowBetween, RowFit } from 'components/Row'
 import { MouseoverTooltip } from 'components/Tooltip'
 import TransactionConfirmationModal, { TransactionErrorContent } from 'components/TransactionConfirmationModal'
 import { useActiveWeb3React } from 'hooks'
-import { useClaimRewardActions, useVotingActions, useVotingInfo } from 'hooks/kyberdao'
-import useTotalVotingReward from 'hooks/kyberdao/useTotalVotingRewards'
+import { useClaimVotingRewards, useVotingActions, useVotingInfo } from 'hooks/kyberdao'
 import useMixpanel, { MIXPANEL_TYPE } from 'hooks/useMixpanel'
 import useTheme from 'hooks/useTheme'
 import { ApplicationModal } from 'state/application/actions'
-import { useToggleModal, useWalletModalToggle } from 'state/application/hooks'
+import { useKNCPrice, useToggleModal, useWalletModalToggle } from 'state/application/hooks'
 import { StyledInternalLink } from 'theme'
 import { formattedNumLong } from 'utils'
 import { formatUnitsToFixed } from 'utils/formatBalance'
 
-import SwitchToEthereumModal, { useSwitchToEthereum } from '../StakeKNC/SwitchToEthereumModal'
+import { useSwitchToEthereum } from '../StakeKNC/SwitchToEthereumModal'
+import TimerCountdown from '../TimerCountdown'
 import KNCLogo from '../kncLogo'
 import ClaimConfirmModal from './ClaimConfirmModal'
 import ProposalListComponent from './ProposalListComponent'
-
-dayjs.extend(RelativeTime)
 
 const Wrapper = styled.div`
   width: 100%;
@@ -68,16 +63,12 @@ const Card = styled.div<{ hasGreenBackground?: boolean }>`
     background-color: ${transparentize(0.3, theme.buttonGray)};
     flex: 1;
   `}
-  ${({ theme, hasGreenBackground }) =>
+  ${({ hasGreenBackground }) =>
     hasGreenBackground &&
-    (theme.darkMode
-      ? css`
-          background-image: url('${luxuryGreenBackground}');
-          background-size: cover;
-        `
-      : css`
-          background: radial-gradient(#daebe6, #daf1ec);
-        `)}
+    css`
+      background-image: url('${luxuryGreenBackground}');
+      background-size: cover;
+    `}
 `
 
 const CardGroup = styled(RowBetween)`
@@ -98,30 +89,6 @@ const TabReward = styled.span<{ active?: boolean }>`
     filter: brightness(1.2);
   }
 `
-
-export function readableTime(seconds: number) {
-  if (seconds < 60) return seconds + 's'
-
-  const levels = [
-    [Math.floor(seconds / 31536000), 'years'],
-    [Math.floor((seconds % 31536000) / 86400), ' days'],
-    [Math.floor(((seconds % 31536000) % 86400) / 3600), 'h'],
-    [Math.floor((((seconds % 31536000) % 86400) % 3600) / 60), 'm'],
-  ]
-
-  let returntext = ''
-  for (let i = 0, max = levels.length; i < max; i++) {
-    if (levels[i][0] === 0) continue
-    returntext +=
-      ' ' +
-      levels[i][0] +
-      (levels[i][0] === 1 && levels[i][1] > 1
-        ? levels[i][1].toString().substring(0, levels[i][1].toString().length - 1)
-        : levels[i][1])
-  }
-
-  return returntext.trim()
-}
 
 const formatVotingPower = (votingPowerNumber: number) => {
   if (votingPowerNumber === undefined) return '--'
@@ -144,10 +111,18 @@ export default function Vote() {
   const theme = useTheme()
   const { account } = useActiveWeb3React()
   const { mixpanelHandler } = useMixpanel()
-  const { daoInfo, remainingCumulativeAmount, claimedRewardAmount, userRewards, stakerInfo, stakerInfoNextEpoch } =
-    useVotingInfo()
-  const { knc, usd, kncPriceETH } = useTotalVotingReward()
-  const { claim } = useClaimRewardActions()
+  const {
+    daoInfo,
+    remainingCumulativeAmount,
+    claimedRewardAmount,
+    stakerInfo,
+    stakerInfoNextEpoch,
+    rewardStats: { knc, usd, apr },
+  } = useVotingInfo()
+
+  const kncPrice = useKNCPrice()
+
+  const claimVotingRewards = useClaimVotingRewards()
   const { vote } = useVotingActions()
   const { switchToEthereum } = useSwitchToEthereum()
 
@@ -162,7 +137,7 @@ export default function Vote() {
   const [pendingText, setPendingText] = useState<string>('')
 
   const [txHash, setTxHash] = useState<string | undefined>(undefined)
-  const [transactionError, setTransactionError] = useState()
+  const [transactionError, setTransactionError] = useState<string | undefined>(undefined)
   const totalStakedAmount = stakerInfo ? stakerInfo?.stake_amount + stakerInfo?.pending_stake_amount : 0
   const votePowerAmount: number = useMemo(
     () =>
@@ -188,44 +163,31 @@ export default function Vote() {
   const isDelegated = stakerInfo && account ? stakerInfo.delegate?.toLowerCase() !== account.toLowerCase() : false
 
   const handleClaim = useCallback(() => {
-    switchToEthereum().then(() => {
+    switchToEthereum(t`Claim reward`).then(() => {
       mixpanelHandler(MIXPANEL_TYPE.KYBER_DAO_CLAIM_CLICK)
       toggleClaimConfirmModal()
     })
   }, [toggleClaimConfirmModal, mixpanelHandler, switchToEthereum])
 
   const handleConfirmClaim = useCallback(async () => {
-    if (!userRewards || !userRewards.userReward || !account) return
-    const { cycle, userReward } = userRewards
-    const { index, tokens, cumulativeAmounts, proof } = userReward
     setPendingText(t`Claming ${formatUnitsToFixed(remainingCumulativeAmount)} KNC`)
     setShowConfirm(true)
     setAttemptingTxn(true)
     toggleClaimConfirmModal()
 
-    const params = {
-      cycle,
-      index,
-      address: account,
-      tokens,
-      cumulativeAmounts,
-      merkleProof: proof,
-      formatAmount: formatUnitsToFixed(remainingCumulativeAmount),
+    try {
+      const tx = await claimVotingRewards()
+      setTxHash(tx)
+    } catch (error) {
+      setTransactionError(error?.message)
+      setTxHash(undefined)
+    } finally {
+      setAttemptingTxn(false)
     }
-    claim(params)
-      .then(tx => {
-        setAttemptingTxn(false)
-        setTxHash(tx)
-      })
-      .catch(error => {
-        setTransactionError(error?.message)
-        setAttemptingTxn(false)
-        setTxHash(undefined)
-      })
-  }, [userRewards, account, claim, remainingCumulativeAmount, toggleClaimConfirmModal])
+  }, [claimVotingRewards, remainingCumulativeAmount, toggleClaimConfirmModal])
 
   const handleVote = useCallback(
-    async (proposal_id: number, option: number) => {
+    async (proposal_id: number, option: number): Promise<boolean> => {
       // only can vote when user has staked amount
       setPendingText(t`Vote submitting`)
       setShowConfirm(true)
@@ -234,12 +196,13 @@ export default function Vote() {
         const tx = await vote(proposal_id, option)
         setAttemptingTxn(false)
         setTxHash(tx)
-        return Promise.resolve(true)
+        return true
       } catch (error) {
         setShowConfirm(false)
+        setAttemptingTxn(false)
         setTransactionError(error?.message)
         setTxHash(undefined)
-        return Promise.reject(error)
+        throw error
       }
     },
     [vote],
@@ -254,7 +217,7 @@ export default function Vote() {
           </Text>
           <RowFit gap="4px">
             <KNCLogo size={20} />
-            <Text fontSize={16}>KNC: ${kncPriceETH ? kncPriceETH.toPrecision(4) : '--'}</Text>
+            <Text fontSize={16}>KNC: ${kncPrice ? (+kncPrice).toPrecision(4) : '--'}</Text>
           </RowFit>
         </RowBetween>
         <CardGroup>
@@ -267,22 +230,33 @@ export default function Vote() {
                 {daoInfo ? formattedNumLong(Math.round(daoInfo.total_staked)) + ' KNC' : '--'}
               </Text>
               <Text fontSize={12} color={theme.subText}>
-                {daoInfo && kncPriceETH
-                  ? '~' + formattedNumLong(kncPriceETH * Math.round(daoInfo.total_staked)) + ' USD'
+                {daoInfo && kncPrice
+                  ? '~' + formattedNumLong(+kncPrice * Math.round(daoInfo.total_staked)) + ' USD'
                   : ''}
               </Text>
             </AutoColumn>
           </Card>
           <Card>
             <AutoColumn>
-              <Text color={theme.subText} fontSize="14px" marginBottom="20px">
-                <Trans>Total Voting Rewards</Trans>
-              </Text>
-              <Text fontSize={20} marginBottom="8px" fontWeight={500}>
-                {knc?.toLocaleString() ?? '--'} KNC
-              </Text>
+              <RowBetween marginBottom="20px">
+                <Text color={theme.subText} fontSize="14px">
+                  <Trans>Total Voting Rewards</Trans>
+                </Text>
+                <Text color={theme.subText} fontSize="14px">
+                  <Trans>APR</Trans>
+                </Text>
+              </RowBetween>
+              <RowBetween marginBottom="8px">
+                <Text fontSize={20} fontWeight={500}>
+                  {(+knc?.toFixed(0)).toLocaleString() ?? '--'} KNC
+                </Text>
+                <Text fontSize={20} fontWeight={500} color={theme.apr}>
+                  {apr.toFixed(2) ?? '--'}%
+                </Text>
+              </RowBetween>
+
               <Text fontSize={12} color={theme.subText}>
-                ~{usd?.toLocaleString() ?? '--'} USD
+                ~{(+usd?.toFixed(0)).toLocaleString() ?? '--'} USD
               </Text>
             </AutoColumn>
           </Card>
@@ -294,7 +268,7 @@ export default function Vote() {
                   fontSize={12}
                   placement="top"
                   text={t`Your voting power is calculated by
-[Your Staked KNC] / [Total Staked KNC] * 100%`}
+[Your Staked KNC] / [Total Staked KNC] * 100%.`}
                 />
               </Text>
 
@@ -376,13 +350,13 @@ export default function Vote() {
                     <InfoHelper
                       placement="top"
                       fontSize={12}
-                      text={t`You have to stake KNC to be able to vote and earn voting reward`}
+                      text={t`You have to stake KNC to be able to vote and earn voting reward.`}
                     />
                   ) : null}
                 </RowFit>
                 {isDelegated && (
                   <MouseoverTooltip
-                    text={t`You have already delegated your voting power to this address`}
+                    text={t`You have already delegated your voting power to this address.`}
                     placement="top"
                   >
                     <RowFit gap="4px" color={theme.subText}>
@@ -429,7 +403,7 @@ export default function Vote() {
                         {formatUnitsToFixed(remainingCumulativeAmount, undefined, 2)} KNC
                       </Text>
                       <Text fontSize={12} color={theme.subText}>
-                        {(+(+formatUnitsToFixed(remainingCumulativeAmount) * +(kncPriceETH || '0')).toFixed(
+                        {(+(+formatUnitsToFixed(remainingCumulativeAmount) * +(kncPrice || '0')).toFixed(
                           2,
                         )).toLocaleString()}{' '}
                         USD
@@ -451,7 +425,7 @@ export default function Vote() {
                         {(+formatUnitsToFixed(claimedRewardAmount, undefined, 2)).toLocaleString()} KNC
                       </Text>
                       <Text fontSize={12} color={theme.subText}>
-                        {(+(+formatUnitsToFixed(claimedRewardAmount) * (kncPriceETH || 0)).toFixed(2)).toLocaleString()}{' '}
+                        {(+(+formatUnitsToFixed(claimedRewardAmount) * +(kncPrice || 0)).toFixed(2)).toLocaleString()}{' '}
                         USD
                       </Text>
                     </AutoColumn>
@@ -459,7 +433,7 @@ export default function Vote() {
                 )
               ) : (
                 <ButtonLight onClick={toggleWalletModal}>
-                  <Trans>Connect Your Wallet</Trans>
+                  <Trans>Connect</Trans>
                 </ButtonLight>
               )}
             </AutoColumn>
@@ -475,32 +449,20 @@ export default function Vote() {
             <Text>
               <Trans>In Progress: Epoch {daoInfo ? daoInfo.current_epoch : '--'}</Trans>
             </Text>
-            <Box
-              backgroundColor={transparentize(0.8, theme.primary)}
-              color={theme.primary}
-              padding="2px 8px"
-              margin="0px 4px"
-              style={{ borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '3px' }}
-            >
-              <Clock size="12px" />{' '}
-              {daoInfo
-                ? readableTime(
-                    daoInfo.first_epoch_start_timestamp +
-                      daoInfo.current_epoch * daoInfo.epoch_period_in_seconds -
-                      Date.now() / 1000,
-                  ) + ' left'
-                : '--:--:--'}
-            </Box>
+            {daoInfo && (
+              <TimerCountdown
+                endTime={daoInfo.first_epoch_start_timestamp + daoInfo.current_epoch * daoInfo.epoch_period_in_seconds}
+              />
+            )}
           </RowFit>
           <Text>
             <Trans>Vote on current epoch proposals to get your full reward.</Trans>
           </Text>
         </AutoRow>
         <Text color={theme.subText} fontStyle="italic" fontSize={12} hidden={isMobile}>
-          <Trans>Note: Voting on KyberDAO is only available on Ethereum chain</Trans>
+          <Trans>Note: Voting on KyberDAO is only available on Ethereum chain.</Trans>
         </Text>
         <ProposalListComponent voteCallback={handleVote} />
-        <SwitchToEthereumModal featureText={t`This action`} />
         <ClaimConfirmModal amount={formatUnitsToFixed(remainingCumulativeAmount)} onConfirmClaim={handleConfirmClaim} />
         <TransactionConfirmationModal
           isOpen={showConfirm}

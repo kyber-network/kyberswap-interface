@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useRef } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
 
 import { useActiveWeb3React, useWeb3React } from 'hooks'
-import { useBlockNumber } from 'state/application/hooks'
+import { useBlockNumber, useKyberSwapConfig } from 'state/application/hooks'
 import { AppDispatch, AppState } from 'state/index'
 import { findTx } from 'utils'
 
@@ -13,6 +13,7 @@ import { GroupedTxsByHash, TransactionDetails, TransactionExtraInfo1Token, Trans
 // helper that can take a ethers library transaction response and add it to the list of transactions
 export function useTransactionAdder(): (tx: TransactionHistory) => void {
   const { chainId, account, isEVM } = useActiveWeb3React()
+  const { readProvider } = useKyberSwapConfig(chainId)
   const { library } = useWeb3React()
   const dispatch = useDispatch<AppDispatch>()
   const blockNumber = useBlockNumber()
@@ -28,7 +29,10 @@ export function useTransactionAdder(): (tx: TransactionHistory) => void {
 
       let tx: TransactionResponse | undefined
       if (isEVM) {
-        tx = await library?.getTransaction(hash)
+        try {
+          tx = await library?.getTransaction(hash)
+          if (!tx) tx = await readProvider?.getTransaction(hash)
+        } catch (error) {}
       }
 
       dispatch(
@@ -46,21 +50,32 @@ export function useTransactionAdder(): (tx: TransactionHistory) => void {
         }),
       )
     },
-    [account, chainId, dispatch, library, isEVM],
+    [account, chainId, dispatch, readProvider, isEVM, library],
   )
 }
 
+const filterTxsMapByAccount = (obj: GroupedTxsByHash | undefined, account: string | undefined) => {
+  if (!obj) return
+  const result: GroupedTxsByHash = {}
+  Object.keys(obj).forEach(key => {
+    const arr = obj[key] ?? []
+    if (isOwnTransactionGroup(arr, account)) {
+      result[key] = obj[key]
+    }
+  })
+  return result
+}
 // returns all the transactions for the current chain
 export function useAllTransactions(allChain = false): GroupedTxsByHash | undefined {
-  const { chainId } = useActiveWeb3React()
+  const { chainId, account } = useActiveWeb3React()
   const transactions = useSelector<AppState, AppState['transactions']>(state => state.transactions)
 
   return useMemo(() => {
-    if (!allChain) return transactions[chainId]
+    if (!allChain) return filterTxsMapByAccount(transactions[chainId], account)
     return Object.values(transactions).reduce((rs, obj) => {
-      return { ...rs, ...obj }
+      return { ...rs, ...filterTxsMapByAccount(obj, account) }
     }, {})
-  }, [allChain, transactions, chainId])
+  }, [allChain, transactions, chainId, account])
 }
 
 export function useSortRecentTransactions(recentOnly = true, allChain = false) {

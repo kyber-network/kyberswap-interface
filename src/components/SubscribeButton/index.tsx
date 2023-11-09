@@ -1,13 +1,15 @@
 import { Trans } from '@lingui/macro'
-import { ReactNode, useEffect, useRef } from 'react'
+import { ReactNode, useCallback, useMemo } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Text } from 'rebass'
-import styled, { css } from 'styled-components'
+import styled, { CSSProperties, css } from 'styled-components'
 
 import NotificationIcon from 'components/Icons/NotificationIcon'
-import { useWeb3React } from 'hooks'
+import { APP_PATHS } from 'constants/index'
 import useMixpanel, { MIXPANEL_TYPE } from 'hooks/useMixpanel'
 import useNotification from 'hooks/useNotification'
 import useTheme from 'hooks/useTheme'
+import { PROFILE_MANAGE_ROUTES } from 'pages/NotificationCenter/const'
 
 import { ButtonPrimary } from '../Button'
 import { MouseoverTooltipDesktopOnly } from '../Tooltip'
@@ -28,7 +30,7 @@ const SubscribeBtn = styled(ButtonPrimary)<{
 }>`
   overflow: hidden;
   width: fit-content;
-  height: 36px;
+  height: 32px;
   padding: 8px 12px;
   background: ${({ bgColor }) => bgColor};
   color: ${({ theme, isDisabled }) => (isDisabled ? theme.border : theme.textReverse)};
@@ -36,7 +38,9 @@ const SubscribeBtn = styled(ButtonPrimary)<{
     background: ${({ bgColor }) => bgColor};
   }
   ${({ iconOnly, bgColor }) => iconOnly && cssSubscribeBtnSmall(bgColor)};
-  ${({ theme, bgColor }) => theme.mediaWidth.upToExtraSmall`
+  ${({ theme, bgColor, iconOnly }) =>
+    iconOnly !== false &&
+    theme.mediaWidth.upToExtraSmall`
    ${cssSubscribeBtnSmall(bgColor)}
   `}
 `
@@ -46,49 +50,59 @@ const ButtonText = styled(Text)<{ iconOnly?: boolean }>`
   font-weight: 500;
   margin-left: 6px !important;
   ${({ iconOnly }) => iconOnly && `display: none`};
-  ${({ theme }) => theme.mediaWidth.upToExtraSmall`
+  ${({ theme, iconOnly }) =>
+    iconOnly !== false &&
+    theme.mediaWidth.upToExtraSmall`
     display: none;
   `}
 `
 export default function SubscribeNotificationButton({
   subscribeTooltip,
-  iconOnly = false,
+  iconOnly,
   trackingEvent,
+  onClick,
+  topicId,
+  style,
 }: {
   subscribeTooltip?: ReactNode
   iconOnly?: boolean
   trackingEvent?: MIXPANEL_TYPE
+  onClick?: () => void
+  topicId?: string
+  style?: CSSProperties
 }) {
   const theme = useTheme()
-  const { account } = useWeb3React()
 
   const { mixpanelHandler } = useMixpanel()
-  const { showNotificationModal } = useNotification()
+  const { topicGroups } = useNotification()
+  const hasSubscribe = useMemo(() => {
+    return topicId
+      ? topicGroups.some(group =>
+          group.topics.some(topic => topic.isSubscribed && String(topic.id) === String(topicId)),
+        )
+      : false
+  }, [topicGroups, topicId])
 
-  const showModalWhenConnected = useRef(false)
-
-  useEffect(() => {
-    if (account && showModalWhenConnected.current) {
-      showNotificationModal()
-      showModalWhenConnected.current = false
-    }
-  }, [account, showNotificationModal])
+  const navigate = useNavigate()
+  const showNotificationModal = useCallback(() => {
+    navigate(`${APP_PATHS.PROFILE_MANAGE}${PROFILE_MANAGE_ROUTES.PREFERENCE}`)
+  }, [navigate])
 
   const onClickBtn = () => {
     showNotificationModal()
+    onClick?.()
     if (trackingEvent)
       setTimeout(() => {
         mixpanelHandler(trackingEvent)
       }, 100)
-    if (!account) showModalWhenConnected.current = true
   }
 
   return (
     <MouseoverTooltipDesktopOnly text={subscribeTooltip} width="400px">
-      <SubscribeBtn bgColor={theme.primary} onClick={onClickBtn} iconOnly={iconOnly}>
-        <NotificationIcon />
+      <SubscribeBtn bgColor={theme.primary} onClick={onClickBtn} iconOnly={iconOnly} style={style}>
+        <NotificationIcon size={16} />
         <ButtonText iconOnly={iconOnly}>
-          <Trans>Subscribe</Trans>
+          {hasSubscribe ? <Trans>Unsubscribe</Trans> : <Trans>Subscribe</Trans>}
         </ButtonText>
       </SubscribeBtn>
     </MouseoverTooltipDesktopOnly>

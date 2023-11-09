@@ -1,17 +1,15 @@
 import { Trans } from '@lingui/macro'
-import React, { useState } from 'react'
-import { isMobile } from 'react-device-detect'
+import { ReactNode, useState } from 'react'
 import { Flex, Text } from 'rebass'
 import styled from 'styled-components'
 
 import { ReactComponent as DropdownSVG } from 'assets/svg/down.svg'
 import SlippageControl from 'components/SlippageControl'
-import { InfoHelperForMaxSlippage } from 'components/swapv2/SwapSettingsPanel/SlippageSetting'
-import { DEFAULT_SLIPPAGE, DEFAULT_SLIPPAGE_STABLE_PAIR_SWAP } from 'constants/index'
+import { MouseoverTooltip, TextDashed } from 'components/Tooltip'
 import useTheme from 'hooks/useTheme'
-import { useAppSelector } from 'state/hooks'
-import { useUserSlippageTolerance } from 'state/user/hooks'
-import { checkWarningSlippage, formatSlippage } from 'utils/slippage'
+import { useSlippageSettingByPage } from 'state/user/hooks'
+import { ExternalLink } from 'theme'
+import { checkWarningSlippage, formatSlippage, getDefaultSlippage } from 'utils/slippage'
 
 const DropdownIcon = styled(DropdownSVG)`
   transition: transform 300ms;
@@ -23,14 +21,18 @@ const DropdownIcon = styled(DropdownSVG)`
 
 type Props = {
   isStablePairSwap: boolean
+  rightComponent?: ReactNode
+  tooltip?: ReactNode
+  isCrossChain?: boolean
 }
-const SlippageSetting: React.FC<Props> = ({ isStablePairSwap }) => {
+const SlippageSetting = ({ isStablePairSwap, rightComponent, tooltip, isCrossChain }: Props) => {
   const theme = useTheme()
-  const isSlippageControlPinned = useAppSelector(state => state.user.isSlippageControlPinned)
   const [expanded, setExpanded] = useState(false)
-  const [rawSlippage, setRawSlippage] = useUserSlippageTolerance()
-  const isWarningSlippage = checkWarningSlippage(rawSlippage, isStablePairSwap)
 
+  const { setRawSlippage, rawSlippage, isSlippageControlPinned } = useSlippageSettingByPage(isCrossChain)
+  const defaultRawSlippage = getDefaultSlippage(isStablePairSwap)
+
+  const isWarningSlippage = checkWarningSlippage(rawSlippage, isStablePairSwap)
   if (!isSlippageControlPinned) {
     return null
   }
@@ -39,6 +41,8 @@ const SlippageSetting: React.FC<Props> = ({ isStablePairSwap }) => {
     <Flex
       sx={{
         flexDirection: 'column',
+        width: '100%',
+        padding: '0 8px',
       }}
     >
       <Flex
@@ -46,48 +50,68 @@ const SlippageSetting: React.FC<Props> = ({ isStablePairSwap }) => {
           alignItems: 'center',
           color: theme.subText,
           gap: '4px',
+          justifyContent: 'space-between',
         }}
       >
-        <Flex
-          sx={{
-            alignItems: 'center',
-            color: theme.subText,
-            fontSize: '12px',
-            fontWeight: 500,
-            lineHeight: '1',
-          }}
-        >
-          <Text as="span">
-            <Trans>Max Slippage</Trans>
-          </Text>
-          <InfoHelperForMaxSlippage />
-          <Text as="span" marginLeft="4px">
-            :
-          </Text>
-        </Flex>
-
-        <Flex
-          sx={{
-            alignItems: 'center',
-            gap: '4px',
-            cursor: 'pointer',
-          }}
-          role="button"
-          onClick={() => setExpanded(e => !e)}
-        >
-          <Text
+        <Flex sx={{ gap: '4px' }} alignItems="center">
+          <TextDashed
+            color={theme.subText}
+            fontSize={12}
+            fontWeight={500}
             sx={{
-              fontSize: isMobile ? '16px' : '14px',
-              fontWeight: 500,
+              display: 'flex',
+              alignItems: 'center',
               lineHeight: '1',
-              color: theme.text,
+              height: 'fit-content',
             }}
           >
-            {formatSlippage(rawSlippage)}
-          </Text>
+            <MouseoverTooltip
+              placement="right"
+              text={
+                tooltip || (
+                  <Text>
+                    <Trans>
+                      During your swap if the price changes by more than this %, your transaction will revert. Read more{' '}
+                      <ExternalLink
+                        href={
+                          'https://docs.kyberswap.com/getting-started/foundational-topics/decentralized-finance/slippage'
+                        }
+                      >
+                        here ↗
+                      </ExternalLink>
+                    </Trans>
+                  </Text>
+                )
+              }
+            >
+              <Trans>Max Slippage</Trans>
+            </MouseoverTooltip>
+          </TextDashed>
+          :
+          <Flex
+            sx={{
+              alignItems: 'center',
+              gap: '4px',
+              cursor: 'pointer',
+            }}
+            role="button"
+            onClick={() => setExpanded(e => !e)}
+          >
+            <Text
+              sx={{
+                fontSize: '14px',
+                fontWeight: 500,
+                lineHeight: '1',
+                color: theme.text,
+              }}
+            >
+              {formatSlippage(rawSlippage)}
+            </Text>
 
-          <DropdownIcon data-flip={expanded} />
+            <DropdownIcon data-flip={expanded} />
+          </Flex>
         </Flex>
+        {rightComponent}
       </Flex>
 
       <Flex
@@ -102,7 +126,7 @@ const SlippageSetting: React.FC<Props> = ({ isStablePairSwap }) => {
           rawSlippage={rawSlippage}
           setRawSlippage={setRawSlippage}
           isWarning={isWarningSlippage}
-          defaultRawSlippage={isStablePairSwap ? DEFAULT_SLIPPAGE_STABLE_PAIR_SWAP : DEFAULT_SLIPPAGE}
+          defaultRawSlippage={defaultRawSlippage}
         />
       </Flex>
     </Flex>

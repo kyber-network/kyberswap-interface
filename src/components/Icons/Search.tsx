@@ -1,9 +1,10 @@
-function Search({ size = 24, color }: { size?: number; color?: string }) {
+function Search({ size = 24, color, onClick }: { size?: number; color?: string; onClick?: () => void }) {
   return (
     <svg
+      onClick={onClick}
       width={size || 24}
       height={size || 24}
-      viewBox={`0 0 ${size} ${size}`}
+      viewBox={`0 0 24 24`}
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
       style={{ minWidth: size + 'px' }}

@@ -1,4 +1,4 @@
-import { ChainId, Currency } from '@kyberswap/ks-sdk-core'
+import { ChainId, Currency, Fraction } from '@kyberswap/ks-sdk-core'
 
 export enum LimitOrderStatus {
   // status from BE
@@ -40,20 +40,41 @@ export type LimitOrder = {
     makingAmount: string
     takingAmount: string
   }>
+  contractAddress: string
+  operatorSignatureExpiredAt?: number
   // custom
   isSuccessful: boolean
   uuid: string
   txHash: string
 }
 
-export type RateInfo = {
-  rate: string
-  invertRate: string
-  invert: boolean
+export enum CancelOrderType {
+  GAS_LESS_CANCEL,
+  HARD_CANCEL,
 }
 
-export type ListOrderHandle = {
-  refreshListOrder: () => void
+export type RateInfo = {
+  rate: string // to store user input
+  invertRate: string // to store user input
+  invert: boolean
+  rateFraction?: Fraction // to calc with big number
+}
+
+export type CancelOrderFunction = (data: {
+  orders: LimitOrder[]
+  cancelType: CancelOrderType
+  isEdit?: boolean
+}) => Promise<CancelOrderResponse>
+
+export type EditOrderInfo = {
+  cancelType?: CancelOrderType
+  gasFee?: string
+  isEdit?: boolean
+  renderCancelButtons: () => JSX.Element
+}
+
+export type CancelOrderResponse = {
+  orders: { operatorSignatureExpiredAt: number }[]
 }
 
 export type CreateOrderParam = {

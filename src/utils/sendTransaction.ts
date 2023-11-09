@@ -6,22 +6,34 @@ import { SignerWalletAdapter } from '@solana/wallet-adapter-base'
 import { Connection, Transaction, VersionedTransaction } from '@solana/web3.js'
 import { ethers } from 'ethers'
 
+import { SUPPORTED_WALLET } from 'constants/wallets'
 import { SolanaEncode } from 'state/swap/types'
 import { TRANSACTION_TYPE, TransactionHistory } from 'state/transactions/type'
 import { calculateGasMargin } from 'utils'
 
-import { TransactionError } from './sentry'
+import { ErrorName, TransactionError } from './sentry'
 
-export async function sendEVMTransaction(
-  account: string,
-  library: ethers.providers.Web3Provider | undefined,
-  contractAddress: string,
-  encodedData: string,
-  value: BigNumber,
-  handler?: (response: TransactionResponse) => void,
-  chainId?: ChainId,
-): Promise<TransactionResponse | undefined> {
-  if (!account || !library) return
+export async function sendEVMTransaction({
+  account,
+  library,
+  contractAddress,
+  encodedData,
+  value,
+  sentryInfo,
+  chainId,
+}: {
+  account: string
+  library: ethers.providers.Web3Provider | undefined
+  contractAddress: string
+  encodedData: string
+  value: BigNumber
+  sentryInfo: {
+    name: ErrorName
+    wallet: SUPPORTED_WALLET | undefined
+  }
+  chainId?: ChainId
+}): Promise<TransactionResponse | undefined> {
+  if (!account || !library) throw new Error('Invalid transaction')
 
   const estimateGasOption = {
     from: account,
@@ -35,7 +47,14 @@ export async function sendEVMTransaction(
     gasEstimate = await library.getSigner().estimateGas(estimateGasOption)
     if (!gasEstimate) throw new Error('gasEstimate is nullish value')
   } catch (error) {
-    throw new TransactionError(error, estimateGasOption)
+    throw new TransactionError(
+      sentryInfo.name,
+      'estimateGas',
+      error?.message,
+      estimateGasOption,
+      { cause: error },
+      sentryInfo.wallet,
+    )
   }
 
   const sendTransactionOption = {
@@ -48,10 +67,16 @@ export async function sendEVMTransaction(
 
   try {
     const response = await library.getSigner().sendTransaction(sendTransactionOption)
-    handler?.(response)
     return response
   } catch (error) {
-    throw new TransactionError(error, sendTransactionOption)
+    throw new TransactionError(
+      sentryInfo.name,
+      'sendTransaction',
+      error?.message,
+      sendTransactionOption,
+      { cause: error },
+      sentryInfo.wallet,
+    )
   }
 }
 
@@ -147,10 +172,10 @@ export async function sendSolanaTransactions(
     } catch (error) {
       console.error({ error })
       if (error?.message?.endsWith('0x1771')) {
-        throw new Error(t`An error occurred. Try refreshing the price rate or increase max slippage`)
+        throw new Error(t`An error occurred. Try refreshing the price rate or increase max slippage.`)
       } else if (/0x[0-9a-f]+$/.test(error.message)) {
         const errorCode = error.message.split(' ').slice(-1)[0]
-        throw new Error(t`Error encountered. We haven’t send the transaction yet. Error code ${errorCode}`)
+        throw new Error(t`Error encountered. We haven’t send the transaction yet. Error code ${errorCode}.`)
       }
       throw new Error(t`Error encountered. We haven’t send the transaction yet.`)
     }

@@ -17,7 +17,7 @@ import { formatDollarAmount } from 'utils/numbers'
 const formatRemainTime = (numberOfSeconds: number) => {
   if (numberOfSeconds < 0) return t`Full unlocked`
   const days = numberOfSeconds / 60 / 60 / 24
-  if (days > 1) return days + ' Days left'
+  if (days > 1) return days.toFixed(2) + ' Days left'
 
   const hours = numberOfSeconds / 60 / 60
   if (hours < 24 && hours > 1) return hours.toFixed(0) + ' Hours left'
@@ -302,7 +302,7 @@ function VestingCard({
                 <Flex alignItems="center" color={theme.subText} sx={{ gap: '4px' }}>
                   <Wallet />
                   <MouseoverTooltip
-                    text={t`The amount of rewards that are unlocked and can be claimed instantly as their vesting is over`}
+                    text={t`The amount of rewards that are unlocked and can be claimed instantly as their vesting is over.`}
                   >
                     <Title>Claimable Rewards</Title>
                   </MouseoverTooltip>
@@ -329,7 +329,7 @@ function VestingCard({
               <SummaryItem>
                 <Flex alignItems="center" color={theme.subText} sx={{ gap: '4px' }}>
                   <Wallet />
-                  <MouseoverTooltip text={t`The amount of rewards that are locked as they are currently vesting`}>
+                  <MouseoverTooltip text={t`The amount of rewards that are locked as they are currently vesting.`}>
                     <Title>
                       <Trans>Locked Rewards</Trans>
                     </Title>

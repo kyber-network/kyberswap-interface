@@ -1,7 +1,6 @@
 import { Trans } from '@lingui/macro'
 import { WalletReadyState } from '@solana/wallet-adapter-base'
 import { useWallet } from '@solana/wallet-adapter-react'
-import { UnsupportedChainIdError } from '@web3-react/core'
 import dayjs from 'dayjs'
 import { rgba, transparentize } from 'polished'
 import { useCallback, useEffect, useState } from 'react'
@@ -21,9 +20,9 @@ import WalletPopup from 'components/WalletPopup'
 import { APP_PATHS, TERM_FILES_PATH } from 'constants/index'
 import { SUPPORTED_WALLET, SUPPORTED_WALLETS, WalletInfo } from 'constants/wallets'
 import { useActiveWeb3React, useWeb3React } from 'hooks'
-import { useActivationWallet } from 'hooks/useActivationWallet'
 import useMixpanel, { MIXPANEL_TYPE } from 'hooks/useMixpanel'
 import useTheme from 'hooks/useTheme'
+import { useActivationWallet } from 'hooks/web3/useActivationWallet'
 import { ApplicationModal } from 'state/application/actions'
 import {
   useCloseModal,
@@ -32,7 +31,8 @@ import {
   useOpenNetworkModal,
   useWalletModalToggle,
 } from 'state/application/hooks'
-import { useIsAcceptedTerm, useIsUserManuallyDisconnect } from 'state/user/hooks'
+import { useIsConnectingWallet } from 'state/authen/hooks'
+import { useIsAcceptedTerm } from 'state/user/hooks'
 import { ExternalLink } from 'theme'
 import { isEVMWallet, isOverriddenWallet, isSolanaWallet } from 'utils'
 
@@ -54,15 +54,6 @@ const Wrapper = styled.div`
   margin: 0;
   padding: 0;
   width: 100%;
-`
-
-const HeaderRow = styled.div<{ padding?: string }>`
-  ${({ theme }) => theme.flexRowNoWrap};
-  font-weight: 500;
-  color: ${props => (props.color === 'blue' ? ({ theme }) => theme.primary : 'inherit')};
-  ${({ theme }) => theme.mediaWidth.upToMedium`
-    padding: 1.5rem 1rem 1rem;
-  `};
 `
 
 const ContentWrapper = styled.div`
@@ -138,28 +129,26 @@ enum WALLET_VIEWS {
 }
 
 type WalletInfoExtended = WalletInfo & {
-  key: string
+  key: SUPPORTED_WALLET
   readyState: WalletReadyState | undefined
   isSupportCurrentChain: boolean
   isOverridden: boolean
 }
 
 export default function WalletModal() {
-  const { account, isSolana, isEVM, walletKey } = useActiveWeb3React()
+  const { isWrongNetwork, account, isSolana, isEVM, walletKey } = useActiveWeb3React()
   // important that these are destructed from the account-specific web3-react context
-  const { active, connector, error } = useWeb3React()
+  const { active, connector } = useWeb3React()
   const { connected, connecting, wallet: solanaWallet } = useWallet()
   const { tryActivation } = useActivationWallet()
-
-  const [, setIsUserManuallyDisconnect] = useIsUserManuallyDisconnect()
 
   const theme = useTheme()
 
   const [walletView, setWalletView] = useState(WALLET_VIEWS.ACCOUNT)
-
   const [pendingWalletKey, setPendingWalletKey] = useState<SUPPORTED_WALLET | undefined>()
 
   const [pendingError, setPendingError] = useState<boolean>()
+  const [error, setError] = useState<Error | null>(null)
 
   const walletModalOpen = useModalOpen(ApplicationModal.WALLET)
   const toggleWalletModal = useWalletModalToggle()
@@ -174,6 +163,10 @@ export default function WalletModal() {
   const location = useLocation()
   const { mixpanelHandler } = useMixpanel()
 
+  useEffect(() => {
+    !account && walletModalOpen && mixpanelHandler(MIXPANEL_TYPE.WALLET_CONNECT_CLICK)
+  }, [mixpanelHandler, walletModalOpen, account])
+
   // close on connection, when logged out before
   useEffect(() => {
     if (account && !previousAccount && walletModalOpen) {
@@ -185,15 +178,16 @@ export default function WalletModal() {
   }, [account, previousAccount, toggleWalletModal, walletModalOpen, location.pathname, mixpanelHandler])
 
   useEffect(() => {
-    if (error && error instanceof UnsupportedChainIdError) {
+    if (isWrongNetwork) {
       openNetworkModal()
     }
-  }, [error, openNetworkModal])
+  }, [isWrongNetwork, openNetworkModal])
 
   // always reset to account view
   useEffect(() => {
     if (walletModalOpen) {
       setPendingError(false)
+      setError(null)
       setWalletView(WALLET_VIEWS.ACCOUNT)
     }
   }, [walletModalOpen])
@@ -203,7 +197,7 @@ export default function WalletModal() {
   const connectorPrevious = usePrevious(connector)
 
   useEffect(() => {
-    if (walletModalOpen && ((active && !activePrevious) || (connector && connector !== connectorPrevious && !error))) {
+    if (walletModalOpen && ((active && !activePrevious) || (connector !== connectorPrevious && !error))) {
       setWalletView(WALLET_VIEWS.ACCOUNT)
     }
   }, [setWalletView, active, error, connector, walletModalOpen, activePrevious, connectorPrevious])
@@ -216,24 +210,31 @@ export default function WalletModal() {
     }
   }, [connecting, connected, solanaWallet])
 
+  const [, setIsConnectingWallet] = useIsConnectingWallet()
   const handleWalletChange = useCallback(
     async (walletKey: SUPPORTED_WALLET) => {
+      mixpanelHandler(MIXPANEL_TYPE.WALLET_CONNECT_WALLET_CLICK, { wallet: walletKey })
       setPendingWalletKey(walletKey)
       setWalletView(WALLET_VIEWS.PENDING)
-      setPendingError(false)
+      setIsConnectingWallet(true)
       try {
         await tryActivation(walletKey)
-        setIsUserManuallyDisconnect(false)
-      } catch {
+        setPendingError(false)
+        setError(null)
+      } catch (error) {
         setPendingError(true)
+        setError(error)
       }
+      setTimeout(() => {
+        setIsConnectingWallet(false)
+      }, 1000)
     },
-    [setIsUserManuallyDisconnect, tryActivation],
+    [tryActivation, setIsConnectingWallet, mixpanelHandler],
   )
 
   function getOptions() {
     // Generate list of wallets and states of it depend on current network
-    const parsedWalletList: WalletInfoExtended[] = Object.keys(SUPPORTED_WALLETS).map((k: string) => {
+    const parsedWalletList: WalletInfoExtended[] = (Object.keys(SUPPORTED_WALLETS) as SUPPORTED_WALLET[]).map(k => {
       const wallet = SUPPORTED_WALLETS[k]
       const readyState = (() => {
         const readyStateEVM = isEVMWallet(wallet) ? wallet.readyState() : undefined
@@ -242,12 +243,6 @@ export default function WalletModal() {
       })()
       const isSupportCurrentChain = (isEVMWallet(wallet) && isEVM) || (isSolanaWallet(wallet) && isSolana) || false
       const overridden = isOverriddenWallet(k) || (walletKey === 'COIN98' && !window.ethereum?.isCoin98)
-      const installLink =
-        k === 'COINBASE' && isEVM
-          ? undefined
-          : readyState === WalletReadyState.NotDetected
-          ? wallet.installLink
-          : undefined
 
       return {
         ...wallet,
@@ -255,16 +250,21 @@ export default function WalletModal() {
         readyState,
         isSupportCurrentChain,
         isOverridden: overridden,
-        installLink: installLink,
+        installLink: readyState === WalletReadyState.NotDetected ? wallet.installLink : undefined,
       }
     })
 
-    const sortWallets = (walletA: WalletInfoExtended, walletB: WalletInfoExtended): -1 | 0 | 1 => {
-      if (!walletA.installLink && !walletA.isOverridden && !walletB.installLink && !walletB.isOverridden) {
-        return walletA.name < walletB.name ? -1 : 1
-      }
-      if (walletA.installLink || walletA.isOverridden) return 1
-      return -1
+    const sortPoint: { [readyState in WalletReadyState]: number } = {
+      [WalletReadyState.Installed]: 1000,
+      [WalletReadyState.Loadable]: 100,
+      [WalletReadyState.NotDetected]: 10,
+      [WalletReadyState.Unsupported]: 1,
+    }
+    const sortWallets = (walletA: WalletInfoExtended, walletB: WalletInfoExtended): number => {
+      return (
+        sortPoint[walletB.readyState || WalletReadyState.Unsupported] -
+        sortPoint[walletA.readyState || WalletReadyState.Unsupported]
+      )
     }
     return (
       parsedWalletList
@@ -289,24 +289,6 @@ export default function WalletModal() {
   const [isPinnedPopupWallet, setPinnedPopupWallet] = useState(false)
 
   function getModalContent() {
-    if (error) {
-      return (
-        <UpperSection>
-          <RowBetween>
-            <HeaderRow padding="1rem">
-              <Trans>Error connecting</Trans>
-            </HeaderRow>
-            <CloseIcon onClick={toggleWalletModal}>
-              <Close />
-            </CloseIcon>
-          </RowBetween>
-          <ContentWrapper>
-            <Trans>Error connecting. Try refreshing the page.</Trans>
-          </ContentWrapper>
-        </UpperSection>
-      )
-    }
-
     return (
       <UpperSection>
         <RowBetween marginBottom="26px" gap="20px">
@@ -314,6 +296,7 @@ export default function WalletModal() {
             <HoverText
               onClick={() => {
                 setPendingError(false)
+                setError(null)
                 setWalletView(WALLET_VIEWS.ACCOUNT)
               }}
               style={{ marginRight: '1rem', flex: 1 }}
@@ -333,29 +316,31 @@ export default function WalletModal() {
           </CloseIcon>
         </RowBetween>
         {(walletView === WALLET_VIEWS.ACCOUNT || walletView === WALLET_VIEWS.CHANGE_WALLET) && (
-          <TermAndCondition onClick={() => setIsAcceptedTerm(!isAcceptedTerm)}>
+          <TermAndCondition
+            onClick={() => {
+              if (!isAcceptedTerm) {
+                mixpanelHandler(MIXPANEL_TYPE.WALLET_CONNECT_ACCEPT_TERM_CLICK)
+              }
+              setIsAcceptedTerm(!isAcceptedTerm)
+            }}
+          >
             <input
-              onChange={() => {
-                //
-              }}
               type="checkbox"
               checked={isAcceptedTerm}
-              style={{ marginRight: '12px', height: '14px', width: '14px', cursor: 'pointer' }}
+              data-testid="accept-term"
+              style={{ marginRight: '12px', height: '14px', width: '14px', minWidth: '14px', cursor: 'pointer' }}
             />
             <Text color={theme.subText}>
               <Trans>Accept </Trans>{' '}
               <ExternalLink href={TERM_FILES_PATH.KYBERSWAP_TERMS} onClick={e => e.stopPropagation()}>
                 <Trans>KyberSwap&lsquo;s Terms of Use</Trans>
-              </ExternalLink>
-              {', '}
-              <ExternalLink href={TERM_FILES_PATH.PRIVACY_POLICY} onClick={e => e.stopPropagation()}>
-                <Trans>Privacy Policy</Trans>
               </ExternalLink>{' '}
               <Trans>and</Trans>{' '}
-              <ExternalLink href={TERM_FILES_PATH.KYBER_DAO_TERMS} onClick={e => e.stopPropagation()}>
-                <Trans>KyberDAO&lsquo;s Terms of Use.</Trans>
+              <ExternalLink href={TERM_FILES_PATH.PRIVACY_POLICY} onClick={e => e.stopPropagation()}>
+                <Trans>Privacy Policy</Trans>
               </ExternalLink>
-              <Text fontSize={10}>
+              {'. '}
+              <Text fontSize={10} as="span">
                 <Trans>Last updated: {dayjs(TERM_FILES_PATH.VERSION).format('DD MMM YYYY')}</Trans>
               </Text>
             </Text>
@@ -448,7 +433,19 @@ export default function WalletModal() {
   }
 
   return (
-    <Modal isOpen={walletModalOpen} onDismiss={closeWalletModal} minHeight={false} maxHeight={90} maxWidth={600}>
+    <Modal
+      isOpen={walletModalOpen}
+      onDismiss={closeWalletModal}
+      minHeight={false}
+      maxHeight={90}
+      maxWidth={600}
+      bypassScrollLock={
+        walletView === WALLET_VIEWS.PENDING && ['WALLET_CONNECT', 'KRYSTAL_WC'].includes(pendingWalletKey)
+      }
+      bypassFocusLock={
+        walletView === WALLET_VIEWS.PENDING && ['WALLET_CONNECT', 'KRYSTAL_WC', 'BLOCTO'].includes(pendingWalletKey)
+      }
+    >
       <Wrapper>{getModalContent()}</Wrapper>
     </Modal>
   )

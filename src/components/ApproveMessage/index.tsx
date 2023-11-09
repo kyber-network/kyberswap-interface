@@ -5,12 +5,12 @@ import { ChevronDown, ChevronUp } from 'react-feather'
 import { useToggle } from 'react-use'
 import styled from 'styled-components'
 
+import { TruncatedText } from 'components'
 import Card from 'components/Card'
 import LightBulbEffect from 'components/Icons/LightBulbEffect'
 import { RowBetween } from 'components/Row'
 import { useActiveWeb3React } from 'hooks/index'
 import useTheme from 'hooks/useTheme'
-import { TruncatedText } from 'pages/TrueSight/components/TrendingSoonLayout/TrendingSoonTokenItem'
 import { ExternalLink, TYPE } from 'theme/index'
 import { getEtherscanLink, isAddress, shortenAddress } from 'utils/index'
 
@@ -30,7 +30,6 @@ export default function ApproveMessage({
     ![
       ChainId.BSCMAINNET,
       ChainId.BTTC,
-      ChainId.VELAS,
       ChainId.CRONOS,
       ChainId.ARBITRUM,
       ChainId.MATIC,
@@ -39,7 +38,6 @@ export default function ApproveMessage({
       ChainId.AURORA,
       ChainId.MAINNET,
       ChainId.AVAXMAINNET,
-      ChainId.OASIS,
     ].includes(chainId)
   ) {
     return null

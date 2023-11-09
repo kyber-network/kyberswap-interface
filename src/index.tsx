@@ -1,14 +1,18 @@
-import { datadogRum } from '@datadog/browser-rum'
 import * as Sentry from '@sentry/react'
+import { captureException } from '@sentry/react'
 import { BrowserTracing } from '@sentry/tracing'
-import { Web3ReactProvider, createWeb3ReactRoot } from '@web3-react/core'
+import { Web3ReactHooks, Web3ReactProvider } from '@web3-react/core'
+import { Connector } from '@web3-react/types'
 import AOS from 'aos'
 import 'aos/dist/aos.css'
+import axios from 'axios'
 import dayjs from 'dayjs'
+import duration from 'dayjs/plugin/duration'
+import relativeTime from 'dayjs/plugin/relativeTime'
 import utc from 'dayjs/plugin/utc'
 import 'inter-ui'
 import mixpanel from 'mixpanel-browser'
-import { StrictMode, useEffect } from 'react'
+import { StrictMode, useEffect, useMemo } from 'react'
 import { createRoot } from 'react-dom/client'
 import TagManager from 'react-gtm-module'
 import 'react-loading-skeleton/dist/skeleton.css'
@@ -17,14 +21,18 @@ import { BrowserRouter } from 'react-router-dom'
 import 'swiper/swiper-bundle.min.css'
 import 'swiper/swiper.min.css'
 
+
+import { KS_SETTING_API } from 'constants/env'
+import CampaignsUpdater from 'state/campaigns/updater'
+
 import SolanaWalletContext from 'components/SolanaWalletContext'
 import { ENV_LEVEL, GTM_ID, MIXPANEL_PROJECT_TOKEN, SENTRY_DNS, TAG } from 'constants/env'
 import { ENV_TYPE } from 'constants/type'
-// import { updateServiceWorker } from 'state/application/actions'
-import CampaignsUpdater from 'state/campaigns/updater'
+import { connections } from 'constants/wallets'
+
 
 import SEO from './components/SEO'
-import { NetworkContextName, sentryRequestId } from './constants'
+import { sentryRequestId } from './constants'
 import { LanguageProvider } from './i18n'
 import App from './pages/App'
 import * as serviceWorkerRegistration from './serviceWorkerRegistration'
@@ -36,37 +44,23 @@ import MulticallUpdater from './state/multicall/updater'
 import TransactionUpdater from './state/transactions/updater'
 import UserUpdater from './state/user/updater'
 import ThemeProvider, { FixedGlobalStyle, ThemedGlobalStyle } from './theme'
-import getLibrary from './utils/getLibrary'
 
 dayjs.extend(utc)
+dayjs.extend(duration)
+dayjs.extend(relativeTime)
 
 mixpanel.init(MIXPANEL_PROJECT_TOKEN, {
   debug: ENV_LEVEL < ENV_TYPE.PROD,
 })
 
 if (ENV_LEVEL > ENV_TYPE.LOCAL) {
-  datadogRum.init({
-    applicationId: '5bd0c243-6141-4bab-be21-5dac9b9efa9f',
-    clientToken: 'pub9163f29b2cdb31314b89ae232af37d5a',
-    site: 'datadoghq.eu',
-    service: 'kyberswap-interface',
-
-    version: TAG,
-    sampleRate: ENV_LEVEL === ENV_TYPE.PROD ? 10 : 100,
-    sessionReplaySampleRate: 100,
-    trackInteractions: true,
-    trackResources: true,
-    trackLongTasks: true,
-    defaultPrivacyLevel: 'mask-user-input',
-  })
-  datadogRum.startSessionReplayRecording()
-
   Sentry.init({
     dsn: SENTRY_DNS,
     environment: 'production',
     ignoreErrors: ['AbortError'],
     integrations: [new BrowserTracing()],
     tracesSampleRate: 0.1,
+    normalizeDepth: 5,
   })
   Sentry.configureScope(scope => {
     scope.setTag('request_id', sentryRequestId)
@@ -82,8 +76,6 @@ if (ENV_LEVEL > ENV_TYPE.LOCAL) {
 
 AOS.init()
 
-const Web3ProviderNetwork = createWeb3ReactRoot(NetworkContextName)
-
 if (window.ethereum) {
   window.ethereum.autoRefreshOnNetworkChange = false
 }
@@ -96,7 +88,6 @@ function Updaters() {
       <ApplicationUpdater />
       <TransactionUpdater />
       <MulticallUpdater />
-      <CampaignsUpdater />
       <CustomizeDexesUpdater />
     </>
   )
@@ -119,11 +110,16 @@ window.recaptchaOptions = {
 
 const ReactApp = () => {
   useEffect(hideLoader, [])
+  const connectors: [Connector, Web3ReactHooks][] = useMemo(
+    () => connections.map(({ hooks, connector }) => [connector, hooks]),
+    [],
+  )
+  const key = useMemo(() => connections.map(connection => connection.name).join('-'), [])
 
   return (
     <StrictMode>
       <SEO
-        title="KyberSwap - Swap and earn tokens at the best rates"
+        title="KyberSwap - Trading Smart"
         description="KyberSwap is DeFi‚Äôs first Dynamic Market Maker; a decentralized exchange protocol that provides frictionless crypto liquidity with extremely high flexibility and capital efficiency. KyberSwap is the first major protocol in Kyber‚Äôs liquidity hub."
       />
       <FixedGlobalStyle />
@@ -131,14 +127,12 @@ const ReactApp = () => {
         <SolanaWalletContext>
           <BrowserRouter>
             <LanguageProvider>
-              <Web3ReactProvider getLibrary={getLibrary}>
-                <Web3ProviderNetwork getLibrary={getLibrary}>
-                  <Updaters />
-                  <ThemeProvider>
-                    <ThemedGlobalStyle />
-                    <App />
-                  </ThemeProvider>
-                </Web3ProviderNetwork>
+              <Web3ReactProvider connectors={connectors} key={key}>
+                <Updaters />
+                <ThemeProvider>
+                  <ThemedGlobalStyle />
+                  <App />
+                </ThemeProvider>
               </Web3ReactProvider>
             </LanguageProvider>
           </BrowserRouter>

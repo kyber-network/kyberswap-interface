@@ -7,57 +7,49 @@ import { useMedia } from 'react-use'
 import { Box, Flex, Text } from 'rebass'
 import styled from 'styled-components'
 
+import ArbitrumDark from 'assets/images/Arbitrum_HorizontalLogo-dark.svg'
+import BTTCDark from 'assets/images/btt-logo-dark.svg'
 import KNCGraphic from 'assets/images/knc-graphic.png'
+import AboutAvalanche from 'assets/svg/about_icon_avalanche.svg'
+import BSC from 'assets/svg/about_icon_bsc.svg'
+import BugBounty from 'assets/svg/about_icon_bug_bounty.svg'
+import EthereumDark from 'assets/svg/about_icon_ethereum.png'
 import githubImg from 'assets/svg/about_icon_github.png'
-import githubImgLight from 'assets/svg/about_icon_github_light.png'
+import KyberDark from 'assets/svg/about_icon_kyber.svg'
+import ChainSecurity from 'assets/svg/chainsecurity.svg'
 import ForTraderImage from 'assets/svg/for_trader.svg'
-import ForTraderImageLight from 'assets/svg/for_trader_light.svg'
 import { ReactComponent as KNCSVG } from 'assets/svg/knc_black.svg'
 import SeamlessImg from 'assets/svg/seamless.svg'
 import Banner from 'components/Banner'
 import { ButtonEmpty, ButtonLight } from 'components/Button'
 import { FooterSocialLink } from 'components/Footer/Footer'
 import {
-  Arbitrum,
-  Aurora,
   AuroraFull,
-  Avalanche,
   BestPrice,
-  Binance,
-  Bttc,
   CircleFocus,
   Clock,
-  Cronos,
   CronosLogoFull,
   Drop,
   Enter,
-  Ethereum,
-  Fantom,
   FantomLogoFull,
   FarmIcon,
+  LineaFull,
   LowestSlippage,
   MoneyBagOutline,
-  Oasis,
-  OasisLogoFull,
-  OptimismLogo,
   OptimismLogoFull,
-  Polygon,
   PolygonLogoFull,
-  Solana,
-  SolanaLogoFull,
-  Velas,
-  VelasLogoFull,
 } from 'components/Icons'
 import AntiSnippingAttack from 'components/Icons/AntiSnippingAttack'
+import ZkSyncFull from 'components/Icons/ZkSyncFull'
 import Loader from 'components/Loader'
 import { APP_PATHS } from 'constants/index'
-import { MAINNET_NETWORKS, NETWORKS_INFO } from 'constants/networks'
+import { NETWORKS_INFO } from 'constants/networks'
 import { VERSION } from 'constants/v2'
 import { useActiveWeb3React } from 'hooks'
+import useChainsConfig from 'hooks/useChainsConfig'
 import useMixpanel, { MIXPANEL_TYPE } from 'hooks/useMixpanel'
 import useTheme from 'hooks/useTheme'
 import { useGlobalData } from 'state/about/hooks'
-import { useDarkModeManager } from 'state/user/hooks'
 import { ExternalLink, MEDIA_WIDTHS, StyledInternalLink } from 'theme'
 import { formatBigLiquidity } from 'utils/formatBalance'
 
@@ -88,7 +80,8 @@ import {
   VerticalDivider,
   Wrapper,
 } from '../styleds'
-import MeetTheTeam from './MeetTheTeam'
+
+// import MeetTheTeam from './MeetTheTeam'
 
 const KNCBlack = styled(KNCSVG)`
   path {
@@ -122,6 +115,7 @@ const ForTraderInfoCell = styled.div`
 export const KSStatistic = () => {
   const theme = useTheme()
   const upToLarge = useMedia(`(max-width: ${MEDIA_WIDTHS.upToLarge}px)`)
+  const { supportedChains } = useChainsConfig()
 
   return (
     <Box sx={{ position: 'relative', marginTop: '20px' }}>
@@ -154,7 +148,7 @@ export const KSStatistic = () => {
         <ForTraderInfoRow>
           <ForTraderInfoCell>
             <Text fontWeight="600" fontSize="24px">
-              {MAINNET_NETWORKS.length - 1}+
+              {supportedChains.length}+
             </Text>
             <Text color={theme.subText} marginTop="4px" fontSize="14px">
               <Trans>Chains</Trans>
@@ -178,7 +172,6 @@ export const KSStatistic = () => {
 function AboutKyberSwap() {
   const { isSolana, networkInfo } = useActiveWeb3React()
   const theme = useTheme()
-  const [isDarkMode] = useDarkModeManager()
   const above992 = useMedia('(min-width: 992px)')
   const above768 = useMedia('(min-width: 768px)')
   const above500 = useMedia('(min-width: 500px)')
@@ -274,7 +267,7 @@ function AboutKyberSwap() {
       {above768 && (
         <Flex alignItems="center" width="fit-content">
           <KyberSwapSlippage>
-            <img src={isDarkMode ? '/logo-dark.svg' : '/logo.svg'} width="88px" alt="KyberSwap" />
+            <img src={'/logo-dark.svg'} width="88px" alt="KyberSwap" />
             <Flex justifyContent="center">
               <Text fontWeight="500" fontSize="40px" lineHeight="48px">
                 ~0.1
@@ -286,7 +279,7 @@ function AboutKyberSwap() {
               AMP Factor = 100
             </Text>
           </KyberSwapSlippage>
-          <TypicalAMM background={isDarkMode ? undefined : '#DCDBDC'}>
+          <TypicalAMM background={undefined}>
             <Text color={theme.subText} fontSize="12px">
               Typical AMM
             </Text>
@@ -476,8 +469,10 @@ function AboutKyberSwap() {
     )
   }
 
+  const { supportedChains } = useChainsConfig()
+
   return (
-    <div style={{ position: 'relative', background: isDarkMode ? theme.buttonBlack : theme.white, width: '100%' }}>
+    <div style={{ position: 'relative', background: theme.buttonBlack, width: '100%' }}>
       <AboutPage>
         <Banner margin="32px auto 0" padding="0 16px" maxWidth="1224px" />
 
@@ -491,24 +486,14 @@ function AboutKyberSwap() {
               <Text fontWeight="500" color={theme.primary} as="span">
                 Earn
               </Text>{' '}
-              Tokens at the Best Rates
+              Tokens at Superior Rates
             </Trans>
           </Text>
 
           <SupportedChain>
-            <Ethereum />
-            <Polygon />
-            <Binance />
-            <Avalanche />
-            <Fantom />
-            <Cronos />
-            <Arbitrum />
-            <Velas />
-            <Aurora />
-            <Oasis />
-            <Bttc />
-            <OptimismLogo />
-            <Solana />
+            {supportedChains.map(({ chainId: chain, icon, name }) => (
+              <img src={icon} alt={name} key={chain} width="36px" height="36px" />
+            ))}
           </SupportedChain>
 
           <KyberSwapGeneralIntro />
@@ -621,7 +606,7 @@ function AboutKyberSwap() {
                 <Trans>FOR TRADERS</Trans>
               </Text>
               <Text as="h2" marginTop="12px" fontSize={['28px', '36px']} fontWeight="500">
-                <Trans>Swap your tokens at the best rates. No limits</Trans>
+                <Trans>Swap your tokens at superior rates. No limits</Trans>
               </Text>
               <Text
                 fontSize="16px"
@@ -632,14 +617,14 @@ function AboutKyberSwap() {
               >
                 <Trans>
                   With our Dynamic Trade Routing technology, we aggregate liquidity from multiple DEXs (including
-                  KyberSwap) and identify the best trade route for you.
+                  KyberSwap) and identify superior trade routes for you.
                 </Trans>
               </Text>
 
               <Flex marginTop="20px" alignItems="center">
                 <BestPrice />
                 <Text marginLeft="12px">
-                  <Trans>Best price guaranteed</Trans>
+                  <Trans>Superior price guaranteed</Trans>
                 </Text>
               </Flex>
               <Flex marginTop="20px" alignItems="center">
@@ -674,7 +659,7 @@ function AboutKyberSwap() {
             <Flex flex={1} flexDirection="column">
               <img
                 width="100%"
-                src={isDarkMode ? ForTraderImage : ForTraderImageLight}
+                src={ForTraderImage}
                 alt="ForTrader"
                 style={{ marginTop: above992 ? '0.25rem' : '40px' }}
               />
@@ -865,19 +850,19 @@ function AboutKyberSwap() {
               <Flex marginTop="20px" alignItems="center">
                 <Enter />
                 <Text marginLeft="12px">
-                  <Trans>No KYC or sign-ups required</Trans>
+                  <Trans>No KYC or sign-ups required.</Trans>
                 </Text>
               </Flex>
               <Flex marginTop="20px" alignItems="center">
                 <BestPrice />
                 <Text marginLeft="12px">
-                  <Trans>No extra deposit or withdrawal fees</Trans>
+                  <Trans>No extra deposit or withdrawal fees.</Trans>
                 </Text>
               </Flex>
               <Flex marginTop="20px" alignItems="center">
                 <CircleFocus />
                 <Text marginLeft="12px">
-                  <Trans>List your tokens permissionlessly</Trans>
+                  <Trans>List your tokens permissionlessly.</Trans>
                 </Text>
               </Flex>
             </Flex>
@@ -927,15 +912,7 @@ function AboutKyberSwap() {
 
                 <ButtonEmpty padding="0">
                   <ExternalLink href="https://chainsecurity.com/security-audit/kyberswap-elastic">
-                    <img
-                      src={
-                        !isDarkMode
-                          ? 'https://chainsecurity.com/wp-content/themes/chainsecurity-wp/resources/images/temp/logo.svg'
-                          : require('assets/svg/chainsecurity.svg').default
-                      }
-                      alt="security"
-                      width={above992 ? '197px' : '140px'}
-                    />
+                    <img src={ChainSecurity} alt="security" width={above992 ? '197px' : '140px'} />
                   </ExternalLink>
                 </ButtonEmpty>
               </div>
@@ -957,7 +934,7 @@ function AboutKyberSwap() {
                 </Text>
                 <ButtonEmpty padding="0">
                   <ExternalLink href="https://github.com/KyberNetwork">
-                    <img src={isDarkMode ? githubImg : githubImgLight} alt="github" width="125px" />
+                    <img src={githubImg} alt="github" width="125px" />
                   </ExternalLink>
                 </ButtonEmpty>
               </div>
@@ -967,11 +944,7 @@ function AboutKyberSwap() {
                 <Text color={theme.subText} textAlign="center" marginBottom="16px">
                   <Trans>Bug Bounty</Trans>
                 </Text>
-                <img
-                  src={require('assets/svg/about_icon_bug_bounty.svg').default}
-                  alt="bugbounty"
-                  width={above992 ? '186px' : '140px'}
-                />
+                <img src={BugBounty} alt="bugbounty" width={above992 ? '186px' : '140px'} />
               </div>
             </Flex>
           </Flex>
@@ -994,7 +967,7 @@ function AboutKyberSwap() {
               >
                 <Trans>
                   KNC is a utility and governance token, and an integral part of Kyber Network and its flagship product
-                  KyberSwap. It is the glue that connects different stakeholders in Kyber&apos;s ecosystem
+                  KyberSwap. It is the glue that connects different stakeholders in Kyber&apos;s ecosystem.
                 </Trans>
               </Text>
               <img
@@ -1012,55 +985,48 @@ function AboutKyberSwap() {
             </Flex>
           </AboutKNC>
 
-          <MeetTheTeam />
+          {/* <MeetTheTeam /> */}
 
           <Text as="h2" marginTop={['100px', '160px']} fontSize={['28px', '36px']} fontWeight="500" textAlign="center">
             <Trans>Powered by</Trans>
 
             <Powered>
-              <img
-                src={
-                  isDarkMode
-                    ? require('assets/svg/about_icon_kyber.svg').default
-                    : require('assets/svg/about_icon_kyber_light.svg').default
-                }
-                alt="kyber_icon"
-                width="100%"
-              />
-              <img
-                src={
-                  isDarkMode
-                    ? require('assets/svg/about_icon_ethereum.png').default
-                    : require('assets/svg/about_icon_ethereum_light.png').default
-                }
-                alt="ethereum_icon"
-                width="100%"
-              />
-              <img src={require('assets/svg/about_icon_bsc.svg').default} alt="bsc_icon" width="100%" />
+              <img src={KyberDark} alt="kyber_icon" width="100%" />
+              <img src={EthereumDark} alt="ethereum_icon" width="100%" />
+              <img src={BSC} alt="bsc_icon" width="100%" />
               <PolygonLogoFull />
-              <img src={require('assets/svg/about_icon_avalanche.svg').default} alt="avalanche_icon" width="100%" />
-              <FantomLogoFull color={isDarkMode ? '#fff' : '#1969FF'} width="100%" height="unset" />
-              <CronosLogoFull color={isDarkMode ? undefined : '#142564'} />
-              <img
-                src={require(`assets/images/Arbitrum_HorizontalLogo${isDarkMode ? '-dark' : ''}.svg`).default}
-                alt=""
-                width="100%"
-              />
-              <VelasLogoFull color={isDarkMode ? undefined : 'black'} />
+              <img src={AboutAvalanche} alt="avalanche_icon" width="100%" />
+              <FantomLogoFull color={'#fff'} width="100%" height="unset" />
+              <CronosLogoFull color={undefined} />
+              <img src={ArbitrumDark} alt="" width="100%" />
               <AuroraFull />
-              <OasisLogoFull />
+              <img src={BTTCDark} alt="btt" width="100%" />
+              <OptimismLogoFull />
+              {/* <SolanaLogoFull /> */}
+              <ZkSyncFull color={theme.text} />
+              <LineaFull />
               <img
-                src={require(`assets/images/btt-logo${isDarkMode ? '-dark' : ''}.svg`).default}
-                alt="btt"
+                src={
+                  'https://polygontechnology.notion.site/image/https%3A%2F%2Fs3-us-west-2.amazonaws.com%2Fsecure.notion-static.com%2Fdd9f65de-0698-41f4-9a0e-4120b50b8176%2FPolygon_zkEVM_logo_light.svg?table=block&id=5d157d90-9ed4-48e4-be5d-4405bb02a2aa&spaceId=51562dc1-1dc5-4484-bf96-2aeac848ae2f&userId=&cache=v2'
+                }
+                alt="zkevm"
                 width="100%"
               />
-              <OptimismLogoFull />
-              <SolanaLogoFull />
+              <img
+                src="https://raw.githubusercontent.com/base-org/brand-kit/001c0e9b40a67799ebe0418671ac4e02a0c683ce/logo/wordmark/Base_Wordmark_Blue.svg"
+                alt="Base"
+                width="100%"
+              />
+              <img
+                src="https://storage.googleapis.com/ks-setting-1d682dca/8f4656a9-aaeb-438c-a6c2-3af30cca26db1697596014388.png"
+                alt="Sroll"
+                width="100%"
+              />
             </Powered>
           </Text>
         </Wrapper>
       </AboutPage>
-      <Footer background={isDarkMode ? theme.background : theme.white}>
+      <Footer background={theme.background}>
         <FooterContainer>
           <Flex flexWrap="wrap" sx={{ gap: '12px' }} justifyContent="center">
             <ExternalLink href={`https://docs.kyberswap.com`}>

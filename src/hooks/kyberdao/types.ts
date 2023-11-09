@@ -37,6 +37,7 @@ interface VoteStat {
   total_address_count: number
   total_vote_count: number
   votes: VoteDetail[] | null
+  quorum_status: number
 }
 export interface ProposalDetail {
   cancelled: boolean
@@ -66,6 +67,39 @@ export interface StakerInfo {
   stake_amount: number
 }
 
+export interface GasRefundTierInfo {
+  userTier: number
+  gasRefundPercentage: number
+}
+
+export interface RewardInfo {
+  knc: number
+  usd: number
+}
+
+interface TransactionInfo {
+  tx: string
+  timestamp: number
+  gasRefundInKNC: string
+  gasRefundInUSD: string
+  gasFeeInUSD: string
+  gasFeeInNativeToken: string
+  epoch: number
+  userTier: number
+  gasRefundPercentage: string
+  userWallet: string
+}
+
+export interface EligibleTxsInfo {
+  transactions: TransactionInfo[]
+  pagination: {
+    totalOfPages: number
+    currentPage: number
+    pageSize: number
+    hasMore: boolean
+  }
+}
+
 export interface StakerAction {
   timestamp: number
   epoch: number
@@ -86,4 +120,16 @@ export interface VoteInfo {
   epoch: number
   staker: string
   power: string
+}
+
+export interface RewardStats {
+  liquidated: {
+    totalAmountInKNC: string
+    totalAmountInUSD: string
+  }
+  pending: {
+    totalAmountInKNC: string
+    totalAmountInUSD: string
+  }
+  apr: string
 }

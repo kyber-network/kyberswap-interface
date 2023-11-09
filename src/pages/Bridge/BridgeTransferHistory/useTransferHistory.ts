@@ -1,20 +1,16 @@
-import { useEffect, useMemo, useState } from 'react'
-import { useDispatch } from 'react-redux'
+import { useMemo, useState } from 'react'
+import { useGetListBridgeTxsQuery } from 'services/crossChain'
 
-import { KS_SETTING_API } from 'constants/env'
-import useGetBridgeTransfers from 'hooks/bridge/useGetBridgeTransfers'
-import { setHistoryURL } from 'state/bridge/actions'
-
-import { ITEMS_PER_PAGE } from '../consts'
+import { ITEMS_PER_PAGE } from 'pages/Bridge/consts'
 
 const useTransferHistory = (account: string) => {
-  const dispatch = useDispatch()
   const [page, setPage] = useState(1)
 
-  const swrKey = account
-    ? `${KS_SETTING_API}/v1/multichain-transfers?userAddress=${account}&page=${page}&pageSize=${ITEMS_PER_PAGE}`
-    : ''
-  const { data, isValidating, error } = useGetBridgeTransfers(swrKey)
+  const {
+    data,
+    isFetching: isValidating,
+    error,
+  } = useGetListBridgeTxsQuery({ walletAddress: account ?? '', page }, { skip: !account })
 
   const transfers = useMemo(() => {
     if (data) return data.data.transfers
@@ -41,11 +37,10 @@ const useTransferHistory = (account: string) => {
     setPage(page + 1)
   }
 
-  const range = useMemo(() => [ITEMS_PER_PAGE * (page - 1) + 1, Math.min(ITEMS_PER_PAGE * page)], [page])
-
-  useEffect(() => {
-    dispatch(setHistoryURL(swrKey))
-  }, [dispatch, swrKey])
+  const range = useMemo(
+    () => [ITEMS_PER_PAGE * (page - 1) + 1, ITEMS_PER_PAGE * (page - 1) + Math.min(ITEMS_PER_PAGE, transfers.length)],
+    [page, transfers.length],
+  )
 
   return {
     range,
@@ -57,7 +52,9 @@ const useTransferHistory = (account: string) => {
     onClickNext,
     onClickPrevious,
     isCompletelyEmpty: page === 1 && transfers.length === 0,
+    isThisPageEmpty: transfers.length === 0,
   }
 }
+export type TransferHistoryResponse = ReturnType<typeof useTransferHistory>
 
 export default useTransferHistory

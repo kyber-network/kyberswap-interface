@@ -1,6 +1,5 @@
 import { ChainId } from '@kyberswap/ks-sdk-core'
-import { Trans, t } from '@lingui/macro'
-import { useNavigate } from 'react-router-dom'
+import { t } from '@lingui/macro'
 import { Flex } from 'rebass'
 
 import { PrivateAnnouncementProp } from 'components/Announcement/PrivateAnnoucement'
@@ -13,21 +12,22 @@ import {
   RowItem,
   Title,
 } from 'components/Announcement/PrivateAnnoucement/styled'
-import { AnnouncementTemplatePoolPosition, PrivateAnnouncementType } from 'components/Announcement/type'
+import { AnnouncementTemplatePoolPosition } from 'components/Announcement/type'
 import { DoubleCurrencyLogoV2 } from 'components/DoubleLogo'
 import { MoneyBag } from 'components/Icons'
 import { APP_PATHS } from 'constants/index'
 import { NETWORKS_INFO } from 'constants/networks'
-import { useChangeNetwork } from 'hooks/useChangeNetwork'
 import useTheme from 'hooks/useTheme'
+import { useNavigateToUrl } from 'utils/redirect'
 
 function InboxItemBridge({
   announcement,
   onRead,
   style,
   time,
+  title,
 }: PrivateAnnouncementProp<AnnouncementTemplatePoolPosition>) {
-  const { templateBody, isRead } = announcement
+  const { templateBody, isRead, templateType } = announcement
   const theme = useTheme()
 
   const {
@@ -41,29 +41,24 @@ function InboxItemBridge({
     poolAddress,
     type,
     chainId: rawChain,
-  } = templateBody.position
+  } = templateBody?.position || {}
 
   const chainId = Number(rawChain) as ChainId
   const isInRange = type === 'IN_RANGE'
   const statusMessage = isInRange ? t`Back in range` : t`Out of range`
 
-  const navigate = useNavigate()
-  const changeNetwork = useChangeNetwork()
+  const navigate = useNavigateToUrl()
   const onClick = () => {
-    changeNetwork(chainId, () => {
-      navigate(`${APP_PATHS.MY_POOLS}/${NETWORKS_INFO[chainId].route}?search=${poolAddress}`)
-      onRead(announcement, statusMessage)
-    })
+    navigate(`${APP_PATHS.MY_POOLS}/${NETWORKS_INFO[chainId].route}?search=${poolAddress}`, chainId)
+    onRead(announcement, statusMessage)
   }
 
   return (
     <InboxItemWrapper isRead={isRead} onClick={onClick} style={style}>
       <InboxItemRow>
         <RowItem>
-          <InboxIcon type={PrivateAnnouncementType.POOL_POSITION} chainId={chainId} />
-          <Title isRead={isRead}>
-            <Trans>Liquidity Pool Alert</Trans>
-          </Title>
+          <InboxIcon type={templateType} chainId={chainId} />
+          <Title isRead={isRead}>{title}</Title>
           {!isRead && <Dot />}
         </RowItem>
         <RowItem>

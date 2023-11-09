@@ -1,3 +1,4 @@
+
 import { ChainId, Token } from '@kyberswap/ks-sdk-core'
 import { Trans } from '@lingui/macro'
 import { stringify } from 'querystring'
@@ -92,18 +93,30 @@ const LimitTab: React.FC = () => {
   }, [chainId])
 
   if (!getLimitOrderContract(chainId)) {
-    return null
-  }
 
-  return (
-    <Tab onClick={onClickTab} isActive={isLimitPage}>
-      <Text fontSize={20} fontWeight={500}>
-        <Trans>Limit</Trans>
-      </Text>
-      <BetaTag>
-        <Trans>Beta</Trans>
-      </BetaTag>
+
+
+    <Tab
+      id="limit-button"
+      data-testid="limit-button"
+      onClick={onClick}
+      isActive={active || isLimitPage}
+      style={{ display: 'flex', gap: '4px', fontSize: '20px', fontWeight: '500' }}
+    >
+      <Trans>Limit</Trans>{' '}
+      {!!numberOfInsufficientFundOrders && (
+        <MouseoverTooltip
+          placement="top"
+          text={
+            <Trans>
+              You have {numberOfInsufficientFundOrders} active orders that don&apos;t have sufficient funds.
+            </Trans>
+          }
+        >
+          <WarningBadge>{numberOfInsufficientFundOrders}</WarningBadge>
+        </MouseoverTooltip>
+      )}
     </Tab>
   )
 }
-export default LimitTab
+

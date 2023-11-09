@@ -18,9 +18,10 @@ import PoolFarmLink from 'components/WalletPopup/Transactions/PoolFarmLink'
 import Status from 'components/WalletPopup/Transactions/Status'
 import { isTxsPendingTooLong } from 'components/WalletPopup/Transactions/helper'
 import { CancellingOrderInfo } from 'components/swapv2/LimitOrder/useCancellingOrders'
-import { APP_PATHS } from 'constants/index'
+import { APP_PATHS, ETHER_ADDRESS } from 'constants/index'
 import { NETWORKS_INFO } from 'constants/networks'
 import useTheme from 'hooks/useTheme'
+import { getAxelarScanUrl } from 'pages/CrossChain'
 import {
   TRANSACTION_TYPE,
   TransactionDetails,
@@ -31,7 +32,7 @@ import {
   TransactionExtraInfoStakeFarm,
 } from 'state/transactions/type'
 import { ExternalLink, ExternalLinkIcon } from 'theme'
-import { getEtherscanLink } from 'utils'
+import { getEtherscanLink, getNativeTokenLogo } from 'utils'
 
 const ItemWrapper = styled.div`
   border-bottom: 1px solid ${({ theme }) => theme.border};
@@ -70,13 +71,13 @@ const Description1Token = (transaction: TransactionDetails) => {
   const { extraInfo = {}, type } = transaction
   const { tokenSymbol, tokenAmount, tokenAddress } = extraInfo as TransactionExtraInfo1Token
   // +10KNC or -10KNC
-  const plus = [TRANSACTION_TYPE.KYBERDAO_CLAIM].includes(type)
+  const plus = [TRANSACTION_TYPE.KYBERDAO_CLAIM, TRANSACTION_TYPE.KYBERDAO_CLAIM_GAS_REFUND].includes(type)
   return <DeltaTokenAmount tokenAddress={tokenAddress} symbol={tokenSymbol} amount={tokenAmount} plus={plus} />
 }
 
 //ex: +3knc -2usdt
 const Description2Token = (transaction: TransactionDetails) => {
-  const { extraInfo = {}, type } = transaction
+  const { extraInfo = {}, type, chainId } = transaction
   const { tokenAmountIn, tokenAmountOut, tokenSymbolIn, tokenSymbolOut, tokenAddressIn, tokenAddressOut } =
     extraInfo as TransactionExtraInfo2Token
 
@@ -86,6 +87,7 @@ const Description2Token = (transaction: TransactionDetails) => {
     TRANSACTION_TYPE.CLASSIC_CREATE_POOL,
     TRANSACTION_TYPE.ELASTIC_CREATE_POOL,
     TRANSACTION_TYPE.ELASTIC_INCREASE_LIQUIDITY,
+    TRANSACTION_TYPE.ELASTIC_ZAP_IN_LIQUIDITY,
   ].includes(type)
 
   const signTokenIn = [
@@ -101,12 +103,14 @@ const Description2Token = (transaction: TransactionDetails) => {
         symbol={tokenSymbolOut}
         amount={tokenAmountOut}
         plus={signTokenOut}
+        logoURL={tokenAddressOut === ETHER_ADDRESS ? getNativeTokenLogo(chainId) : undefined}
       />
       <DeltaTokenAmount
         tokenAddress={tokenAddressIn}
         symbol={tokenSymbolIn}
         amount={tokenAmountIn}
         plus={signTokenIn}
+        logoURL={tokenAddressIn === ETHER_ADDRESS ? getNativeTokenLogo(chainId) : undefined}
       />
     </>
   )
@@ -226,6 +230,58 @@ const DescriptionBridge = (transaction: TransactionDetails) => {
   }
 }
 
+const DescriptionCrossChain = (transaction: TransactionDetails) => {
+  const { extraInfo = {} } = transaction
+  const {
+    tokenAmountIn,
+    tokenSymbolIn,
+    chainIdIn = ChainId.MAINNET,
+    chainIdOut = ChainId.MAINNET,
+    tokenAddressIn,
+    tokenAddressOut,
+    tokenAmountOut,
+    tokenSymbolOut,
+    tokenLogoURLIn,
+    tokenLogoURLOut,
+    rate,
+  } = extraInfo as TransactionExtraInfo2Token
+  const theme = useTheme()
+
+  return {
+    leftComponent: (
+      <>
+        <TokenAmountWrapper>
+          <DeltaTokenAmount
+            tokenAddress={tokenAddressOut}
+            amount={tokenAmountOut}
+            symbol={tokenSymbolOut}
+            plus
+            chainId={chainIdOut}
+            logoURL={tokenLogoURLOut}
+          />
+        </TokenAmountWrapper>
+        <TokenAmountWrapper>
+          <DeltaTokenAmount
+            tokenAddress={tokenAddressIn}
+            amount={tokenAmountIn}
+            symbol={tokenSymbolIn}
+            plus={false}
+            chainId={chainIdIn}
+            logoURL={tokenLogoURLIn}
+          />
+        </TokenAmountWrapper>
+      </>
+    ),
+    rightComponent: (
+      <DeltaTokenAmount
+        color={theme.text}
+        symbol={`${tokenSymbolIn}/${tokenSymbolOut}`}
+        amount={Number(rate).toPrecision(6)}
+      />
+    ),
+  }
+}
+
 // ex: approve elastic farm, approve knc, claim 3knc
 const DescriptionApproveClaim = (transaction: TransactionDetails) => {
   const { extraInfo = {}, type } = transaction
@@ -290,13 +346,14 @@ const DESCRIPTION_MAP: {
   [TRANSACTION_TYPE.ELASTIC_DEPOSIT_LIQUIDITY]: DescriptionStakeFarm,
   [TRANSACTION_TYPE.ELASTIC_WITHDRAW_LIQUIDITY]: DescriptionStakeFarm,
 
-  [TRANSACTION_TYPE.KYBERDAO_CLAIM]: Description1Token,
-
   [TRANSACTION_TYPE.APPROVE]: DescriptionApproveClaim,
   [TRANSACTION_TYPE.CLAIM_REWARD]: DescriptionApproveClaim,
 
   [TRANSACTION_TYPE.KYBERDAO_STAKE]: DescriptionKyberDaoStake,
   [TRANSACTION_TYPE.KYBERDAO_UNSTAKE]: DescriptionKyberDaoStake,
+  [TRANSACTION_TYPE.KYBERDAO_CLAIM]: Description1Token,
+  [TRANSACTION_TYPE.KYBERDAO_CLAIM_GAS_REFUND]: Description1Token,
+
   [TRANSACTION_TYPE.TRANSFER_TOKEN]: Description1Token,
 
   [TRANSACTION_TYPE.UNWRAP_TOKEN]: Description2Token,
@@ -305,6 +362,7 @@ const DESCRIPTION_MAP: {
   [TRANSACTION_TYPE.KYBERDAO_MIGRATE]: Description2Token,
 
   [TRANSACTION_TYPE.BRIDGE]: DescriptionBridge,
+  [TRANSACTION_TYPE.CROSS_CHAIN_SWAP]: DescriptionCrossChain,
   [TRANSACTION_TYPE.CANCEL_LIMIT_ORDER]: DescriptionLimitOrder,
 
   [TRANSACTION_TYPE.CLASSIC_CREATE_POOL]: DescriptionLiquidity,
@@ -314,6 +372,7 @@ const DESCRIPTION_MAP: {
   [TRANSACTION_TYPE.CLASSIC_REMOVE_LIQUIDITY]: DescriptionLiquidity,
   [TRANSACTION_TYPE.ELASTIC_REMOVE_LIQUIDITY]: DescriptionLiquidity,
   [TRANSACTION_TYPE.ELASTIC_INCREASE_LIQUIDITY]: DescriptionLiquidity,
+  [TRANSACTION_TYPE.ELASTIC_ZAP_IN_LIQUIDITY]: DescriptionLiquidity,
   [TRANSACTION_TYPE.ELASTIC_COLLECT_FEE]: DescriptionLiquidity,
 
   [TRANSACTION_TYPE.HARVEST]: DescriptionHarvestFarmReward,
@@ -355,7 +414,14 @@ export default forwardRef<HTMLDivElement, Prop>(function TransactionItem(
           <Text color={theme.text} fontSize="14px">
             {type}
           </Text>
-          <ExternalLinkIcon color={theme.subText} href={getEtherscanLink(chainId, hash, 'transaction')} />
+          <ExternalLinkIcon
+            color={theme.subText}
+            href={
+              type === TRANSACTION_TYPE.CROSS_CHAIN_SWAP
+                ? getAxelarScanUrl(hash)
+                : getEtherscanLink(chainId, hash, 'transaction')
+            }
+          />
         </Row>
         <Status transaction={transaction} cancellingOrderInfo={cancellingOrderInfo} />
       </Flex>
