@@ -4,6 +4,7 @@ import { BigNumber } from 'ethers'
 import { ZERO_ADDRESS } from 'constants/index'
 import useMixpanel, { MIXPANEL_TYPE } from 'hooks/useMixpanel'
 import { useTransactionAdder } from 'state/transactions/hooks'
+import { TRANSACTION_TYPE } from 'state/transactions/type'
 import { Schedule } from 'state/vesting/hooks'
 import { calculateGasMargin } from 'utils'
 import { fixedFormatting } from 'utils/formatBalance'
@@ -28,7 +29,7 @@ const ScheduleCard = ({ schedules }: { schedules: Schedule[] }) => {
       token: Token
       tokenPrice: number
     }
-  }>((result, schedule, index) => {
+  }>((result, schedule) => {
     const address = (schedule.token.isNative ? ZERO_ADDRESS : schedule.token.address) as string
 
     if (!result[address]) {
@@ -94,7 +95,11 @@ const ScheduleCard = ({ schedules }: { schedules: Schedule[] }) => {
       gasLimit: calculateGasMargin(estimateGas),
     })
     if (tx) {
-      addTransactionWithType(tx, { type: 'Claim', summary: 'all rewards' })
+      addTransactionWithType({
+        hash: tx.hash,
+        type: TRANSACTION_TYPE.CLAIM_REWARD,
+        extraInfo: { summary: 'all rewards' },
+      })
       mixpanelHandler(MIXPANEL_TYPE.ELASTIC_ALL_REWARD_CLAIMED, {
         reward_tokens_and_qty: Object.assign(
           {},

@@ -1,11 +1,10 @@
-import { ChainId } from '@kyberswap/ks-sdk-core'
-import { computePoolAddress } from '@kyberswap/ks-sdk-elastic'
 import { Trans, t } from '@lingui/macro'
 import { BigNumber } from 'ethers'
 import { rgba } from 'polished'
-import { useMemo, useRef, useState } from 'react'
+import { useCallback, useMemo, useRef, useState } from 'react'
+import { isMobile } from 'react-device-detect'
 import { Info } from 'react-feather'
-import { useHistory, useLocation } from 'react-router-dom'
+import { Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { useMedia } from 'react-use'
 import { Flex, Text } from 'rebass'
 import styled from 'styled-components'
@@ -14,23 +13,30 @@ import Card from 'components/Card'
 import { AutoColumn } from 'components/Column'
 import Wallet from 'components/Icons/Wallet'
 import Search from 'components/Search'
+import SubscribeNotificationButton from 'components/SubscribeButton'
 import Toggle from 'components/Toggle'
 import Tutorial, { TutorialType } from 'components/Tutorial'
-import { PROMM_ANALYTICS_URL } from 'constants/index'
-import { NETWORKS_INFO } from 'constants/networks'
+import { APP_PATHS, PROMM_ANALYTICS_URL } from 'constants/index'
 import { VERSION } from 'constants/v2'
 import { useActiveWeb3React } from 'hooks'
 import useDebounce from 'hooks/useDebounce'
+import { MIXPANEL_TYPE } from 'hooks/useMixpanel'
 import useParsedQueryString from 'hooks/useParsedQueryString'
-import { useProAmmPositions } from 'hooks/useProAmmPositions'
+import { useFarmPositions, useProAmmPositions } from 'hooks/useProAmmPositions'
 import useTheme from 'hooks/useTheme'
-import { FilterRow, InstructionText, PageWrapper, PositionCardGrid, Tab } from 'pages/Pool'
-import { FarmUpdater, useElasticFarms } from 'state/farms/elastic/hooks'
+import { FilterRow, InstructionText, PageWrapper, PositionCardGrid, Tab } from 'pages/MyPool'
+import { FarmUpdater } from 'state/farms/elastic/hooks'
+import { useElasticFarmsV2 } from 'state/farms/elasticv2/hooks'
+import ElasticFarmV2Updater from 'state/farms/elasticv2/updater'
 import { ExternalLink, StyledInternalLink, TYPE } from 'theme'
 import { PositionDetails } from 'types/position'
 
 import ContentLoader from './ContentLoader'
-import PositionListItem from './PositionListItem'
+import PositionGrid from './PositionGrid'
+
+const Highlight = styled.span`
+  color: ${({ theme }) => theme.text};
+`
 
 const TabRow = styled.div`
   display: flex;
@@ -45,71 +51,68 @@ const TabRow = styled.div`
   `}
 `
 
+const TabWrapper = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  ${({ theme }) => theme.mediaWidth.upToSmall`
+    gap: 8px;
+  `}
+`
+
 interface AddressSymbolMapInterface {
   [key: string]: string
 }
 
+const renderNotificationButton = (iconOnly: boolean) => {
+  return (
+    <SubscribeNotificationButton
+      iconOnly={iconOnly}
+      subscribeTooltip={
+        <div>
+          <Trans>
+            Subscribe to receive emails on your Elastic liquidity positions across all chains. Whenever a position goes
+            <Highlight>out-of-range</Highlight> or comes back <Highlight>in-range</Highlight>, you will receive an
+            email.
+          </Trans>
+        </div>
+      }
+      trackingEvent={MIXPANEL_TYPE.MYPOOLS_CLICK_SUBSCRIBE_BTN}
+    />
+  )
+}
+
 export default function ProAmmPool() {
-  const { account, chainId } = useActiveWeb3React()
+  const { account, chainId, isEVM, networkInfo } = useActiveWeb3React()
   const tokenAddressSymbolMap = useRef<AddressSymbolMapInterface>({})
   const { positions, loading: positionsLoading } = useProAmmPositions(account)
 
-  const { farms, loading, userFarmInfo } = useElasticFarms()
+  const { userInfo } = useElasticFarmsV2()
 
-  const farmingPools = useMemo(() => farms?.map(farm => farm.pools).flat() || [], [farms])
-
-  const farmPositions = useMemo(() => {
-    if (!chainId) return []
-    return Object.values(userFarmInfo || {})
-      .map(info => {
-        return info.depositedPositions
-          .map(pos => {
-            const poolAddress = computePoolAddress({
-              factoryAddress: NETWORKS_INFO[chainId].elastic.coreFactory,
-              tokenA: pos.pool.token0,
-              tokenB: pos.pool.token1,
-              fee: pos.pool.fee,
-              initCodeHashManualOverride: NETWORKS_INFO[chainId].elastic.initCodeHash,
-            })
-            const pool = farmingPools.filter(pool => pool.poolAddress === poolAddress.toLowerCase())
-
-            const joinedLiquidity =
-              // I'm sure we can always find pool
-              // eslint-disable-next-line
-              Object.values(info.joinedPositions)
-                .flat()
-                .filter(joinedPos => joinedPos.nftId.toString() === pos.nftId.toString())
-                .reduce(
-                  (acc, cur) =>
-                    acc.gt(BigNumber.from(cur.liquidity.toString())) ? acc : BigNumber.from(cur.liquidity.toString()),
-                  BigNumber.from(0),
-                ) || BigNumber.from(0)
-
-            return {
-              nonce: BigNumber.from('1'),
-              tokenId: pos.nftId,
-              operator: '0x0000000000000000000000000000000000000000',
-              poolId: poolAddress,
-              tickLower: pos.tickLower,
-              tickUpper: pos.tickUpper,
-              liquidity: BigNumber.from(pos.liquidity.toString()),
-              // not used
-              feeGrowthInsideLast: BigNumber.from(0),
-              stakedLiquidity: joinedLiquidity,
-              // not used
-              rTokenOwed: BigNumber.from(0),
-              token0: pos.pool.token0.address,
-              token1: pos.pool.token1.address,
-              fee: pos.pool.fee,
-              endTime: pool?.[0].endTime,
-              rewardPendings: [],
-            }
-          })
-          .flat()
-      })
-      .flat()
-  }, [chainId, farmingPools, userFarmInfo])
-
+  const farmV2Positions = useMemo(
+    () =>
+      userInfo?.map(item => ({
+        nonce: BigNumber.from('1'),
+        tokenId: item.nftId,
+        operator: '0x0000000000000000000000000000000000000000',
+        poolId: item.poolAddress,
+        tickLower: item.position.tickLower,
+        tickUpper: item.position.tickUpper,
+        liquidity: BigNumber.from(item.position.liquidity.toString()),
+        // not used
+        feeGrowthInsideLast: BigNumber.from(0),
+        stakedLiquidity: item.stakedLiquidity,
+        // not used
+        rTokenOwed: BigNumber.from(0),
+        token0: item.position.pool.token0.wrapped.address,
+        token1: item.position.pool.token1.wrapped.address,
+        fee: item.position.pool.fee,
+        // endTime: pool?.[0]?.endTime,
+        // rewardPendings: [],
+      })) || [],
+    [userInfo],
+  )
+  const { farmPositions, loading, userFarmInfo } = useFarmPositions()
   const [openPositions, closedPositions] = useMemo(
     () =>
       positions?.reduce<[PositionDetails[], PositionDetails[]]>(
@@ -124,80 +127,110 @@ export default function ProAmmPool() {
 
   const theme = useTheme()
 
-  const qs = useParsedQueryString()
-  const searchValueInQs: string = (qs.search as string) ?? ''
+  const {
+    search: searchValueInQs = '',
+    tab = VERSION.ELASTIC,
+    nftId,
+  } = useParsedQueryString<{
+    search: string
+    tab: string
+    nftId: string
+  }>()
 
-  const history = useHistory()
+  const navigate = useNavigate()
   const location = useLocation()
-
-  const tab = (qs.tab as string) || VERSION.ELASTIC
-
   const onSearch = (search: string) => {
-    history.replace(location.pathname + '?search=' + search + '&tab=' + tab)
+    navigate(location.pathname + '?search=' + search + '&tab=' + tab, { replace: true })
   }
 
   const debouncedSearchText = useDebounce(searchValueInQs.trim().toLowerCase(), 300)
 
   const [showClosed, setShowClosed] = useState(false)
 
-  const filteredFarmPositions = useMemo(
-    () =>
-      farmPositions.filter(pos => {
+  const filter = useCallback(
+    (pos: PositionDetails): boolean => {
+      return (
+        debouncedSearchText.trim().length === 0 ||
+        (!!tokenAddressSymbolMap.current[pos.token0.toLowerCase()] &&
+          tokenAddressSymbolMap.current[pos.token0.toLowerCase()].includes(debouncedSearchText)) ||
+        (!!tokenAddressSymbolMap.current[pos.token1.toLowerCase()] &&
+          tokenAddressSymbolMap.current[pos.token1.toLowerCase()].includes(debouncedSearchText)) ||
+        pos.poolId.toLowerCase() === debouncedSearchText ||
+        pos.tokenId.toString() === debouncedSearchText
+      )
+    },
+    [debouncedSearchText],
+  )
+
+  const filteredFarmPositions = useMemo(() => {
+    return [...farmPositions, ...farmV2Positions].filter(filter)
+  }, [filter, farmPositions, farmV2Positions])
+
+  const sortFn = useCallback(
+    (a: PositionDetails, b: PositionDetails) => +a.tokenId.toString() - +b.tokenId.toString(),
+    [],
+  )
+
+  const openFarmPositions = useMemo(() => {
+    return filteredFarmPositions.filter(pos => pos.liquidity.gt('0')).sort(sortFn)
+  }, [filteredFarmPositions, sortFn])
+
+  const closedFarmPositions = useMemo(() => {
+    return filteredFarmPositions.filter(pos => pos.liquidity.eq('0')).sort(sortFn)
+  }, [filteredFarmPositions, sortFn])
+
+  const filteredPositions = useMemo(() => {
+    const opens = [...openPositions, ...openFarmPositions].sort(sortFn)
+    const closeds = [...closedPositions, ...closedFarmPositions].sort(sortFn)
+
+    return (!showClosed ? opens : [...opens, ...closeds])
+      .filter(position => {
+        if (nftId) return position.tokenId.toString() === nftId
         return (
           debouncedSearchText.trim().length === 0 ||
-          (!!tokenAddressSymbolMap.current[pos.token0.toLowerCase()] &&
-            tokenAddressSymbolMap.current[pos.token0.toLowerCase()].includes(debouncedSearchText)) ||
-          (!!tokenAddressSymbolMap.current[pos.token1.toLowerCase()] &&
-            tokenAddressSymbolMap.current[pos.token1.toLowerCase()].includes(debouncedSearchText)) ||
-          pos.poolId.toLowerCase() === debouncedSearchText
+          (!!tokenAddressSymbolMap.current[position.token0.toLowerCase()] &&
+            tokenAddressSymbolMap.current[position.token0.toLowerCase()].includes(debouncedSearchText)) ||
+          (!!tokenAddressSymbolMap.current[position.token1.toLowerCase()] &&
+            tokenAddressSymbolMap.current[position.token1.toLowerCase()].includes(debouncedSearchText)) ||
+          position.poolId.toLowerCase() === debouncedSearchText ||
+          position.tokenId.toString() === debouncedSearchText
         )
-      }),
-    [debouncedSearchText, farmPositions],
-  )
-
-  const filteredPositions = useMemo(
-    () =>
-      (!showClosed
-        ? [...openPositions, ...filteredFarmPositions]
-        : [...openPositions, ...filteredFarmPositions, ...closedPositions]
-      )
-        .filter(position => {
-          return (
-            debouncedSearchText.trim().length === 0 ||
-            (!!tokenAddressSymbolMap.current[position.token0.toLowerCase()] &&
-              tokenAddressSymbolMap.current[position.token0.toLowerCase()].includes(debouncedSearchText)) ||
-            (!!tokenAddressSymbolMap.current[position.token1.toLowerCase()] &&
-              tokenAddressSymbolMap.current[position.token1.toLowerCase()].includes(debouncedSearchText)) ||
-            position.poolId.toLowerCase() === debouncedSearchText
-          )
-        })
-        .filter((pos, index, array) => array.findIndex(pos2 => pos2.tokenId.eq(pos.tokenId)) === index),
-    [showClosed, openPositions, closedPositions, debouncedSearchText, filteredFarmPositions],
-  )
+      })
+      .filter((pos, index, array) => array.findIndex(pos2 => pos2.tokenId.eq(pos.tokenId)) === index)
+  }, [
+    showClosed,
+    openPositions,
+    closedPositions,
+    debouncedSearchText,
+    nftId,
+    openFarmPositions,
+    closedFarmPositions,
+    sortFn,
+  ])
 
   const [showStaked, setShowStaked] = useState(false)
+  const positionList = useMemo(
+    () =>
+      showStaked
+        ? showClosed
+          ? [...openFarmPositions, ...closedFarmPositions]
+          : openFarmPositions
+        : filteredPositions,
+    [showStaked, filteredPositions, openFarmPositions, closedFarmPositions, showClosed],
+  )
 
   const upToSmall = useMedia('(max-width: 768px)')
 
-  const activeFarmAddress = useMemo(() => {
-    const now = Date.now() / 1000
-    return (
-      farms
-        ?.map(farm => farm.pools)
-        .flat()
-        ?.filter(farm => farm.endTime >= now)
-        .map(farm => farm.poolAddress.toLowerCase()) || []
-    )
-  }, [farms])
+  if (!isEVM) return <Navigate to="/" />
 
   return (
     <>
       <PageWrapper style={{ padding: 0, marginTop: '24px' }}>
         <AutoColumn gap="lg" style={{ width: '100%' }}>
           <InstructionText>
-            <Trans>Here you can view all your liquidity and staked balances in the Elastic Pools</Trans>
+            <Trans>Here you can view all your liquidity and staked balances in the Elastic Pools.</Trans>
             {!upToSmall && (
-              <ExternalLink href={`${PROMM_ANALYTICS_URL[chainId as ChainId]}/account/${account}`}>
+              <ExternalLink href={`${PROMM_ANALYTICS_URL[chainId]}/account/${account}`}>
                 <Flex alignItems="center">
                   <Wallet size={16} />
                   <Text fontSize="14px" marginLeft="4px">
@@ -209,7 +242,7 @@ export default function ProAmmPool() {
           </InstructionText>
           <TabRow>
             <Flex justifyContent="space-between" flex={1} alignItems="center" width="100%">
-              <Flex sx={{ gap: '1rem' }} alignItems="center">
+              <TabWrapper>
                 <Tab
                   active={!showStaked}
                   role="button"
@@ -227,13 +260,13 @@ export default function ProAmmPool() {
                   }}
                   role="button"
                 >
-                  <Trans>Staked Positions</Trans>
+                  {isMobile ? <Trans>Farming Positions</Trans> : <Trans>My Farming Positions</Trans>}
                 </Tab>
-              </Flex>
+              </TabWrapper>
 
               {upToSmall && (
                 <Flex sx={{ gap: '8px' }}>
-                  <ExternalLink href={`${PROMM_ANALYTICS_URL[chainId as ChainId]}/account/${account}`}>
+                  <ExternalLink href={`${PROMM_ANALYTICS_URL[chainId]}/account/${account}`}>
                     <Flex
                       sx={{ borderRadius: '50%' }}
                       width="36px"
@@ -246,10 +279,10 @@ export default function ProAmmPool() {
                     </Flex>
                   </ExternalLink>
                   <Tutorial type={TutorialType.ELASTIC_MY_POOLS} />
+                  {renderNotificationButton(true)}
                 </Flex>
               )}
             </Flex>
-
             <FilterRow>
               <Flex alignItems="center" style={{ gap: '8px' }}>
                 <Text fontSize="14px" color={theme.subText}>
@@ -263,7 +296,12 @@ export default function ProAmmPool() {
                 onSearch={onSearch}
                 placeholder={t`Search by token or pool address`}
               />
-              {!upToSmall && <Tutorial type={TutorialType.ELASTIC_MY_POOLS} />}
+              {!upToSmall && (
+                <>
+                  <Tutorial type={TutorialType.ELASTIC_MY_POOLS} />
+                  {renderNotificationButton(false)}
+                </>
+              )}
             </FilterRow>
           </TabRow>
 
@@ -273,40 +311,15 @@ export default function ProAmmPool() {
                 <Trans>Connect to a wallet to view your liquidity.</Trans>
               </TYPE.body>
             </Card>
-          ) : positionsLoading || loading ? (
+          ) : (positionsLoading && !positions) || (loading && !userFarmInfo && !positions?.length) ? (
             <PositionCardGrid>
               <ContentLoader />
               <ContentLoader />
               <ContentLoader />
             </PositionCardGrid>
-          ) : (filteredPositions && filteredPositions.length > 0) || filteredFarmPositions.length > 0 ? (
+          ) : filteredPositions.length > 0 || filteredFarmPositions.length > 0 ? (
             <>
-              {/* Use display attribute here instead of condition rendering to prevent re-render full list when toggle showStaked => increase performance */}
-              <PositionCardGrid style={{ display: showStaked ? 'none' : 'grid' }}>
-                {filteredPositions.map(p => (
-                  <PositionListItem
-                    refe={tokenAddressSymbolMap}
-                    positionDetails={p}
-                    key={p.tokenId.toString()}
-                    hasUserDepositedInFarm={!!p.stakedLiquidity}
-                    hasActiveFarm={activeFarmAddress.includes(p.poolId.toLowerCase())}
-                  />
-                ))}
-              </PositionCardGrid>
-              <PositionCardGrid style={{ display: !showStaked ? 'none' : 'grid' }}>
-                {filteredFarmPositions.map(p => {
-                  return (
-                    <PositionListItem
-                      key={p.tokenId.toString()}
-                      stakedLayout
-                      hasUserDepositedInFarm
-                      refe={tokenAddressSymbolMap}
-                      positionDetails={p}
-                      hasActiveFarm={activeFarmAddress.includes(p.poolId.toLowerCase())}
-                    />
-                  )
-                })}
-              </PositionCardGrid>
+              <PositionGrid positions={positionList} refe={tokenAddressSymbolMap} />
             </>
           ) : (
             <Flex flexDirection="column" alignItems="center" marginTop="60px">
@@ -314,7 +327,9 @@ export default function ProAmmPool() {
               <Text fontSize={16} lineHeight={1.5} color={theme.subText} textAlign="center" marginTop="1rem">
                 <Trans>
                   No liquidity found. Check out our{' '}
-                  <StyledInternalLink to="/pools?tab=elastic">Pools.</StyledInternalLink>
+                  <StyledInternalLink to={`${APP_PATHS.POOLS}/${networkInfo.route}?tab=elastic`}>
+                    Pools.
+                  </StyledInternalLink>
                 </Trans>
               </Text>
             </Flex>
@@ -322,6 +337,7 @@ export default function ProAmmPool() {
         </AutoColumn>
       </PageWrapper>
       <FarmUpdater />
+      <ElasticFarmV2Updater />
     </>
   )
 }

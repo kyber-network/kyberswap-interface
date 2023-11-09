@@ -1,56 +1,53 @@
-import { getAddress } from '@ethersproject/address'
+import { ApolloClient, NormalizedCacheObject } from '@apollo/client'
 import { BigNumber } from '@ethersproject/bignumber'
-import { AddressZero } from '@ethersproject/constants'
-import { Contract } from '@ethersproject/contracts'
-import { JsonRpcSigner, Web3Provider } from '@ethersproject/providers'
 import { ChainId, Currency, CurrencyAmount, Percent, Token, WETH } from '@kyberswap/ks-sdk-core'
+import { WalletReadyState } from '@solana/wallet-adapter-base'
+import { PublicKey } from '@solana/web3.js'
 import dayjs from 'dayjs'
-import { ethers } from 'ethers'
 import JSBI from 'jsbi'
 import Numeral from 'numeral'
+import blockServiceApi from 'services/blockService'
 
-import { GET_BLOCK, GET_BLOCKS } from 'apollo/queries'
-import ZAP_STATIC_FEE_ABI from 'constants/abis/zap-static-fee.json'
+import { GET_BLOCKS } from 'apollo/queries'
+import { ENV_KEY } from 'constants/env'
+import { DEFAULT_GAS_LIMIT_MARGIN, ETHER_ADDRESS, ZERO_ADDRESS } from 'constants/index'
+import { NETWORKS_INFO, SUPPORTED_NETWORKS, isEVM } from 'constants/networks'
+import { KNCL_ADDRESS, KNC_ADDRESS } from 'constants/tokens'
 import {
-  DEFAULT_GAS_LIMIT_MARGIN,
-  KNC,
-  KNCL_ADDRESS,
-  KNCL_ADDRESS_ROPSTEN,
-  ROPSTEN_TOKEN_LOGOS_MAPPING,
-  ZERO_ADDRESS,
-} from 'constants/index'
-import { NETWORKS_INFO } from 'constants/networks'
+  EVMWalletInfo,
+  INJECTED_KEY,
+  INJECTED_KEYS,
+  SUPPORTED_WALLET,
+  SUPPORTED_WALLETS,
+  SolanaWalletInfo,
+  WalletInfo,
+} from 'constants/wallets'
 import store from 'state'
+import { GroupedTxsByHash, TransactionDetails } from 'state/transactions/type'
+import { chunk } from 'utils/array'
 
-import CLAIM_REWARD_ABI from '../constants/abis/claim-reward.json'
-import ROUTER_DYNAMIC_FEE_ABI from '../constants/abis/dmm-router-dynamic-fee.json'
-import ROUTER_STATIC_FEE_ABI from '../constants/abis/dmm-router-static-fee.json'
-import KS_ROUTER_STATIC_FEE_ABI from '../constants/abis/ks-router-static-fee.json'
-import ROUTER_PRO_AMM from '../constants/abis/v2/ProAmmRouter.json'
-import ZAP_ABI from '../constants/abis/zap.json'
-import { getAuroraTokenLogoURL } from './auroraTokenMapping'
-import { getAvaxMainnetTokenLogoURL } from './avaxMainnetTokenMapping'
-import { getAvaxTestnetTokenLogoURL } from './avaxTestnetTokenMapping'
-import { getBscMainnetTokenLogoURL } from './bscMainnetTokenMapping'
-import { getBscTestnetTokenLogoURL } from './bscTestnetTokenMapping'
-import { getCronosTokenLogoURL } from './cronosTokenMapping'
-import { getEthereumMainnetTokenLogoURL } from './ethereumMainnetTokenMapping'
-import { getFantomTokenLogoURL } from './fantomTokenMapping'
-import { getMaticTokenLogoURL } from './maticTokenMapping'
-import { getMumbaiTokenLogoURL } from './mumbaiTokenMapping'
+export const isWalletAddressSolana = async (addr: string) => {
+  try {
+    if (!addr) return false
+    const publicKey = new PublicKey(addr)
+    return await PublicKey.isOnCurve(publicKey.toBytes())
+  } catch (err) {
+    return false
+  }
+}
 
 // returns the checksummed address if the address is valid, otherwise returns false
-export function isAddress(value: any): string | false {
+export function isAddress(chainId: ChainId, value: any): string | false {
   try {
-    return getAddress(value)
+    return new Token(chainId, value, 0).address
   } catch {
     return false
   }
 }
 
-export function isAddressString(value: any): string {
+export function isAddressString(chainId: ChainId, value: any): string {
   try {
-    return getAddress(value)
+    return new Token(chainId, value, 0).address
   } catch {
     return ''
   }
@@ -68,6 +65,7 @@ export function getEtherscanLink(
       return `${prefix}/tx/${data}`
     }
     case 'token': {
+      if (chainId === ChainId.ZKSYNC) return `${prefix}/address/${data}`
       return `${prefix}/token/${data}`
     }
     case 'block': {
@@ -80,17 +78,14 @@ export function getEtherscanLink(
   }
 }
 
-export function getEtherscanLinkText(chainId: ChainId): string {
-  return NETWORKS_INFO[chainId].etherscanName
-}
-
 // shorten the checksummed version of the input address to have 0x + 4 characters at start and end
-export function shortenAddress(address: string, chars = 4): string {
-  const parsed = isAddress(address)
-  if (!parsed) {
-    throw Error(`Invalid 'address' parameter '${address}'.`)
+export function shortenAddress(chainId: ChainId, address: string, chars = 4, checksum = true): string {
+  const parsed = isAddress(chainId, address)
+  if (!parsed && checksum) {
+    throw Error(`Invalid 'address' parameter '${address}' on chain ${chainId}.`)
   }
-  return `${parsed.substring(0, chars + 2)}...${parsed.substring(42 - chars)}`
+  const value = (checksum && parsed ? parsed : address) ?? ''
+  return `${value.substring(0, chars + 2)}...${value.substring(42 - chars)}`
 }
 
 /**
@@ -100,9 +95,10 @@ export function shortenAddress(address: string, chars = 4): string {
  * @param value BigNumber
  * @returns BigNumber
  */
-export function calculateGasMargin(value: BigNumber): BigNumber {
+export function calculateGasMargin(value: BigNumber, chainId?: ChainId): BigNumber {
   const defaultGasLimitMargin = BigNumber.from(DEFAULT_GAS_LIMIT_MARGIN)
-  const gasMargin = value.mul(BigNumber.from(2000)).div(BigNumber.from(10000))
+  const needHigherGas = [ChainId.MATIC, ChainId.OPTIMISM].includes(chainId as ChainId)
+  const gasMargin = value.mul(BigNumber.from(needHigherGas ? 5000 : 2000)).div(BigNumber.from(10000))
 
   return gasMargin.gte(defaultGasLimitMargin) ? value.add(gasMargin) : value.add(defaultGasLimitMargin)
 }
@@ -120,80 +116,6 @@ export function calculateSlippageAmount(value: CurrencyAmount<Currency>, slippag
     JSBI.divide(JSBI.multiply(value.quotient, JSBI.BigInt(10000 - slippage)), JSBI.BigInt(10000)),
     JSBI.divide(JSBI.multiply(value.quotient, JSBI.BigInt(10000 + slippage)), JSBI.BigInt(10000)),
   ]
-}
-
-// account is not optional
-export function getSigner(library: Web3Provider, account: string): JsonRpcSigner {
-  return library.getSigner(account).connectUnchecked()
-}
-
-// account is optional
-export function getProviderOrSigner(library: Web3Provider, account?: string): Web3Provider | JsonRpcSigner {
-  return account ? getSigner(library, account) : library
-}
-
-// account is optional
-export function getContract(address: string, ABI: any, library: Web3Provider, account?: string): Contract {
-  if (!isAddress(address) || address === AddressZero) {
-    throw Error(`Invalid 'address' parameter '${address}'.`)
-  }
-
-  return new Contract(address, ABI, getProviderOrSigner(library, account) as any)
-}
-// account is optional
-export function getContractForReading(address: string, ABI: any, library: ethers.providers.JsonRpcProvider): Contract {
-  if (!isAddress(address) || address === AddressZero) {
-    throw Error(`Invalid 'address' parameter '${address}'.`)
-  }
-
-  return new Contract(address, ABI, library)
-}
-
-// account is optional
-export function getOldStaticFeeRouterContract(chainId: ChainId, library: Web3Provider, account?: string): Contract {
-  return getContract(NETWORKS_INFO[chainId].classic.oldStatic?.router ?? '', ROUTER_STATIC_FEE_ABI, library, account)
-}
-// account is optional
-export function getStaticFeeRouterContract(chainId: ChainId, library: Web3Provider, account?: string): Contract {
-  return getContract(NETWORKS_INFO[chainId].classic.static.router, KS_ROUTER_STATIC_FEE_ABI, library, account)
-}
-// account is optional
-export function getDynamicFeeRouterContract(chainId: ChainId, library: Web3Provider, account?: string): Contract {
-  return getContract(NETWORKS_INFO[chainId].classic.dynamic?.router ?? '', ROUTER_DYNAMIC_FEE_ABI, library, account)
-}
-
-// account is optional
-export function getProAmmRouterContract(chainId: ChainId, library: Web3Provider, account?: string): Contract {
-  return getContract(NETWORKS_INFO[chainId].elastic.routers, ROUTER_PRO_AMM.abi, library, account)
-}
-
-// account is optional
-export function getZapContract(
-  chainId: ChainId,
-  library: Web3Provider,
-  account?: string,
-  isStaticFeeContract?: boolean,
-  isOldStaticFeeContract?: boolean,
-): Contract {
-  return getContract(
-    isStaticFeeContract
-      ? isOldStaticFeeContract
-        ? NETWORKS_INFO[chainId].classic.oldStatic?.zap || ''
-        : NETWORKS_INFO[chainId].classic.static.zap
-      : NETWORKS_INFO[chainId].classic.dynamic?.zap || '',
-    isStaticFeeContract && !isOldStaticFeeContract ? ZAP_STATIC_FEE_ABI : ZAP_ABI,
-    library,
-    account,
-  )
-}
-
-export function getClaimRewardContract(
-  chainId: ChainId,
-  library: Web3Provider,
-  account?: string,
-): Contract | undefined {
-  if (!NETWORKS_INFO[chainId].classic.claimReward) return
-  return getContract(NETWORKS_INFO[chainId].classic.claimReward, CLAIM_REWARD_ABI, library, account)
 }
 
 export function escapeRegExp(string: string): string {
@@ -230,7 +152,9 @@ const formatDollarSignificantAmount = (num: number, minDigits: number, maxDigits
   })
   return formatter.format(num)
 }
-
+/** @deprecated use formatDisplayNumber instead
+ * @example formatDisplayNumber(number, { style: 'decimal', significantDigits: 2 })
+ */
 export function formatNumberWithPrecisionRange(number: number, minPrecision = 2, maxPrecision = 2) {
   const options = {
     minimumFractionDigits: minPrecision,
@@ -239,30 +163,47 @@ export function formatNumberWithPrecisionRange(number: number, minPrecision = 2,
   return number.toLocaleString(undefined, options)
 }
 
-export function formattedNum(number: string, usd = false, fractionDigits = 5) {
-  if (number === '' || number === undefined) {
-    return usd ? '$0' : 0
+// Take only 6 fraction digits
+// This returns a different result compared to toFixed
+// 0.000297796.toFixed(6) = 0.000298
+// truncateFloatNumber(0.000297796) = 0.000297
+const truncateFloatNumber = (num: number, maximumFractionDigits = 6) => {
+  const [wholePart, fractionalPart] = String(num).split('.')
+
+  if (!fractionalPart) {
+    return wholePart
   }
 
-  const num = parseFloat(number)
+  return `${wholePart}.${fractionalPart.slice(0, maximumFractionDigits)}`
+}
+
+/** @deprecated use formatDisplayNumber instead
+ * @example formatDisplayNumber(number, { style: 'currency' | 'decimal', significantDigits: 6 })
+ */
+export function formattedNum(number: string | number, usd = false, fractionDigits = 5): string {
+  if (number === 0 || number === '' || number === undefined) {
+    return usd ? '$0' : '0'
+  }
+
+  const num = parseFloat(String(number))
 
   if (num > 500000000) {
     return (usd ? '$' : '') + toK(num.toFixed(0))
+  }
+
+  if (num >= 1000) {
+    return usd ? formatDollarFractionAmount(num, 0) : Number(num.toFixed(0)).toLocaleString()
   }
 
   if (num === 0) {
     if (usd) {
       return '$0'
     }
-    return 0
+    return '0'
   }
 
-  if (num < 0.0001 && num > 0) {
+  if (num < 0.0001) {
     return usd ? '< $0.0001' : '< 0.0001'
-  }
-
-  if (num > 1000) {
-    return usd ? formatDollarFractionAmount(num, 0) : Number(num.toFixed(0)).toLocaleString()
   }
 
   if (usd) {
@@ -273,9 +214,16 @@ export function formattedNum(number: string, usd = false, fractionDigits = 5) {
     }
   }
 
-  return Number(num.toFixed(fractionDigits)).toLocaleString()
+  // this function can be replaced when `roundingMode` of `Intl.NumberFormat` is widely supported
+  // this function is to avoid this case
+  // 0.000297796.toFixed(6) = 0.000298
+  // truncateFloatNumber(0.000297796) = 0.000297
+  return truncateFloatNumber(num, fractionDigits)
 }
 
+/** @deprecated use formatDisplayNumber instead
+ * @example formatDisplayNumber(number, { style: 'currency' | 'decimal', significantDigits: 6 })
+ */
 export function formattedNumLong(num: number, usd = false) {
   if (num === 0) {
     if (usd) {
@@ -317,7 +265,18 @@ export function getTimestampsForChanges(): [number, number, number] {
   return [t1, t2, tWeek]
 }
 
-export async function splitQuery(query: any, localClient: any, vars: any, list: any, skipCount = 100): Promise<any> {
+export async function splitQuery<ResultType, T, U>(
+  query: (values: T[], ...vars: U[]) => import('graphql').DocumentNode,
+  localClient: ApolloClient<NormalizedCacheObject>,
+  list: T[],
+  vars: U[],
+  skipCount = 100,
+): Promise<
+  | {
+      [key: string]: ResultType
+    }
+  | undefined
+> {
   let fetchedData = {}
   let allFound = false
   let skip = 0
@@ -329,7 +288,7 @@ export async function splitQuery(query: any, localClient: any, vars: any, list: 
     }
     const sliced = list.slice(skip, end)
     const result = await localClient.query({
-      query: query(...vars, sliced),
+      query: query(sliced, ...vars),
       fetchPolicy: 'no-cache',
     })
     fetchedData = {
@@ -347,58 +306,70 @@ export async function splitQuery(query: any, localClient: any, vars: any, list: 
 }
 
 /**
- * @notice Fetches first block after a given timestamp
- * @dev Query speed is optimized by limiting to a 600-second period
- * @param {Int} timestamp in seconds
- */
-export async function getBlockFromTimestamp(timestamp: number, chainId?: ChainId) {
-  const result = await NETWORKS_INFO[chainId || ChainId.MAINNET].blockClient.query({
-    query: GET_BLOCK,
-    variables: {
-      timestampFrom: timestamp,
-      timestampTo: timestamp + 600,
-    },
-    fetchPolicy: 'cache-first',
-  })
-
-  return result?.data?.blocks?.[0]?.number
-}
-
-/**
  * @notice Fetches block objects for an array of timestamps.
  * @dev blocks are returned in chronological order (ASC) regardless of input.
  * @dev blocks are returned at string representations of Int
  * @dev timestamps are returns as they were provided; not the block time.
  * @param {Array} timestamps
  */
-export async function getBlocksFromTimestamps(
+async function getBlocksFromTimestampsSubgraph(
+  blockClient: ApolloClient<NormalizedCacheObject>,
   timestamps: number[],
-  chainId?: ChainId,
-  skipCount = 500,
-): Promise<{ timestamp: string; number: number }[]> {
+  chainId: ChainId,
+): Promise<{ timestamp: number; number: number }[]> {
+  if (!isEVM(chainId)) return []
   if (timestamps?.length === 0) {
     return []
   }
 
-  const fetchedData = await splitQuery(
-    GET_BLOCKS,
-    NETWORKS_INFO[chainId || ChainId.MAINNET].blockClient,
-    [],
-    timestamps,
-    skipCount,
-  )
-  const blocks: { timestamp: string; number: number }[] = []
+  const fetchedData = await splitQuery<{ number: string }[], number, any>(GET_BLOCKS, blockClient, timestamps, [])
+  const blocks: { timestamp: number; number: number }[] = []
   if (fetchedData) {
     for (const t in fetchedData) {
       if (fetchedData[t].length > 0) {
         blocks.push({
-          timestamp: t.split('t')[1],
-          number: fetchedData[t][0]['number'],
+          timestamp: Number(t.split('t')[1]),
+          number: Number(fetchedData[t][0]['number']),
         })
       }
     }
   }
+
   return blocks
+}
+
+async function getBlocksFromTimestampsBlockService(
+  timestamps: number[],
+  chainId: ChainId,
+): Promise<{ timestamp: number; number: number }[]> {
+  if (!isEVM(chainId)) return []
+  if (timestamps?.length === 0) {
+    return []
+  }
+
+  const allChunkResult = (
+    await Promise.all(
+      chunk(timestamps, 50).map(
+        async timestampsChunk =>
+          await store.dispatch(blockServiceApi.endpoints.getBlocks.initiate({ chainId, timestamps: timestampsChunk })),
+      ),
+    )
+  )
+    .map(chunk => chunk.data?.data || [])
+    .flat()
+    .sort((a, b) => a.number - b.number)
+
+  return allChunkResult
+}
+
+export async function getBlocksFromTimestamps(
+  isEnableBlockService: boolean,
+  blockClient: ApolloClient<NormalizedCacheObject>,
+  timestamps: number[],
+  chainId: ChainId,
+): Promise<{ timestamp: number; number: number }[]> {
+  if (isEnableBlockService) return getBlocksFromTimestampsBlockService(timestamps, chainId)
+  return getBlocksFromTimestampsSubgraph(blockClient, timestamps, chainId)
 }
 
 /**
@@ -416,114 +387,34 @@ export const get24hValue = (valueNow: string, value24HoursAgo: string | undefine
   return currentChange
 }
 
-export const getRopstenTokenLogoURL = (address: string) => {
-  if (address.toLowerCase() === KNCL_ADDRESS_ROPSTEN.toLowerCase()) {
-    return 'https://raw.githubusercontent.com/KyberNetwork/kyberswap-interface/develop/src/assets/images/KNCL.png'
-  }
-
-  if (ROPSTEN_TOKEN_LOGOS_MAPPING[address.toLowerCase()]) {
-    address = ROPSTEN_TOKEN_LOGOS_MAPPING[address.toLowerCase()]
-  }
-
-  return `https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/ethereum/assets/${isAddress(
-    address,
-  )}/logo.png`
+export const getNativeTokenLogo = (chainId: ChainId) => {
+  return (
+    store.getState()?.lists?.mapWhitelistTokens?.[chainId]?.[ETHER_ADDRESS]?.logoURI ||
+    (chainId ? NETWORKS_INFO[chainId].nativeToken.logo : '')
+  )
 }
 
-export const getTokenLogoURL = (inputAddress: string, chainId?: ChainId): string => {
+export const getTokenLogoURL = (inputAddress: string, chainId: ChainId): string => {
   let address = inputAddress
-  if (address === ZERO_ADDRESS && chainId) {
+  if (address === ZERO_ADDRESS) {
     address = WETH[chainId].address
   }
 
-  if (chainId !== ChainId.ETHW) {
-    if (address.toLowerCase() === KNC[chainId as ChainId].address.toLowerCase()) {
-      return 'https://raw.githubusercontent.com/KyberNetwork/kyberswap-interface/develop/src/assets/images/KNC.svg'
-    }
-
-    if (address.toLowerCase() === KNCL_ADDRESS.toLowerCase()) {
-      return 'https://raw.githubusercontent.com/KyberNetwork/kyberswap-interface/develop/src/assets/images/KNCL.png'
-    }
-
-    // WBTC
-    if (address.toLowerCase() === '0x2f2a2543b76a4166549f7aab2e75bef0aefc5b0f') {
-      return 'https://assets.coingecko.com/coins/images/7598/thumb/wrapped_bitcoin_wbtc.png?1548822744'
-    }
+  if (address.toLowerCase() === KNC_ADDRESS) {
+    return 'https://raw.githubusercontent.com/KyberNetwork/kyberswap-interface/develop/src/assets/images/KNC.svg'
   }
 
-  let imageURL
-
-  imageURL = store
-    .getState()
-    .lists.byUrl[NETWORKS_INFO[chainId || ChainId.MAINNET].tokenListUrl].current?.tokens.find(
-      item => item.address.toLowerCase() === address.toLowerCase(),
-    )?.logoURI
-
-  if (imageURL) return imageURL
-
-  switch (chainId) {
-    //todo namgold: merge these adhoc func to tokenllist
-    case ChainId.MAINNET:
-      imageURL = getEthereumMainnetTokenLogoURL(address)
-      break
-    case ChainId.ROPSTEN:
-      imageURL = getRopstenTokenLogoURL(address)
-      break
-    case ChainId.MATIC:
-      imageURL = getMaticTokenLogoURL(address)
-      break
-    case ChainId.MUMBAI:
-      imageURL = getMumbaiTokenLogoURL(address)
-      break
-    case ChainId.BSCTESTNET:
-      imageURL = getBscTestnetTokenLogoURL(address)
-      break
-    case ChainId.BSCMAINNET:
-      imageURL = getBscMainnetTokenLogoURL(address)
-      break
-    case ChainId.AVAXTESTNET:
-      imageURL = getAvaxTestnetTokenLogoURL(address)
-      break
-    case ChainId.AVAXMAINNET:
-      imageURL = getAvaxMainnetTokenLogoURL(address)
-      break
-    case ChainId.FANTOM:
-      imageURL = getFantomTokenLogoURL(address)
-      break
-    case ChainId.CRONOS:
-      imageURL = getCronosTokenLogoURL(address)
-      break
-    case ChainId.AURORA:
-      imageURL = getAuroraTokenLogoURL(address)
-      break
-    case ChainId.ARBITRUM:
-      imageURL = `https://raw.githubusercontent.com/Uniswap/assets/master/blockchains/arbitrum/assets/${address}/logo.png`
-      break
-    case ChainId.ETHW: {
-      imageURL = ''
-      break
-    }
-    default:
-      imageURL = `https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/ethereum/assets/${isAddress(
-        address,
-      )}/logo.png`
-      break
+  if (address.toLowerCase() === KNCL_ADDRESS.toLowerCase()) {
+    return 'https://raw.githubusercontent.com/KyberNetwork/kyberswap-interface/develop/src/assets/images/KNCL.png'
   }
 
-  return imageURL
-}
-
-export const getTokenSymbol = (token: Token, chainId?: ChainId): string => {
-  if (chainId && token.address.toLowerCase() === WETH[chainId as ChainId].address.toLowerCase()) {
-    return NETWORKS_INFO[chainId].nativeToken.symbol
+  // WBTC
+  if (address.toLowerCase() === '0x2f2a2543b76a4166549f7aab2e75bef0aefc5b0f') {
+    return 'https://assets.coingecko.com/coins/images/7598/thumb/wrapped_bitcoin_wbtc.png?1548822744'
   }
 
-  return token.symbol || 'ETH'
-}
-
-export const nativeNameFromETH = (chainId: ChainId | undefined) => {
-  if (!chainId) return 'ETH'
-  return NETWORKS_INFO[chainId].nativeToken.symbol
+  const imageURL = store.getState()?.lists?.mapWhitelistTokens?.[chainId]?.[address]?.logoURI
+  return imageURL || ''
 }
 
 // push unique
@@ -551,6 +442,98 @@ export const deleteUnique = <T>(array: T[] | undefined, element: T): T[] => {
   return array
 }
 
+export const isEVMWallet = (wallet?: WalletInfo): wallet is EVMWalletInfo => !!wallet && 'connector' in wallet
+export const isSolanaWallet = (wallet?: WalletInfo): wallet is SolanaWalletInfo => !!wallet && 'adapter' in wallet
+
+// https://docs.metamask.io/guide/ethereum-provider.html#basic-usage
+// https://docs.cloud.coinbase.com/wallet-sdk/docs/injected-provider#properties
+// Coin98 and Brave wallet is overriding Metamask. So at a time, there is only 1 exists
+export const detectInjectedType = (): INJECTED_KEY | undefined => {
+  return INJECTED_KEYS.find(walletKey => {
+    const wallet = SUPPORTED_WALLETS[walletKey]
+    return wallet.readyState() === WalletReadyState.Installed
+  })
+}
+
+export const isOverriddenWallet = (wallet: SUPPORTED_WALLET) => {
+  const injectedType = detectInjectedType()
+  return (
+    (wallet === 'COIN98' && injectedType === 'METAMASK') ||
+    (wallet === 'METAMASK' && injectedType === 'COIN98') ||
+    (wallet === 'BRAVE' && injectedType === 'COIN98') ||
+    (wallet === 'COIN98' && injectedType === 'BRAVE') ||
+    (wallet === 'COINBASE' && injectedType === 'COIN98') ||
+    // Coin98 turned off override MetaMask in setting
+    (wallet === 'COIN98' && window.coin98 && !window.ethereum?.isCoin98)
+  )
+}
+
 export const filterTruthy = <T>(array: (T | undefined | null | false)[]): T[] => {
   return array.filter(Boolean) as T[]
+}
+
+export const findTx = (txs: GroupedTxsByHash | undefined, hash: string): TransactionDetails | undefined => {
+  return txs
+    ? txs?.[hash]?.[0] ||
+        Object.values(txs)
+          .flat()
+          .find(tx => tx?.hash === hash)
+    : undefined
+}
+
+export const isChristmasTime = () => {
+  const currentTime = dayjs()
+  return currentTime.month() === 11 && currentTime.date() >= 15
+}
+
+export const isSupportLimitOrder = (chainId: ChainId): boolean => {
+  if (!SUPPORTED_NETWORKS.includes(chainId)) return false
+  const limitOrder = NETWORKS_INFO[chainId]?.limitOrder
+  return limitOrder === '*' || (limitOrder || []).includes(ENV_KEY)
+}
+
+export function openFullscreen(elem: any) {
+  if (elem.requestFullscreen) {
+    elem.requestFullscreen()
+  } else if (elem.webkitRequestFullScreen) {
+    /* Old webkit */
+    elem.webkitRequestFullScreen()
+  } else if (elem.webkitRequestFullscreen) {
+    /* New webkit */
+    elem.webkitRequestFullscreen()
+  } else if (elem.mozRequestFullScreen) {
+    elem.mozRequestFullScreen()
+  } else if (elem.msRequestFullscreen) {
+    /* IE11 */
+    elem.msRequestFullscreen()
+  }
+}
+
+export const downloadImage = (data: Blob | string | undefined, filename: string) => {
+  if (!data) return
+  const link = document.createElement('a')
+  link.download = filename
+  link.href = typeof data === 'string' ? data : URL.createObjectURL(data)
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+}
+
+export function buildFlagsForFarmV21({
+  isClaimFee,
+  isSyncFee,
+  isClaimReward,
+  isReceiveNative,
+}: {
+  isClaimFee: boolean
+  isSyncFee: boolean
+  isClaimReward: boolean
+  isReceiveNative: boolean
+}) {
+  let flags = 1
+  if (isReceiveNative) flags = 1
+  if (isClaimFee) flags = flags | (1 << 3)
+  if (isSyncFee) flags = flags | (1 << 2)
+  if (isClaimReward) flags = flags | (1 << 1)
+  return flags
 }

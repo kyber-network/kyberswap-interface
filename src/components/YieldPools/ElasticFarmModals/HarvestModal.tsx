@@ -13,21 +13,11 @@ import Modal from 'components/Modal'
 import { MouseoverTooltip } from 'components/Tooltip'
 import useMixpanel, { MIXPANEL_TYPE } from 'hooks/useMixpanel'
 import useTheme from 'hooks/useTheme'
-import { useElasticFarms, useFarmAction } from 'state/farms/elastic/hooks'
+import { useElasticFarms, useFarmAction, useJoinedPositions } from 'state/farms/elastic/hooks'
 import { useTokenPrices } from 'state/tokenPrices/hooks'
-import { StyledInternalLink } from 'theme'
 import { formatDollarAmount } from 'utils/numbers'
 
 import { ModalContentWrapper, Title } from './styled'
-
-const HarvestInfo = styled.div`
-  padding: 16px;
-  border-radius: 4px;
-  background: ${({ theme }) => theme.primary + '33'};
-  margin-top: 18px;
-  font-size: 12px;
-  line-height: 20px;
-`
 
 const RewardRow = styled.div`
   border-radius: 999px;
@@ -52,7 +42,8 @@ function HarvestModal({
   onDismiss: () => void
 }) {
   const theme = useTheme()
-  const { farms, userFarmInfo } = useElasticFarms()
+  const { farms } = useElasticFarms()
+  const userFarmInfo = useJoinedPositions()
   const selectedFarm = farms?.find(farm => farm.id.toLowerCase() === farmsAddress.toLowerCase())
 
   const { harvest } = useFarmAction(farmsAddress)
@@ -102,7 +93,7 @@ function HarvestModal({
         }
       })
 
-    const tx = await harvest(nftIds, poolIds)
+    const tx = await harvest(nftIds, poolIds, selectedPool, Object.values(rewards))
     if (tx) {
       onDismiss()
       if (poolId === null) {
@@ -142,21 +133,6 @@ function HarvestModal({
             </ButtonEmpty>
           </Flex>
         </Flex>
-
-        <HarvestInfo>
-          <Trans>
-            After harvesting, your rewards will begin vesting linearly (only if the farm has a vesting duration).
-            <br />
-            <br />
-            Vesting means that your reward tokens will be locked initially but released gradually. You can claim the
-            reward tokens to your wallet as and when they are released.
-            <br />
-            <br />
-            To claim your rewards, go to the{' '}
-            <StyledInternalLink to="/farms?type=vesting&tab=elastic"> Vesting</StyledInternalLink> tab and click
-            &apos;Claim&apos;.
-          </Trans>
-        </HarvestInfo>
 
         <Flex marginTop="20px" justifyContent="space-between">
           <Text>

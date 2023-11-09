@@ -1,7 +1,7 @@
 import { t } from '@lingui/macro'
 import { Step } from 'walktour'
 
-export interface StepCustom extends Step {
+export interface StepTutorial extends Step {
   stopPropagationMouseDown?: boolean // stop Propagation onMouseDown event, ex: prevent Menufly setting auto close
   center?: boolean // popup at center
   hasPointer?: boolean
@@ -12,11 +12,7 @@ export interface StepCustom extends Step {
   selectorHint?: string // this is element to check we clicked requiredClickSelector or not.
   stepNumber?: number // for tracking, display
   callbackEndStep?: () => void
-}
-
-export const TutorialNumbers = {
-  TOTAL_STEP: 9,
-  STEP_BRIDGE: 6,
+  lastStep?: boolean
 }
 
 // please do not remove TutorialIds.xxxxxx in some where to make sure tutorial work well
@@ -29,25 +25,28 @@ export const TutorialIds = {
   SWAP_FORM_CONTENT: 'swap-page',
   TRADING_SETTING_CONTENT: 'tradingSettingContent',
 
-  BUTTON_SETTING: 'open-settings-dialog-button',
+  BUTTON_MENU_HEADER: 'open-settings-dialog-button',
   BUTTON_SETTING_SWAP_FORM: 'btnSettingSwapForm',
 
   EARNING_LINKS: 'earningLinks',
   BRIDGE_LINKS: 'bridgeLinks',
   DISCOVER_LINK: 'discoverLink',
   CAMPAIGN_LINK: 'campaignLink',
+  KYBER_DAO_LINK: 'kyberDaoLink',
   BUTTON_VIEW_GUIDE_SWAP: 'btnViewGuideSwap',
 }
 
 export const LIST_TITLE = {
+  WELCOME: t`Welcome to KyberSwap - Trading Smart!`,
   YOUR_WALLET: t`Your wallet address`,
   CONNECT_WALLET: t`Connect a wallet`,
-  SELECT_NETWORK: t`Select your network`,
-  START_TRADING: t`Select tokens to swap & start trading`,
-  SETTING: t`Customize your settings`,
+  SELECT_NETWORK: t`Select your chain`,
+  START_TRADING: t`Select tokens to swap and start trading`,
+  SETTING: t`Personalize your trading interface`,
   EARN: t`Earn trading fees through our Pools / Farms`,
-  DISCOVER: t`Discover trending soon tokens`,
+  DISCOVER: t`KyberAI - Ape Smart!`,
   CAMPAIGN: t`Participate in our campaigns`,
+  KYBER_DAO: t`KyberDAO`,
   VIEW_GUIDE: t`View our KyberSwap Guide again`,
-  BRIDGE: t`Buy Crypto or Bridge Tokens`,
+  BRIDGE: t`Place Limit Orders, Bridge Tokens or Buy Crypto`,
 }

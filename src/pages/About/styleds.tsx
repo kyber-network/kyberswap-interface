@@ -70,7 +70,7 @@ export const BtnPrimary = styled(ButtonPrimary)`
 
 export const OverflowStatisticWrapper = styled.div`
   margin-top: 160px;
-  ${({ theme }) => theme.mediaWidth.upToMedium`    
+  ${({ theme }) => theme.mediaWidth.upToMedium`
     margin-left: 0;
     margin-right: 0;
   `}
@@ -89,7 +89,7 @@ export const StatisticWrapper = styled.div`
 `
 
 export const StatisticItem = styled.div`
-  background-color: ${({ theme }) => theme.background2};
+  background-color: ${({ theme }) => theme.background};
   flex: 1;
   border-radius: 8px;
   text-align: center;
@@ -110,7 +110,7 @@ export const ForTrader = styled.div`
 
 export const ForTraderInfo = styled(Flex)`
   margin-top: 20px;
-  background-color: ${({ theme }) => theme.background2};
+  background-color: ${({ theme }) => theme.background};
   padding: 20px 0;
   border-radius: 8px;
   justify-content: center;
@@ -156,7 +156,7 @@ export const ForLiquidityProviderItem = styled(Flex)`
   padding: 48px;
   border-radius: 20px;
   width: 100%;
-  background-color: ${({ theme }) => theme.background2};
+  background-color: ${({ theme }) => theme.background};
 
   ${({ theme }) => theme.mediaWidth.upToMedium`
     padding: 32px;
@@ -220,29 +220,35 @@ export const FooterContainer = styled.div`
 `
 
 export const Powered = styled.div`
-  display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+  display: flex;
+  flex-wrap: wrap;
   margin-top: 48px;
-  gap: 52px;
   align-items: center;
-
+  justify-content: center;
+  gap: 52px;
+  & > * {
+    width: calc(100% / 5 - 52px);
+  }
   svg {
     max-width: 100%;
   }
 
   ${({ theme }) => theme.mediaWidth.upToMedium`
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    & > * {
+      width: calc(25% - 52px);
+    }
   `}
 
   ${({ theme }) => theme.mediaWidth.upToSmall`
-    padding: 48px;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    & > * {
+      width: calc(100% / 3 - 52px);
+    }
   `}
 
   ${({ theme }) => theme.mediaWidth.upToExtraSmall`
-    padding: 12px;
-    row-gap: 24px;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    & > * {
+      width: calc(50% - 52px);
+    }
   `}
 `
 
@@ -298,7 +304,7 @@ export const AboutKNC = styled.div`
 export const ExchangeWrapper = styled.div`
   margin: 28px 0px;
   height: 152px;
-  background: ${({ theme }) => theme.background2};
+  background: ${({ theme }) => theme.background};
   display: flex;
   border-radius: 8px;
 `
@@ -306,7 +312,7 @@ export const ExchangeWrapper = styled.div`
 export const MoreInfoWrapper = styled.div`
   display: flex;
   border-radius: 20px;
-  background: ${({ theme }) => theme.background2};
+  background: ${({ theme }) => theme.background};
   width: 100%;
   padding: 64px;
   margin-top: 100px;

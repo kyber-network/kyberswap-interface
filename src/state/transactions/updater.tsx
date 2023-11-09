@@ -1,24 +1,28 @@
-import { TransactionReceipt } from '@ethersproject/abstract-provider'
 import { BigNumber } from '@ethersproject/bignumber'
-import { ethers } from 'ethers'
-import { useCallback, useEffect, useMemo } from 'react'
+import { ChainId } from '@kyberswap/ks-sdk-core'
+import { ParsedTransactionWithMeta } from '@solana/web3.js'
+import { findReplacementTx } from 'find-replacement-tx'
+import { useEffect, useMemo } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
 
-import { AGGREGATOR_ROUTER_SWAPPED_EVENT_TOPIC } from 'constants/index'
+import { NotificationType } from 'components/Announcement/type'
+import { APP_PATHS } from 'constants/index'
+import { useActiveWeb3React, useWeb3Solana } from 'hooks'
 import useMixpanel, { MIXPANEL_TYPE, NEED_CHECK_SUBGRAPH_TRANSACTION_TYPES } from 'hooks/useMixpanel'
-import { AppPaths } from 'pages/App'
+import { useBlockNumber, useKyberSwapConfig, useTransactionNotify } from 'state/application/hooks'
 import { useSetClaimingCampaignRewardId } from 'state/campaigns/hooks'
-import { getFullDisplayBalance } from 'utils/formatBalance'
+import { AppDispatch, AppState } from 'state/index'
+import { revokePermit } from 'state/user/actions'
+import { findTx } from 'utils'
 
-import { useActiveWeb3React } from '../../hooks'
-import { NotificationType, useBlockNumber, useTransactionNotify } from '../application/hooks'
-import { AppDispatch, AppState } from '../index'
-import { SerializableTransactionReceipt, checkedTransaction, finalizeTransaction } from './actions'
+import { checkedTransaction, finalizeTransaction, removeTx, replaceTx } from './actions'
+import { SerializableTransactionReceipt, TRANSACTION_TYPE, TransactionDetails } from './type'
 
-export function shouldCheck(
+function shouldCheck(
   lastBlockNumber: number,
-  tx: { addedTime: number; receipt?: SerializableTransactionReceipt; lastCheckedBlockNumber?: number },
+  tx?: { addedTime: number; receipt?: SerializableTransactionReceipt; lastCheckedBlockNumber?: number },
 ): boolean {
+  if (!tx) return false
   if (tx.receipt) return false
   if (!tx.lastCheckedBlockNumber) return true
   const blocksSinceCheck = lastBlockNumber - tx.lastCheckedBlockNumber
@@ -37,178 +41,237 @@ export function shouldCheck(
 }
 
 export default function Updater(): null {
-  const { chainId, library } = useActiveWeb3React()
+  const { chainId, isEVM, isSolana, account } = useActiveWeb3React()
+  const { readProvider } = useKyberSwapConfig(chainId)
+  const { connection } = useWeb3Solana()
 
   const lastBlockNumber = useBlockNumber()
   const dispatch = useDispatch<AppDispatch>()
-  const state = useSelector<AppState, AppState['transactions']>(state => state.transactions)
+  const transactionsState = useSelector<AppState, AppState['transactions'][ChainId]>(
+    state => state.transactions[chainId],
+  )
 
-  const transactions = useMemo(() => (chainId ? state[chainId] ?? {} : {}), [chainId, state])
+  const transactions = useMemo(() => transactionsState ?? {}, [transactionsState])
 
   // show popup on confirm
 
-  const parseTransactionType = useCallback(
-    (receipt: TransactionReceipt): string | undefined => {
-      return transactions[receipt.transactionHash]?.type
-    },
-    [transactions],
-  )
-
-  const parseTransactionSummary = useCallback(
-    (receipt: TransactionReceipt): string | undefined => {
-      let log = undefined
-
-      for (let i = 0; i < receipt.logs.length; i++) {
-        if (receipt.logs[i].topics.includes(AGGREGATOR_ROUTER_SWAPPED_EVENT_TOPIC)) {
-          log = receipt.logs[i]
-          break
-        }
-      }
-
-      // No event log includes Swapped event topic
-      if (!log) {
-        return transactions[receipt.transactionHash]?.summary
-      }
-
-      // Parse summary message for Swapped event
-      if (!transactions[receipt.transactionHash] || !transactions[receipt.transactionHash]?.arbitrary) {
-        return transactions[receipt.transactionHash]?.summary
-      }
-
-      const inputSymbol = transactions[receipt.transactionHash]?.arbitrary?.inputSymbol
-      const outputSymbol = transactions[receipt.transactionHash]?.arbitrary?.outputSymbol
-      const inputDecimals = transactions[receipt.transactionHash]?.arbitrary?.inputDecimals
-      const outputDecimals = transactions[receipt.transactionHash]?.arbitrary?.outputDecimals
-      const withRecipient = transactions[receipt.transactionHash]?.arbitrary?.withRecipient
-
-      if (!inputSymbol || !outputSymbol || !inputDecimals || !outputDecimals) {
-        return transactions[receipt.transactionHash]?.summary
-      }
-
-      const decodedValues = ethers.utils.defaultAbiCoder.decode(
-        ['address', 'address', 'address', 'address', 'uint256', 'uint256'],
-        log.data,
-      )
-
-      const inputAmount = getFullDisplayBalance(BigNumber.from(decodedValues[4].toString()), inputDecimals, 3)
-      const outputAmount = getFullDisplayBalance(BigNumber.from(decodedValues[5].toString()), outputDecimals, 3)
-
-      const base = `${inputAmount} ${inputSymbol} for ${outputAmount} ${outputSymbol}`
-
-      return `${base} ${withRecipient ?? ''}`
-    },
-    [transactions],
-  )
   const { mixpanelHandler, subgraphMixpanelHandler } = useMixpanel()
   const transactionNotify = useTransactionNotify()
   const setClaimingCampaignRewardId = useSetClaimingCampaignRewardId()[1]
 
   useEffect(() => {
-    if (!chainId || !library || !lastBlockNumber) return
-    const uniqueTransactions = [...new Set(Object.keys(transactions))]
+    if (!readProvider || !lastBlockNumber) return
+    const uniqueTransactions = [
+      ...new Set(
+        Object.values(transactions)
+          .map((txs: TransactionDetails[] | TransactionDetails | undefined) =>
+            Array.isArray(txs) ? txs.map(tx => tx.hash) : txs?.hash,
+          )
+          .flat(2)
+          .filter(Boolean) as [string],
+      ),
+    ]
 
     uniqueTransactions
-      .filter(hash => shouldCheck(lastBlockNumber, transactions[hash]))
+      .filter(hash => shouldCheck(lastBlockNumber, findTx(transactions, hash)))
       .forEach(hash => {
-        library
-          .getTransactionReceipt(hash)
-          .then(receipt => {
-            if (receipt) {
-              const transaction = transactions[receipt.transactionHash]
+        if (isEVM) {
+          // Check if tx was replaced
+          readProvider
+            .getTransaction(hash)
+            .then(res => {
+              const transaction = findTx(transactions, hash)
+
+              if (!transaction || !!res) return // !res this mean tx was drop (cancel/replace)
+
+              const { sentAtBlock, from, to, nonce, data, addedTime } = transaction
+              const checkRemoveTxs = () => {
+                // pending >1 days
+                if (Date.now() - addedTime > 86_400_000) dispatch(removeTx({ chainId, hash }))
+              }
+
+              if (sentAtBlock && from && to && nonce && data)
+                findReplacementTx(readProvider, sentAtBlock, {
+                  from,
+                  to,
+                  nonce,
+                  data,
+                })
+                  .then(newTx => {
+                    if (newTx) {
+                      dispatch(
+                        replaceTx({
+                          chainId,
+                          oldHash: hash,
+                          newHash: newTx.hash,
+                        }),
+                      )
+                    }
+                  })
+                  .catch(() => {
+                    checkRemoveTxs()
+                  })
+              else {
+                checkRemoveTxs()
+              }
+            })
+            .catch(console.warn)
+          readProvider
+            .getTransactionReceipt(hash)
+            .then(receipt => {
+              if (!receipt) {
+                dispatch(checkedTransaction({ chainId, hash, blockNumber: lastBlockNumber }))
+                return
+              }
+
+              const transaction = findTx(transactions, receipt.transactionHash)
+              if (!transaction) return
               dispatch(
                 finalizeTransaction({
                   chainId,
-                  hash,
+                  hash: receipt.transactionHash,
                   receipt: {
                     blockHash: receipt.blockHash,
-                    blockNumber: receipt.blockNumber,
-                    contractAddress: receipt.contractAddress,
-                    from: receipt.from,
                     status: receipt.status,
-                    to: receipt.to,
-                    transactionHash: receipt.transactionHash,
-                    transactionIndex: receipt.transactionIndex,
-                    gasUsed: receipt.gasUsed,
-                    effectiveGasPrice: receipt.effectiveGasPrice,
                   },
-                  needCheckSubgraph: NEED_CHECK_SUBGRAPH_TRANSACTION_TYPES.includes(transaction.type || ''),
+                  needCheckSubgraph: NEED_CHECK_SUBGRAPH_TRANSACTION_TYPES.includes(transaction.type),
                 }),
               )
 
               transactionNotify({
-                hash,
-                notiType: receipt.status === 1 ? NotificationType.SUCCESS : NotificationType.ERROR,
-                type: parseTransactionType(receipt),
-                summary: parseTransactionSummary(receipt),
+                hash: receipt.transactionHash,
+                type: receipt.status === 1 ? NotificationType.SUCCESS : NotificationType.ERROR,
+                account: account ?? '',
               })
-              if (receipt.status === 1 && transaction) {
+              if (receipt.status === 1) {
+                const arbitrary = transaction.extraInfo?.arbitrary
                 switch (transaction.type) {
-                  case 'Swap': {
-                    if (transaction.arbitrary) {
-                      mixpanelHandler(MIXPANEL_TYPE.SWAP_COMPLETED, {
-                        arbitrary: transaction.arbitrary,
-                        actual_gas: receipt.gasUsed || BigNumber.from(0),
-                        gas_price: receipt.effectiveGasPrice || BigNumber.from(0),
-                        tx_hash: hash,
-                      })
+                  case TRANSACTION_TYPE.SWAP: {
+                    if (!arbitrary) return
+                    if (account && arbitrary.isPermitSwap) {
+                      dispatch(revokePermit({ chainId, address: arbitrary.inputAddress, account }))
                     }
+                    mixpanelHandler(MIXPANEL_TYPE.SWAP_COMPLETED, {
+                      arbitrary,
+                      actual_gas: receipt.gasUsed || BigNumber.from(0),
+                      gas_price: receipt.effectiveGasPrice || BigNumber.from(0),
+                      tx_hash: receipt.transactionHash,
+                      feeInfo: arbitrary.feeInfo,
+                    })
                     break
                   }
-                  case 'Bridge': {
-                    if (transaction.arbitrary) {
+                  case TRANSACTION_TYPE.BRIDGE: {
+                    if (arbitrary) {
                       mixpanelHandler(MIXPANEL_TYPE.BRIDGE_TRANSACTION_SUBMIT, {
-                        ...transaction.arbitrary,
-                        tx_hash: hash,
+                        ...arbitrary,
+                        tx_hash: receipt.transactionHash,
                       })
                     }
                     break
                   }
-                  case 'Collect fee': {
-                    if (transaction.arbitrary) {
-                      mixpanelHandler(MIXPANEL_TYPE.ELASTIC_COLLECT_FEES_COMPLETED, transaction.arbitrary)
+                  case TRANSACTION_TYPE.ELASTIC_COLLECT_FEE: {
+                    if (arbitrary) {
+                      mixpanelHandler(MIXPANEL_TYPE.ELASTIC_COLLECT_FEES_COMPLETED, arbitrary)
                     }
                     break
                   }
-                  case 'Increase liquidity': {
-                    if (transaction.arbitrary) {
+                  case TRANSACTION_TYPE.ELASTIC_INCREASE_LIQUIDITY: {
+                    if (arbitrary) {
                       mixpanelHandler(MIXPANEL_TYPE.ELASTIC_INCREASE_LIQUIDITY_COMPLETED, {
-                        ...transaction.arbitrary,
-                        tx_hash: hash,
+                        ...arbitrary,
+                        tx_hash: receipt.transactionHash,
                       })
                     }
                     break
                   }
-                  case 'Claim': {
+                  case TRANSACTION_TYPE.CLAIM_REWARD: {
                     // claim campaign reward successfully
                     // reset id claiming when finished
-                    if (window.location.pathname.startsWith(AppPaths.CAMPAIGN)) setClaimingCampaignRewardId(null)
+                    if (window.location.pathname.startsWith(APP_PATHS.CAMPAIGN)) setClaimingCampaignRewardId(null)
+                    break
+                  }
+                  case TRANSACTION_TYPE.CANCEL_LIMIT_ORDER: {
+                    if (arbitrary) {
+                      mixpanelHandler(MIXPANEL_TYPE.LO_CANCEL_ORDER_SUBMITTED, {
+                        ...arbitrary,
+                        tx_hash: receipt.transactionHash,
+                      })
+                    }
                     break
                   }
                   default:
                     break
                 }
               }
-            } else {
-              dispatch(checkedTransaction({ chainId, hash, blockNumber: lastBlockNumber }))
-            }
-          })
-          .catch(error => {
-            console.error(`failed to check transaction hash: ${hash}`, error)
-          })
+            })
+            .catch((error: any) => {
+              console.error(`failed to check transaction hash: ${hash}`, error)
+            })
+        }
+        if (isSolana && connection) {
+          connection
+            .getParsedTransaction(hash, { maxSupportedTransactionVersion: 0 })
+            .then((tx: ParsedTransactionWithMeta | null) => {
+              if (tx) {
+                const transaction = findTx(transactions, hash)
+                if (!transaction) return
+                dispatch(
+                  finalizeTransaction({
+                    chainId,
+                    hash,
+                    receipt: {
+                      blockHash: tx.transaction.message.recentBlockhash,
+                      status: tx.meta?.err ? 0 : 1,
+                    },
+                    needCheckSubgraph: false,
+                  }),
+                )
+
+                transactionNotify({
+                  hash,
+                  type: tx.meta?.err ? NotificationType.ERROR : NotificationType.SUCCESS,
+                  account: account ?? '',
+                })
+                if (!tx.meta?.err && transaction) {
+                  const arbitrary = transaction.extraInfo?.arbitrary
+                  switch (transaction.type) {
+                    case TRANSACTION_TYPE.SWAP: {
+                      if (arbitrary) {
+                        mixpanelHandler(MIXPANEL_TYPE.SWAP_COMPLETED, {
+                          arbitrary,
+                          gas_price: tx.meta?.fee,
+                          tx_hash: hash,
+                          actual_gas: BigNumber.from(tx.meta?.fee || 0),
+                        })
+                      }
+                      break
+                    }
+                    default:
+                      break
+                  }
+                }
+              } else {
+                dispatch(checkedTransaction({ chainId, hash, blockNumber: lastBlockNumber }))
+              }
+            })
+            .catch((error: any) => {
+              console.error(`failed to check transaction hash: ${hash}`, error)
+            })
+        }
       })
     uniqueTransactions
-      .filter(hash => transactions[hash]?.needCheckSubgraph)
+      .filter(hash => findTx(transactions, hash)?.extraInfo?.needCheckSubgraph)
       .forEach(async (hash: string) => {
-        const transaction = transactions[hash]
+        const transaction = findTx(transactions, hash)
         try {
-          subgraphMixpanelHandler(transaction)
+          transaction && subgraphMixpanelHandler(transaction)
         } catch (error) {
           console.log(error)
         }
       })
 
     // eslint-disable-next-line
-  }, [chainId, library, transactions, lastBlockNumber, dispatch, parseTransactionSummary, parseTransactionType])
+  }, [chainId, readProvider, transactions, lastBlockNumber, dispatch, connection])
 
   return null
 }

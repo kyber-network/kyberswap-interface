@@ -1,16 +1,16 @@
 import { Trans, t } from '@lingui/macro'
-import React, { ChangeEvent, useCallback } from 'react'
+import { ChangeEvent, DOMAttributes, ReactNode, useCallback } from 'react'
 import { Flex, Text } from 'rebass'
-import styled from 'styled-components'
+import styled, { CSSProperties } from 'styled-components'
 
 import { ReactComponent as DropdownSVG } from 'assets/svg/down.svg'
+import { AutoColumn } from 'components/Column'
+import Row from 'components/Row'
 import { useActiveWeb3React } from 'hooks'
+import useENS from 'hooks/useENS'
 import useTheme from 'hooks/useTheme'
 import { ExternalLink } from 'theme'
-import { getEtherscanLink, getEtherscanLinkText } from 'utils'
-
-import useENS from '../../hooks/useENS'
-import { AutoColumn } from '../Column'
+import { getEtherscanLink } from 'utils'
 
 const InputPanel = styled.div`
   ${({ theme }) => theme.flexColumnNoWrap}
@@ -55,22 +55,80 @@ const Input = styled.input<{ error?: boolean }>`
   }
   padding: 0px;
   -webkit-appearance: textfield;
+  appearance: textfield;
 
   ::-webkit-search-decoration {
     -webkit-appearance: none;
+    appearance: none;
   }
 
   ::-webkit-outer-spin-button,
   ::-webkit-inner-spin-button {
     -webkit-appearance: none;
+    appearance: none;
   }
 `
 
-const DropdownIcon = styled(DropdownSVG)<{ open: boolean }>`
+const DropdownIcon = styled(DropdownSVG)<{ $rotated: boolean }>`
   cursor: pointer;
   transition: transform 300ms;
-  transform: rotate(${({ open }) => (open ? '-180deg' : 0)});
+  transform: rotate(${({ $rotated }) => ($rotated ? '-180deg' : 0)});
 `
+
+type Props = {
+  pattern?: string | null
+  error?: boolean
+  value: string | null
+  placeholder?: string
+  icon?: ReactNode
+  disabled?: boolean
+  className?: string
+  style?: CSSProperties
+} & Pick<DOMAttributes<HTMLInputElement>, 'onBlur' | 'onFocus' | 'onChange' | 'onClick'>
+
+const AddressInputComponent = function AddressInput({
+  onChange,
+  onFocus,
+  onBlur,
+  onClick,
+  value,
+  error = false,
+  placeholder,
+  icon,
+  disabled = false,
+  style = {},
+  className,
+  pattern = '^(0x[a-fA-F0-9]{40})$',
+}: Props) {
+  return (
+    <ContainerRow error={error} className={className} onClick={onClick}>
+      <InputContainer>
+        <Row gap="5px">
+          <Input
+            style={style}
+            disabled={disabled}
+            className="recipient-address-input"
+            type="text"
+            autoComplete="off"
+            autoCorrect="off"
+            autoCapitalize="off"
+            spellCheck="false"
+            placeholder={placeholder || t`Wallet Address or ENS name`}
+            error={error}
+            pattern={pattern || undefined}
+            onBlur={onBlur}
+            onFocus={onFocus}
+            onChange={onChange}
+            value={value || ''}
+          />
+          {icon}
+        </Row>
+      </InputContainer>
+    </ContainerRow>
+  )
+}
+
+export const AddressInput = styled(AddressInputComponent)``
 
 export default function AddressInputPanel({
   id,
@@ -83,7 +141,7 @@ export default function AddressInputPanel({
   // triggers whenever the typed value changes
   onChange: (value: string | null) => void
 }) {
-  const { chainId } = useActiveWeb3React()
+  const { chainId, networkInfo, isEVM } = useActiveWeb3React()
   const { address, loading, name } = useENS(value)
 
   const handleInput = useCallback(
@@ -97,45 +155,41 @@ export default function AddressInputPanel({
   const theme = useTheme()
 
   const error = Boolean((value || '').length > 0 && !loading && !address)
-
+  if (!isEVM) return null
   return (
     <AutoColumn gap="4px">
-      <Flex justifyContent="space-between" alignItems="center" marginTop="4px" color={theme.subText}>
-        <Text fontSize="12px" fontWeight="500">
+      <Flex
+        role="button"
+        onClick={() => onChange(value === null ? '' : null)}
+        sx={{
+          cursor: 'pointer',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          marginTop: '4px',
+          color: theme.subText,
+          padding: '0 8px',
+        }}
+      >
+        <Text fontSize="12px" fontWeight="400" color={theme.subText}>
           <Trans>Recipient (Optional)</Trans>
 
-          {address && chainId && (
+          {address && (
             <ExternalLink
               href={getEtherscanLink(chainId, name ?? address, 'address')}
               style={{ fontSize: '12px', marginLeft: '4px' }}
+              onClick={e => {
+                e.stopPropagation()
+              }}
             >
-              ({getEtherscanLinkText(chainId)})
+              ({networkInfo.etherscanName})
             </ExternalLink>
           )}
         </Text>
-        <DropdownIcon open={value !== null} onClick={() => onChange(value === null ? '' : null)} />
+        <DropdownIcon $rotated={value !== null} />
       </Flex>
 
       <InputPanel id={id} style={{ maxHeight: value === null ? 0 : '44px' }}>
-        <ContainerRow error={error}>
-          <InputContainer>
-            <AutoColumn gap="md">
-              <Input
-                className="recipient-address-input"
-                type="text"
-                autoComplete="off"
-                autoCorrect="off"
-                autoCapitalize="off"
-                spellCheck="false"
-                placeholder={t`Wallet Address or ENS name`}
-                error={error}
-                pattern="^(0x[a-fA-F0-9]{40})$"
-                onChange={handleInput}
-                value={value || ''}
-              />
-            </AutoColumn>
-          </InputContainer>
-        </ContainerRow>
+        <AddressInput onChange={handleInput} value={value || ''} error={error} />
       </InputPanel>
     </AutoColumn>
   )

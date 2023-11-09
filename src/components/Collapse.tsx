@@ -1,6 +1,6 @@
 import React, { CSSProperties, ReactNode, useState } from 'react'
-import { ChevronUp } from 'react-feather'
-import styled from 'styled-components'
+import { ChevronDown } from 'react-feather'
+import styled, { css } from 'styled-components'
 
 const ItemWrapper = styled.div`
   position: relative;
@@ -14,7 +14,7 @@ const Header = styled.div`
   display: flex;
   align-items: center;
   justify-content: space-between;
-
+  user-select: none;
   cursor: pointer;
 `
 
@@ -32,18 +32,24 @@ const ArrowWrapper = styled.div`
     transition: all 150ms ease-in-out;
   }
 
-  &[data-expanded='false'] {
+  &[data-expanded='true'] {
     svg {
       transform: rotate(180deg);
     }
   }
 `
 
-const ContentWrapper = styled.div`
+const ContentWrapper = styled.div<{ $hasAnim?: boolean; $maxHeight?: string }>`
   width: 100%;
-
+  overflow: hidden;
+  ${({ $hasAnim, $maxHeight }) =>
+    $hasAnim &&
+    css`
+      transition: max-height 500ms ease;
+      max-height: ${$maxHeight};
+    `};
   &[data-expanded='false'] {
-    display: none;
+    max-height: 0;
   }
 `
 
@@ -56,6 +62,11 @@ type Props = {
   onExpand?: () => void
   className?: string
   arrowComponent?: ReactNode
+  headerStyle?: CSSProperties
+  headerBorderRadius?: string
+  arrowStyle?: CSSProperties
+  animation?: boolean
+  maxHeight?: string
 }
 
 export const CollapseItem: React.FC<Props> = ({
@@ -65,27 +76,42 @@ export const CollapseItem: React.FC<Props> = ({
   expandedOnMount = false,
   style = {},
   className,
+  headerStyle,
+  headerBorderRadius,
+  arrowStyle,
+  animation = false,
+  maxHeight,
 }) => {
   const [isExpanded, setExpanded] = useState(expandedOnMount)
 
   return (
     <ItemWrapper style={style} className={className}>
       <Header
+        style={{
+          ...headerStyle,
+          ...(headerBorderRadius !== undefined
+            ? { borderRadius: isExpanded ? `${headerBorderRadius} ${headerBorderRadius} 0 0` : headerBorderRadius }
+            : {}),
+        }}
         onClick={() => {
           setExpanded(e => !e)
         }}
       >
         {header}
-        <ArrowWrapper data-expanded={isExpanded}>{arrowComponent || <ChevronUp />}</ArrowWrapper>
+        <ArrowWrapper data-expanded={isExpanded} style={arrowStyle}>
+          {arrowComponent || <ChevronDown />}
+        </ArrowWrapper>
       </Header>
-      <ContentWrapper data-expanded={isExpanded}>{children}</ContentWrapper>
+      <ContentWrapper data-expanded={isExpanded} $hasAnim={animation} $maxHeight={maxHeight}>
+        {children}
+      </ContentWrapper>
     </ItemWrapper>
   )
 }
 
 export type ToggleItemType = { title: React.ReactNode; content: ReactNode | string }
 // open one, close the others
-export const ToggleCollapse = ({
+const ToggleCollapse = ({
   data,
   itemActiveStyle = {},
   itemStyle = {},
@@ -108,7 +134,7 @@ export const ToggleCollapse = ({
             >
               {item.title}
               <ArrowWrapper data-expanded={isActive}>
-                <ChevronUp />
+                <ChevronDown />
               </ArrowWrapper>
             </Header>
             <ContentWrapper data-expanded={isActive}>{item.content}</ContentWrapper>

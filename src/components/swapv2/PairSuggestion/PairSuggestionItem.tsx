@@ -7,7 +7,7 @@ import { Flex, Text } from 'rebass'
 import styled from 'styled-components'
 
 import Logo from 'components/Logo'
-import { MouseoverTooltip } from 'components/Tooltip'
+import { MouseoverTooltipDesktopOnly } from 'components/Tooltip'
 import { useActiveWeb3React } from 'hooks'
 import { useAllTokens } from 'hooks/Tokens'
 import useTheme from 'hooks/useTheme'
@@ -20,11 +20,8 @@ const ItemWrapper = styled.div<{ isActive: boolean }>`
   display: flex;
   justify-content: space-between;
   align-items: center;
-  background-color: ${({ theme, isActive }) => (isActive ? rgba(theme.buttonBlack, 0.5) : 'transparent')};
+  background-color: ${({ theme, isActive }) => (isActive ? rgba(theme.buttonBlack, 0.6) : 'transparent')};
   padding: 1em;
-  &:hover {
-    background-color: ${({ theme }) => rgba(theme.buttonBlack, 0.5)};
-  }
 `
 
 const StyledLogo = styled(Logo)`
@@ -41,6 +38,7 @@ type PropsType = {
   amount: string
   isFavorite?: boolean
   isFullFavoritePair?: boolean
+  onMouseEnter: () => void
 }
 export default function SuggestItem({
   data,
@@ -50,6 +48,7 @@ export default function SuggestItem({
   amount,
   onClickStar,
   onSelectPair,
+  onMouseEnter,
 }: PropsType) {
   const theme = useTheme()
   const activeTokens = useAllTokens(true)
@@ -76,6 +75,7 @@ export default function SuggestItem({
       className={isTokenNotImport ? 'no-blur' : ''}
       onClick={onSelectPair}
       isActive={isActive && !isMobile}
+      onMouseEnter={onMouseEnter}
     >
       <Flex alignItems="center" style={{ gap: 10 }}>
         <Flex alignItems="flex-start" height="100%">
@@ -93,8 +93,10 @@ export default function SuggestItem({
       </Flex>
       <Flex height="100%" tabIndex={0} className="no-blur" minWidth={20}>
         {account &&
-          (isFullFavoritePair && !isMobile ? (
-            <MouseoverTooltip text={t`You can only favorite up to three token pairs`}>{star}</MouseoverTooltip>
+          (isFullFavoritePair ? (
+            <MouseoverTooltipDesktopOnly text={t`You can only favorite up to three token pairs.`}>
+              {star}
+            </MouseoverTooltipDesktopOnly>
           ) : (
             star
           ))}

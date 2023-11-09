@@ -1,11 +1,12 @@
 import { Trans, t } from '@lingui/macro'
 import dayjs from 'dayjs'
 import { rgba } from 'polished'
-import React, { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { Clock } from 'react-feather'
 import { useSelector } from 'react-redux'
 import { useMedia, useSize } from 'react-use'
 import { Flex, Text } from 'rebass'
+import { useGetLuckyWinnersQuery } from 'services/campaign'
 import styled, { css } from 'styled-components'
 
 import Bronze from 'assets/svg/bronze_icon.svg'
@@ -14,20 +15,18 @@ import Silver from 'assets/svg/silver_icon.svg'
 import InfoHelper from 'components/InfoHelper'
 import Pagination from 'components/Pagination'
 import Search, { Container as SearchContainer, Wrapper as SearchWrapper } from 'components/Search'
-import { BIG_INT_ZERO, CAMPAIGN_LEADERBOARD_ITEM_PER_PAGE, DEFAULT_SIGNIFICANT } from 'constants/index'
+import { BIG_INT_ZERO, CAMPAIGN_LEADERBOARD_ITEM_PER_PAGE, DEFAULT_SIGNIFICANT, EMPTY_ARRAY } from 'constants/index'
 import useTheme from 'hooks/useTheme'
 import { AppState } from 'state'
 import { CampaignState, CampaignStatus, RewardRandom } from 'state/campaigns/actions'
 import {
   useSelectedCampaignLeaderboardLookupAddressManager,
   useSelectedCampaignLeaderboardPageNumberManager,
-  useSelectedCampaignLuckyWinnerPageNumber,
-  useSelectedCampaignLuckyWinnersLookupAddressManager,
 } from 'state/campaigns/hooks'
 import { formatNumberWithPrecisionRange } from 'utils'
 import getShortenAddress from 'utils/getShortenAddress'
 
-const leaderboardTableBodyBackgroundColorsByRank: { [p: string]: string } = {
+export const leaderboardTableBodyBackgroundColorsByRank: { [p: string]: string } = {
   1: `linear-gradient(90deg, rgba(255, 204, 102, 0.25) 0%, rgba(255, 204, 102, 0) 54.69%, rgba(255, 204, 102, 0) 100%)`,
   2: `linear-gradient(90deg, rgba(224, 224, 224, 0.25) 0%, rgba(224, 224, 224, 0) 54.69%, rgba(224, 224, 224, 0) 100%)`,
   3: `linear-gradient(90deg, rgba(255, 152, 56, 0.25) 0%, rgba(255, 152, 56, 0) 54.69%, rgba(255, 152, 56, 0) 100%)`,
@@ -48,37 +47,44 @@ export default function LeaderboardLayout({
     </span>
   ))
 
-  const { selectedCampaignLeaderboard, selectedCampaignLuckyWinners, selectedCampaign } = useSelector(
-    (state: AppState) => state.campaigns,
-  )
-
-  const [currentPage, setCurrentPage] = useSelectedCampaignLeaderboardPageNumberManager()
-  const [currentPageLuckyWinner, setCurrentPageLuckyWinner] = useSelectedCampaignLuckyWinnerPageNumber()
+  const { selectedCampaignLeaderboard, selectedCampaign } = useSelector((state: AppState) => state.campaigns)
   const [leaderboardSearchValue, setLeaderboardSearchValue] = useSelectedCampaignLeaderboardLookupAddressManager()
-  const [luckyWinnersSearchValue, setLuckyWinnersSearchValue] = useSelectedCampaignLuckyWinnersLookupAddressManager()
+
+  const [luckyWinnersSearchValue, setLuckyWinnersSearchValue] = useState('')
+
   const [searchValue, setSearchValue] =
     type === 'leaderboard'
       ? [leaderboardSearchValue, setLeaderboardSearchValue]
       : [luckyWinnersSearchValue, setLuckyWinnersSearchValue]
+  const [currentPageLuckyWinner, setCurrentPageLuckyWinner] = useState(0)
+  const { currentData: dataLuckWinners } = useGetLuckyWinnersQuery(
+    {
+      pageSize: CAMPAIGN_LEADERBOARD_ITEM_PER_PAGE,
+      pageNumber: currentPageLuckyWinner,
+      lookupAddress: luckyWinnersSearchValue,
+      campaignId: selectedCampaign?.id || 0,
+    },
+    { skip: !selectedCampaign?.id },
+  )
+
+  const luckyWinners =
+    (selectedCampaign?.campaignState === CampaignState.CampaignStateReady ? EMPTY_ARRAY : dataLuckWinners) ||
+    EMPTY_ARRAY
+
+  const [currentPage, setCurrentPage] = useSelectedCampaignLeaderboardPageNumberManager()
 
   let totalItems = 0
-  if (type === 'leaderboard') {
-    if (selectedCampaignLeaderboard) {
-      totalItems = leaderboardSearchValue ? 1 : selectedCampaignLeaderboard.numberOfEligibleParticipants
-    }
+  if (type === 'leaderboard' && selectedCampaignLeaderboard) {
+    totalItems = leaderboardSearchValue ? 1 : selectedCampaignLeaderboard.totalParticipants
   }
-  if (type === 'lucky_winner') {
-    if (selectedCampaign && selectedCampaignLeaderboard) {
-      const randomRewards = selectedCampaign.rewardDistribution.filter(reward => reward.type === 'Random')
-      const totalRandomRewardItems = randomRewards.reduce(
-        (acc, reward) => acc + ((reward as RewardRandom).nWinners ?? 0),
-        0,
-      )
+  if (type === 'lucky_winner' && selectedCampaign && selectedCampaignLeaderboard) {
+    const randomRewards = selectedCampaign.rewardDistribution.filter(reward => reward.type === 'Random')
+    const totalRandomRewardItems = randomRewards.reduce(
+      (acc, reward) => acc + ((reward as RewardRandom).nWinners ?? 0),
+      0,
+    )
 
-      totalItems = searchValue
-        ? 1
-        : Math.min(totalRandomRewardItems, selectedCampaignLeaderboard.numberOfEligibleParticipants)
-    }
+    totalItems = searchValue ? 1 : Math.min(totalRandomRewardItems, selectedCampaignLeaderboard.totalParticipants)
   }
 
   const refreshInMinute = Math.floor(refreshIn / 60)
@@ -90,7 +96,7 @@ export default function LeaderboardLayout({
   useEffect(() => {
     setCurrentPage(0)
     setCurrentPageLuckyWinner(0)
-  }, [selectedCampaign, setCurrentPageLuckyWinner, setCurrentPage])
+  }, [searchValue, selectedCampaign, setCurrentPageLuckyWinner, setCurrentPage])
 
   const leaderboardTableBody = (selectedCampaignLeaderboard?.rankings ?? []).map((data, index) => {
     const isThisRankingEligible = Boolean(selectedCampaign && data.totalPoint >= selectedCampaign.tradingVolumeRequired)
@@ -145,7 +151,7 @@ export default function LeaderboardLayout({
     )
   })
 
-  const luckyWinnersTableBody = selectedCampaignLuckyWinners.map((luckyWinner, index) => {
+  const luckyWinnersTableBody = luckyWinners.map((luckyWinner, index) => {
     return (
       <LeaderboardTableBody key={index} noColumns={2} showMedal={false} style={{ background: 'transparent' }}>
         <LeaderboardTableBodyItem isThisRankingEligible={true}>

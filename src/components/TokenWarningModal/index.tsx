@@ -1,23 +1,23 @@
-import { Token } from '@kyberswap/ks-sdk-core'
-import React from 'react'
+import { Currency, Token } from '@kyberswap/ks-sdk-core'
 
+import Modal from 'components/Modal'
 import { ImportToken } from 'components/SearchModal/ImportToken'
 
-import Modal from '../Modal'
+const noop = () => {
+  // empty
+}
 
 export default function TokenWarningModal({
   isOpen,
   tokens,
   onConfirm,
-  onDismiss,
 }: {
   isOpen: boolean
   tokens: Token[]
-  onConfirm: () => void
-  onDismiss: () => void
+  onConfirm: (token: Currency[]) => void
 }) {
   return (
-    <Modal isOpen={isOpen} onDismiss={onDismiss} maxHeight={100}>
+    <Modal isOpen={isOpen} onDismiss={noop} maxHeight={100}>
       <ImportToken tokens={tokens} handleCurrencySelect={onConfirm} enterToImport={isOpen} />
     </Modal>
   )

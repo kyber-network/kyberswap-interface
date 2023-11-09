@@ -1,23 +1,24 @@
-import { ChainId, Currency, NativeCurrency, Token } from '@kyberswap/ks-sdk-core'
+import { Currency, NativeCurrency, Token } from '@kyberswap/ks-sdk-core'
 import { t } from '@lingui/macro'
-import { debounce } from 'lodash'
-import { stringify } from 'qs'
+import debounce from 'lodash/debounce'
+import { stringify } from 'querystring'
 import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
 import { BrowserView, MobileView, isIOS, isMobile } from 'react-device-detect'
-import { useHistory } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import styled from 'styled-components'
 
+import { NotificationType } from 'components/Announcement/type'
 import Modal from 'components/Modal'
 import { ETHER_ADDRESS } from 'constants/index'
-import { nativeOnChain } from 'constants/tokens'
+import { NativeCurrencies } from 'constants/tokens'
 import { useActiveWeb3React } from 'hooks'
 import { useAllTokens } from 'hooks/Tokens'
 import useMixpanel, { MIXPANEL_TYPE } from 'hooks/useMixpanel'
 import useParsedQueryString from 'hooks/useParsedQueryString'
-import { NotificationType, useNotify } from 'state/application/hooks'
+import { useNotify } from 'state/application/hooks'
 import { filterTokens } from 'utils/filtering'
 
-import ListPair from './ListPair'
+import ListPair, { Props as ListPairProps } from './ListPair'
 import SearchInput from './SearchInput'
 import { SuggestionPairData, reqAddFavoritePair, reqGetSuggestionPair, reqRemoveFavoritePair } from './request'
 import { findLogoAndSortPair, getAddressParam, isActivePair, isFavoritePair } from './utils'
@@ -57,7 +58,7 @@ export default forwardRef<PairSuggestionHandle, Props>(function PairSuggestionIn
 ) {
   const [searchQuery, setSearchQuery] = useState('')
 
-  const [selectedIndex, setSelectedIndex] = useState(0) // index selected when press up/down arrow
+  const [selectedIndex, setSelectedIndex] = useState(-1) // index selected when press up/down arrow
   const [isShowListPair, setIsShowListPair] = useState(false)
 
   const [suggestedPairs, setSuggestions] = useState<SuggestionPairData[]>([])
@@ -68,7 +69,7 @@ export default forwardRef<PairSuggestionHandle, Props>(function PairSuggestionIn
 
   const { account, chainId } = useActiveWeb3React()
   const qs = useParsedQueryString()
-  const history = useHistory()
+  const navigate = useNavigate()
   const { mixpanelHandler } = useMixpanel()
 
   const refLoading = useRef(false) // prevent spam call api
@@ -78,9 +79,9 @@ export default forwardRef<PairSuggestionHandle, Props>(function PairSuggestionIn
 
   const findToken = (search: string): NativeCurrency | Token | undefined => {
     if (search.toLowerCase() === ETHER_ADDRESS.toLowerCase()) {
-      return nativeOnChain(chainId as ChainId)
+      return NativeCurrencies[chainId]
     }
-    return filterTokens(Object.values(activeTokens), search)[0]
+    return filterTokens(chainId, Object.values(activeTokens), search)[0]
   }
 
   const focusInput = useCallback(() => {
@@ -166,7 +167,7 @@ export default forwardRef<PairSuggestionHandle, Props>(function PairSuggestionIn
 
   const hideListView = () => {
     setIsShowListPair(false)
-    setSelectedIndex(0)
+    setSelectedIndex(-1)
     refInput.current?.blur()
   }
   const showListView = useCallback(() => {
@@ -213,7 +214,7 @@ export default forwardRef<PairSuggestionHandle, Props>(function PairSuggestionIn
         inputCurrency: getAddressParam(item.tokenIn, chainId),
         outputCurrency: getAddressParam(item.tokenOut, chainId),
       }
-      history.push({
+      navigate({
         search: stringify(newQs),
       })
       setShowModalImportToken(true)
@@ -261,7 +262,7 @@ export default forwardRef<PairSuggestionHandle, Props>(function PairSuggestionIn
     }
   }
 
-  const propsListPair = {
+  const propsListPair: ListPairProps = {
     suggestedAmount,
     selectedIndex,
     isSearch: !!searchQuery,
@@ -271,6 +272,9 @@ export default forwardRef<PairSuggestionHandle, Props>(function PairSuggestionIn
     isFullFavoritePair: totalFavoritePair === MAX_FAVORITE_PAIRS,
     onClickStar,
     onSelectPair,
+    onMouseEnterItem: (index: number) => {
+      setSelectedIndex(index)
+    },
   }
 
   const propsSearch = {

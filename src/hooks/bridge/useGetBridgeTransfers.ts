@@ -8,7 +8,7 @@ export enum MultichainTransferStatus {
 
 export type MultichainTransfer = {
   id: number
-  userAddress: string
+  walletAddress: string
   srcChainId: string
   dstChainId: string
   srcTxHash: string
@@ -19,6 +19,7 @@ export type MultichainTransfer = {
   dstAmount: string
   status: number
   createdAt: number
+  isReceiveAnyToken: boolean
 }
 
 type Response = {
@@ -33,19 +34,23 @@ type Response = {
 }
 
 const useGetBridgeTransfers = (swrKey: string | null) => {
-  return useSWR<Response>(swrKey, async (url: string) => {
-    const response = await fetch(url)
-    if (response.ok) {
-      const data = await response.json()
-      if (data) {
-        return data
+  return useSWR<Response>(
+    swrKey,
+    async (url: string) => {
+      const response = await fetch(url)
+      if (response.ok) {
+        const data = await response.json()
+        if (data) {
+          return data
+        }
+
+        throw new Error(`No transfers found with url = ${swrKey}`)
       }
 
-      throw new Error(`No transfers found with url = ${swrKey}`)
-    }
-
-    throw new Error(`Fetching bridge transfers failed with url = ${swrKey}`)
-  })
+      throw new Error(`Fetching bridge transfers failed with url = ${swrKey}`)
+    },
+    { revalidateOnFocus: false, refreshInterval: 5_000 },
+  )
 }
 
 export default useGetBridgeTransfers

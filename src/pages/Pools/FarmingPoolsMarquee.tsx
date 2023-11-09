@@ -8,15 +8,16 @@ import { FadeInAnimation } from 'components/Animation'
 import CurrencyLogo from 'components/CurrencyLogo'
 import { MoneyBag } from 'components/Icons'
 import { MouseoverTooltip } from 'components/Tooltip'
-import { nativeOnChain } from 'constants/tokens'
+import { APP_PATHS } from 'constants/index'
+import { NativeCurrencies } from 'constants/tokens'
 import { VERSION } from 'constants/v2'
 import { useActiveWeb3React } from 'hooks'
 import { useToken } from 'hooks/Tokens'
 import useMarquee from 'hooks/useMarquee'
 import useParsedQueryString from 'hooks/useParsedQueryString'
 import useTheme from 'hooks/useTheme'
+import { useActiveAndUniqueFarmsData } from 'state/farms/classic/hooks'
 import { useElasticFarms } from 'state/farms/elastic/hooks'
-import { useActiveAndUniqueFarmsData } from 'state/farms/hooks'
 
 const StyledLink = styled(Link)`
   display: flex;
@@ -35,26 +36,26 @@ const StyledLink = styled(Link)`
 `
 
 const MarqueeItem = ({ token0: address0, token1: address1 }: { token0: string; token1: string }) => {
-  const { chainId } = useActiveWeb3React()
+  const { chainId, networkInfo } = useActiveWeb3React()
 
   const token0 = useToken(address0) as Token
   const currency0 =
-    chainId && address0.toLowerCase() === WETH[chainId].address.toLowerCase() ? nativeOnChain(chainId) : token0
+    chainId && address0.toLowerCase() === WETH[chainId].address.toLowerCase() ? NativeCurrencies[chainId] : token0
 
   const token1 = useToken(address1) as Token
   const currency1 =
-    chainId && address1.toLowerCase() === WETH[chainId].address.toLowerCase() ? nativeOnChain(chainId) : token1
+    chainId && address1.toLowerCase() === WETH[chainId].address.toLowerCase() ? NativeCurrencies[chainId] : token1
 
-  const qs = useParsedQueryString()
+  const { tab = VERSION.ELASTIC } = useParsedQueryString<{
+    tab: string
+  }>()
   if (!token0 || !token1) return null
 
   const token0Address = currency0.isNative ? currency0.symbol : token0.address
   const token1Address = currency1.isNative ? currency1.symbol : token1.address
 
-  const tab = (qs.tab as string) || VERSION.ELASTIC
-
   return (
-    <StyledLink to={`/pools/${token0Address}/${token1Address}?tab=${tab}`}>
+    <StyledLink to={`${APP_PATHS.POOLS}/${networkInfo.route}/${token0Address}/${token1Address}?tab=${tab}`}>
       <CurrencyLogo currency={currency0} size="16px" />
       <Text fontSize="12px">
         {currency0.symbol} - {currency1.symbol}
@@ -93,7 +94,7 @@ const FarmingPoolsMarquee = ({ tab }: { tab: string }) => {
     <FadeInAnimation>
       <Container>
         <Title>
-          <MouseoverTooltip text="Available for yield farming">
+          <MouseoverTooltip text="Available for yield farming.">
             <MoneyBag size={16} color={theme.apr} />
           </MouseoverTooltip>
 
@@ -108,8 +109,8 @@ const FarmingPoolsMarquee = ({ tab }: { tab: string }) => {
                 ? uniqueAndActiveFarms.map(farm => (
                     <MarqueeItem
                       key={`${farm.token0?.symbol}-${farm.token1?.symbol}`}
-                      token0={farm.token0.id}
-                      token1={farm.token1.id}
+                      token0={farm.token0.address}
+                      token1={farm.token1.address}
                     />
                   ))
                 : activePrommFarm.map(farm => (

@@ -1,51 +1,52 @@
 import { Currency } from '@kyberswap/ks-sdk-core'
 import { FeeAmount } from '@kyberswap/ks-sdk-elastic'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 
 import { POOL_POSITION_COUNT } from 'apollo/queries/promm'
-import { NETWORKS_INFO } from 'constants/networks'
 import { useActiveWeb3React } from 'hooks'
 import { useProAmmPoolInfos } from 'hooks/useProAmmPoolInfo'
+import { useKyberSwapConfig } from 'state/application/hooks'
+
+export const FEE_AMOUNTS = [
+  FeeAmount.VERY_STABLE,
+  FeeAmount.VERY_STABLE1,
+  FeeAmount.VERY_STABLE2,
+  FeeAmount.STABLE,
+  FeeAmount.MOST_PAIR,
+  FeeAmount.MOST_PAIR1,
+  FeeAmount.MOST_PAIR2,
+  FeeAmount.EXOTIC,
+  FeeAmount.VOLATILE,
+  FeeAmount.RARE,
+]
+
+const initState = FEE_AMOUNTS.reduce(
+  (acc, feeAmount) => ({ ...acc, [feeAmount]: 0 }),
+  {} as { [key in FeeAmount]: number },
+)
 
 export const useFeeTierDistribution = (
   currencyA: Currency | undefined,
   currencyB: Currency | undefined,
 ): { [key in FeeAmount]: number } => {
-  const { chainId } = useActiveWeb3React()
-
-  const feeAmounts = useMemo(() => {
-    return [FeeAmount.HIGH, FeeAmount.LOW, FeeAmount.LOWEST, FeeAmount.STABLE, FeeAmount.MEDIUM]
-  }, [])
-
-  const poolIds = useProAmmPoolInfos(currencyA, currencyB, feeAmounts)
-
-  const initState = useMemo(() => {
-    return {
-      [FeeAmount.HIGH]: 0,
-      [FeeAmount.LOW]: 0,
-      [FeeAmount.LOWEST]: 0,
-      [FeeAmount.STABLE]: 0,
-      [FeeAmount.MEDIUM]: 0,
-    }
-  }, [])
+  const { isEVM } = useActiveWeb3React()
+  const { elasticClient } = useKyberSwapConfig()
+  const poolIds = useProAmmPoolInfos(currencyA, currencyB, FEE_AMOUNTS).filter(Boolean)
 
   const [feeTierDistribution, setFeeTierDistribution] = useState<{ [key in FeeAmount]: number }>(initState)
 
-  // reset feeTierDistribution when change token
   useEffect(() => {
+    if (!isEVM) return
+    if (!poolIds.length) return
     setFeeTierDistribution(initState)
-  }, [currencyA, currencyB, initState])
-
-  useEffect(() => {
-    if (!chainId) return
-    NETWORKS_INFO[chainId].elasticClient
+    elasticClient
       .query({
         query: POOL_POSITION_COUNT(poolIds),
       })
       .then(res => {
         const feeArray: { feeTier: string; activePositions: number }[] = res?.data?.pools?.map(
-          (item: { positionCount: string; closedPostionCount: string; feeTier: string }) => {
-            const activePositions = Number(item.positionCount) - Number(item.closedPostionCount)
+          (item: { positionCount: string; closedPositionCount: string; feeTier: string }) => {
+            const activePositions = Number(item.positionCount)
             return {
               feeTier: item.feeTier,
               activePositions,
@@ -53,20 +54,22 @@ export const useFeeTierDistribution = (
           },
         )
 
-        const totalPostions = feeArray.reduce((total, cur) => total + cur.activePositions, 0)
+        const totalPositions = feeArray.reduce((total, cur) => total + cur.activePositions, 0)
 
-        if (!totalPostions) return
+        if (!totalPositions) return
         setFeeTierDistribution(
           Object.keys(FeeAmount).reduce((acc, cur) => {
             const temp = feeArray.find(item => item.feeTier === cur)
             return {
               ...acc,
-              [cur]: temp ? (temp.activePositions * 100) / totalPostions : 0,
+              [cur]: temp ? (temp.activePositions * 100) / totalPositions : 0,
             }
           }, initState),
         )
       })
-  }, [chainId, initState, poolIds])
+      .catch(err => console.warn({ err }))
+    // eslint-disable-next-line
+  }, [JSON.stringify(poolIds), isEVM, elasticClient])
 
   return feeTierDistribution
 }

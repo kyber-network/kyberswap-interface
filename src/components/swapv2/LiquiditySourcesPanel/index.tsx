@@ -5,8 +5,6 @@ import { Box, Flex, Text } from 'rebass'
 import styled from 'styled-components'
 
 import Checkbox from 'components/CheckBox'
-import { kyberswapDexes } from 'constants/dexes'
-import { ELASTIC_NOT_SUPPORTED } from 'constants/v2'
 import { useActiveWeb3React } from 'hooks'
 import useDebounce from 'hooks/useDebounce'
 import { useAllDexes, useExcludeDexes } from 'state/customizeDexes/hooks'
@@ -108,15 +106,17 @@ const LiquiditySourceHeader = styled.div`
   align-items: center;
 `
 
+export const isKyberSwapDex = (id: string) => id.toLowerCase().includes('kyber')
+
 const LiquiditySourcesPanel: React.FC<Props> = ({ onBack }) => {
   const [searchText, setSearchText] = useState('')
   const debouncedSearchText = useDebounce(searchText.toLowerCase(), 200).trim()
-  const { chainId } = useActiveWeb3React()
+  const { isEVM } = useActiveWeb3React()
 
   const dexes = useAllDexes()
   const [excludeDexes, setExcludeDexes] = useExcludeDexes()
 
-  const checkAllRef = useRef<HTMLInputElement>(null)
+  const checkAllRef = useRef<HTMLInputElement | null>(null)
   const kyberSwapRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -137,8 +137,8 @@ const LiquiditySourcesPanel: React.FC<Props> = ({ onBack }) => {
   }, [excludeDexes, dexes])
 
   const ksDexes = useMemo(
-    () => kyberswapDexes.filter(item => (ELASTIC_NOT_SUPPORTED[chainId || 1] ? item.id !== 'kyberswapv2' : true)),
-    [chainId],
+    () => dexes.filter(item => isKyberSwapDex(item.id)).sort((a, b) => a.sortId - b.sortId),
+    [dexes],
   )
 
   useEffect(() => {
@@ -189,7 +189,6 @@ const LiquiditySourcesPanel: React.FC<Props> = ({ onBack }) => {
 
         <LiquiditySourceHeader>
           <Checkbox
-            type="checkbox"
             ref={checkAllRef}
             onChange={e => {
               if (!e.currentTarget.checked) {
@@ -205,19 +204,18 @@ const LiquiditySourcesPanel: React.FC<Props> = ({ onBack }) => {
         </LiquiditySourceHeader>
 
         <SourceList>
-          {!!ksDexes.filter(item => item.name.toLowerCase().includes(debouncedSearchText)).length && (
+          {isEVM && !!ksDexes.filter(item => item.name.toLowerCase().includes(debouncedSearchText)).length && (
             <>
               <Source>
                 <Checkbox
-                  type="checkbox"
                   ref={kyberSwapRef}
                   checked={!ksDexes.map(i => i.id).every(item => excludeDexes.includes(item))}
                   onChange={e => {
                     if (e.target.checked) {
-                      setExcludeDexes(excludeDexes.filter(item => !item.includes('kyberswap')))
+                      setExcludeDexes(excludeDexes.filter(item => !isKyberSwapDex(item)))
                     } else {
                       const newData = [
-                        ...excludeDexes.filter(item => !item.includes('kyberswap')),
+                        ...excludeDexes.filter(item => !isKyberSwapDex(item)),
                         ...ksDexes.map(item => item.id),
                       ]
                       setExcludeDexes(newData)
@@ -227,7 +225,7 @@ const LiquiditySourcesPanel: React.FC<Props> = ({ onBack }) => {
                 <ImageWrapper>
                   <img src="https://kyberswap.com/favicon.ico" alt="ks logo" />
                 </ImageWrapper>
-                <SourceName>Kyberswap - All</SourceName>
+                <SourceName>KyberSwap - All</SourceName>
               </Source>
 
               {ksDexes
@@ -235,11 +233,7 @@ const LiquiditySourcesPanel: React.FC<Props> = ({ onBack }) => {
                 .map(({ name, logoURL, id }) => {
                   return (
                     <Source key={name} style={{ padding: '12px 48px' }}>
-                      <Checkbox
-                        type="checkbox"
-                        checked={!excludeDexes.includes(id)}
-                        onChange={() => handleToggleDex(id)}
-                      />
+                      <Checkbox checked={!excludeDexes.includes(id)} onChange={() => handleToggleDex(id)} />
 
                       <ImageWrapper>
                         <img src={logoURL} alt="" />
@@ -252,10 +246,10 @@ const LiquiditySourcesPanel: React.FC<Props> = ({ onBack }) => {
             </>
           )}
           {dexes
-            ?.filter(item => !item.id.includes('kyberswap') && item.name.toLowerCase().includes(debouncedSearchText))
+            ?.filter(item => !isKyberSwapDex(item.id) && item.name.toLowerCase().includes(debouncedSearchText))
             .map(({ name, logoURL, id }) => (
               <Source key={name}>
-                <Checkbox type="checkbox" checked={!excludeDexes.includes(id)} onChange={() => handleToggleDex(id)} />
+                <Checkbox checked={!excludeDexes.includes(id)} onChange={() => handleToggleDex(id)} />
 
                 <ImageWrapper>
                   <img src={logoURL} alt="" />

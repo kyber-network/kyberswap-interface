@@ -1,33 +1,24 @@
-import { getAddress } from '@ethersproject/address'
 import { BigNumber } from '@ethersproject/bignumber'
 import { Pair } from '@kyberswap/ks-sdk-classic'
-import {
-  ChainId,
-  ChainId as ChainIdDMM,
-  Currency,
-  CurrencyAmount,
-  Fraction,
-  Price,
-  Token,
-  TokenAmount,
-} from '@kyberswap/ks-sdk-core'
+import { ChainId, Currency, CurrencyAmount, Fraction, Price, Token, TokenAmount } from '@kyberswap/ks-sdk-core'
 import JSBI from 'jsbi'
 import { useMemo } from 'react'
 
 import { BLOCKS_PER_YEAR, SECONDS_PER_YEAR, ZERO_ADDRESS } from 'constants/index'
-import { NETWORKS_INFO } from 'constants/networks'
-import { nativeOnChain } from 'constants/tokens'
+import { EVM_NETWORK } from 'constants/networks'
+import { NativeCurrencies } from 'constants/tokens'
 import { useActiveWeb3React } from 'hooks'
 import { useAllTokens } from 'hooks/Tokens'
+import { ClassicPoolData } from 'hooks/pool/classic/type'
 import { useBlockNumber } from 'state/application/hooks'
-import { useActiveAndUniqueFarmsData, useRewardTokenPrices, useRewardTokens } from 'state/farms/hooks'
-import { Farm, Reward, RewardPerTimeUnit } from 'state/farms/types'
-import { SubgraphPoolData, UserLiquidityPosition } from 'state/pools/hooks'
+import { useRewardTokens } from 'state/farms/classic/hooks'
+import { FairLaunchVersion, Farm, Reward, RewardPerTimeUnit } from 'state/farms/classic/types'
+import { UserLiquidityPosition } from 'state/pools/hooks'
 import { tryParseAmount } from 'state/swap/hooks'
-import { formattedNum } from 'utils'
+import { useTokenPrices } from 'state/tokenPrices/hooks'
+import { formatDisplayNumber } from 'utils/numbers'
+import { isTokenNative } from 'utils/tokenInfo'
 import { unwrappedToken } from 'utils/wrappedCurrency'
-
-import { getFullDisplayBalance } from './formatBalance'
 
 export function priceRangeCalc(
   price?: Price<Currency, Currency> | Fraction,
@@ -47,7 +38,7 @@ export function priceRangeCalc(
 }
 
 export function parseSubgraphPoolData(
-  poolData: SubgraphPoolData,
+  poolData: ClassicPoolData,
   chainId: ChainId,
 ): {
   reserve0: CurrencyAmount<Currency> | undefined
@@ -58,28 +49,14 @@ export function parseSubgraphPoolData(
   currency0: Currency
   currency1: Currency
 } {
-  const token0 = new Token(
-    chainId,
-    getAddress(poolData.token0.id),
-    +poolData.token0.decimals,
-    poolData.token0.symbol,
-    poolData.token0.name,
-  )
-  const token1 = new Token(
-    chainId,
-    getAddress(poolData.token1.id),
-    +poolData.token1.decimals,
-    poolData.token1.symbol,
-    poolData.token1.name,
-  )
-  const currency0 = unwrappedToken(token0)
-  const currency1 = unwrappedToken(token1)
+  const currency0 = unwrappedToken(poolData.token0)
+  const currency1 = unwrappedToken(poolData.token1)
 
   const reserve0 = tryParseAmount(poolData.reserve0, currency0)
   const virtualReserve0 = tryParseAmount(poolData.vReserve0, currency0)
   const reserve1 = tryParseAmount(poolData.reserve1, currency1)
   const virtualReserve1 = tryParseAmount(poolData.vReserve1, currency1)
-  const totalSupply = tryParseAmount(poolData.totalSupply, nativeOnChain(chainId)) // Only care about decimals 18
+  const totalSupply = tryParseAmount(poolData.totalSupply, NativeCurrencies[chainId]) // Only care about decimals 18
 
   return {
     reserve0,
@@ -94,7 +71,7 @@ export function parseSubgraphPoolData(
 
 // const temp = pool.virtualReserve1.subtract(pool.reserve1).divide(pool.reserve1.decimalScale).asFraction
 
-function getToken0MinPrice(pool: Pair | SubgraphPoolData): Fraction {
+function getToken0MinPrice(pool: Pair | ClassicPoolData): Fraction {
   if (pool instanceof Pair) {
     const temp = pool.virtualReserve1.subtract(pool.reserve1).divide(pool.reserve1.decimalScale).asFraction
     return temp
@@ -121,7 +98,7 @@ function getToken0MinPrice(pool: Pair | SubgraphPoolData): Fraction {
   }
 }
 
-function getToken0MaxPrice(pool: Pair | SubgraphPoolData): Fraction {
+function getToken0MaxPrice(pool: Pair | ClassicPoolData): Fraction {
   if (pool instanceof Pair) {
     const temp = pool.virtualReserve0.subtract(pool.reserve0).divide(pool.virtualReserve0.decimalScale).asFraction
 
@@ -154,7 +131,7 @@ function getToken0MaxPrice(pool: Pair | SubgraphPoolData): Fraction {
   }
 }
 
-function getToken1MinPrice(pool: Pair | SubgraphPoolData): Fraction {
+function getToken1MinPrice(pool: Pair | ClassicPoolData): Fraction {
   if (pool instanceof Pair) {
     const temp = pool.virtualReserve0.subtract(pool.reserve0).divide(pool.reserve0.decimalScale).asFraction
 
@@ -182,7 +159,7 @@ function getToken1MinPrice(pool: Pair | SubgraphPoolData): Fraction {
   }
 }
 
-function getToken1MaxPrice(pool: Pair | SubgraphPoolData): Fraction {
+function getToken1MaxPrice(pool: Pair | ClassicPoolData): Fraction {
   if (pool instanceof Pair) {
     const temp = pool.virtualReserve1.subtract(pool.reserve1).divide(pool.reserve1.decimalScale).asFraction
 
@@ -231,7 +208,7 @@ export const priceRangeCalcByPair = (pair?: Pair): [Fraction | undefined, Fracti
 }
 
 export const priceRangeCalcBySubgraphPool = (
-  pool?: SubgraphPoolData,
+  pool?: ClassicPoolData,
 ): [Fraction | undefined, Fraction | undefined][] => {
   if (!pool || new Fraction(pool.amp).equalTo(JSBI.BigInt(10000)))
     return [
@@ -260,54 +237,51 @@ export const getTradingFeeAPR = (liquidity?: string, feeOneDay?: string): number
     : (parseFloat(feeOneDay) * 365 * 100) / parseFloat(liquidity)
 }
 
-const DEFAULT_MY_LIQUIDITY = '-'
+const DEFAULT_MY_LIQUIDITY = '--'
 
-export const getMyLiquidity = (liquidityPosition?: UserLiquidityPosition): string | 0 => {
+export const getMyLiquidity = (
+  liquidityPosition?: UserLiquidityPosition,
+  defaultValue = DEFAULT_MY_LIQUIDITY,
+): string => {
   if (!liquidityPosition || parseFloat(liquidityPosition.pool.totalSupply) === 0) {
-    return DEFAULT_MY_LIQUIDITY
+    return defaultValue
   }
 
   const myLiquidity =
     (parseFloat(liquidityPosition.liquidityTokenBalance) * parseFloat(liquidityPosition.pool.reserveUSD)) /
     parseFloat(liquidityPosition.pool.totalSupply)
 
-  if (myLiquidity === 0) {
-    return DEFAULT_MY_LIQUIDITY
-  }
-
-  return formattedNum(myLiquidity.toString(), true)
+  return formatDisplayNumber(myLiquidity, { style: 'currency', significantDigits: 4, allowDisplayZero: false })
 }
 
-export function useFarmRewardsPerTimeUnit(farm?: Farm): RewardPerTimeUnit[] {
+function useFarmRewardsPerTimeUnit(farm?: Farm): RewardPerTimeUnit[] {
   if (!farm) {
     return []
   }
 
   const farmRewardsPerTimeUnit: RewardPerTimeUnit[] = []
 
-  if (farm.rewardPerSeconds) {
+  if (farm.version === FairLaunchVersion.V1) {
     farm.rewardTokens.forEach((token, index) => {
+      const amount = BigNumber.from(farm.rewardPerBlocks[index])
       if (farmRewardsPerTimeUnit[index]) {
-        farmRewardsPerTimeUnit[index].amount = farmRewardsPerTimeUnit[index].amount.add(
-          BigNumber.from(farm.rewardPerSeconds[index]),
-        )
+        farmRewardsPerTimeUnit[index].amount = farmRewardsPerTimeUnit[index].amount.add(amount)
       } else {
         farmRewardsPerTimeUnit[index] = {
           token,
-          amount: BigNumber.from(farm.rewardPerSeconds[index]),
+          amount,
         }
       }
     })
-  } else if (farm.rewardPerBlocks) {
+  } else {
     farm.rewardTokens.forEach((token, index) => {
+      const amount = BigNumber.from(farm.rewardPerSeconds[index])
       if (farmRewardsPerTimeUnit[index]) {
-        farmRewardsPerTimeUnit[index].amount = farmRewardsPerTimeUnit[index].amount.add(
-          BigNumber.from(farm.rewardPerBlocks[index]),
-        )
+        farmRewardsPerTimeUnit[index].amount = farmRewardsPerTimeUnit[index].amount.add(amount)
       } else {
         farmRewardsPerTimeUnit[index] = {
           token,
-          amount: BigNumber.from(farm.rewardPerBlocks[index]),
+          amount,
         }
       }
     })
@@ -322,48 +296,14 @@ export function useFarmRewardsPerTimeUnit(farm?: Farm): RewardPerTimeUnit[] {
  * @returns
  */
 export function useFarmApr(farm: Farm, poolLiquidityUsd: string): number {
-  const { chainId } = useActiveWeb3React()
+  const { chainId, isEVM } = useActiveWeb3React()
   const currentBlock = useBlockNumber()
   const rewardsPerTimeUnit = useFarmRewardsPerTimeUnit(farm)
-  const tokenPrices = useRewardTokenPrices((rewardsPerTimeUnit || []).map(item => item.token))
+  const tokenPrices = useTokenPrices((rewardsPerTimeUnit || []).map(item => item.token.wrapped.address))
+
   let yearlyRewardUSD
 
-  if (farm.rewardPerSeconds) {
-    // FarmV2
-
-    const currentTimestamp = Math.floor(Date.now() / 1000)
-
-    // Check if pool is active for liquidity mining
-    const isLiquidityMiningActive =
-      currentTimestamp && farm.startTime && farm.endTime
-        ? farm.startTime <= currentTimestamp && currentTimestamp <= farm.endTime
-        : false
-
-    if (parseFloat(poolLiquidityUsd) === 0 || !isLiquidityMiningActive) {
-      return 0
-    }
-
-    if (!rewardsPerTimeUnit || rewardsPerTimeUnit.length === 0) {
-      return 0
-    }
-
-    yearlyRewardUSD = rewardsPerTimeUnit.reduce((total, rewardPerSecond, index) => {
-      if (!rewardPerSecond || !rewardPerSecond.amount) {
-        return total
-      }
-
-      if (chainId && tokenPrices[index]) {
-        const rewardPerSecondAmount = TokenAmount.fromRawAmount(
-          rewardPerSecond.token,
-          rewardPerSecond.amount.toString(),
-        )
-        const yearlyETHRewardAllocation = parseFloat(rewardPerSecondAmount.toSignificant(6)) * SECONDS_PER_YEAR
-        total += yearlyETHRewardAllocation * tokenPrices[index]
-      }
-
-      return total
-    }, 0)
-  } else {
+  if (farm.version === FairLaunchVersion.V1) {
     // Check if pool is active for liquidity mining
     const isLiquidityMiningActive =
       currentBlock && farm.startBlock && farm.endBlock
@@ -383,11 +323,46 @@ export function useFarmApr(farm: Farm, poolLiquidityUsd: string): number {
         return total
       }
 
-      if (chainId && tokenPrices[index]) {
+      if (isEVM && tokenPrices[index]) {
         const rewardPerBlockAmount = TokenAmount.fromRawAmount(rewardPerBlock.token, rewardPerBlock.amount.toString())
         const yearlyETHRewardAllocation =
-          parseFloat(rewardPerBlockAmount.toSignificant(6)) * BLOCKS_PER_YEAR(chainId as ChainId)
+          parseFloat(rewardPerBlockAmount.toSignificant(6)) * BLOCKS_PER_YEAR(chainId as EVM_NETWORK)
         total += yearlyETHRewardAllocation * tokenPrices[index]
+      }
+
+      return total
+    }, 0)
+  } else {
+    // FarmV2
+
+    const currentTimestamp = Math.floor(Date.now() / 1000)
+
+    // Check if pool is active for liquidity mining
+    const isLiquidityMiningActive =
+      currentTimestamp && farm.startTime && farm.endTime
+        ? farm.startTime <= currentTimestamp && currentTimestamp <= farm.endTime
+        : false
+
+    if (parseFloat(poolLiquidityUsd) === 0 || !isLiquidityMiningActive) {
+      return 0
+    }
+
+    if (!rewardsPerTimeUnit || rewardsPerTimeUnit.length === 0) {
+      return 0
+    }
+
+    yearlyRewardUSD = rewardsPerTimeUnit.reduce((total, rewardPerSecond) => {
+      if (!rewardPerSecond || !rewardPerSecond.amount) {
+        return total
+      }
+
+      if (chainId && tokenPrices[rewardPerSecond.token.wrapped.address]) {
+        const rewardPerSecondAmount = TokenAmount.fromRawAmount(
+          rewardPerSecond.token,
+          rewardPerSecond.amount.toString(),
+        )
+        const yearlyETHRewardAllocation = parseFloat(rewardPerSecondAmount.toSignificant(6)) * SECONDS_PER_YEAR
+        total += yearlyETHRewardAllocation * tokenPrices[rewardPerSecond.token.wrapped.address]
       }
 
       return total
@@ -400,98 +375,70 @@ export function useFarmApr(farm: Farm, poolLiquidityUsd: string): number {
 }
 
 export function useCurrencyConvertedToNative(currency?: Currency): Currency | undefined {
-  const { chainId } = useActiveWeb3React()
   return useMemo(() => {
-    if (!!currency && !!chainId) {
-      return currency.isNative ? nativeOnChain(chainId) : currency
+    if (!!currency) {
+      return isTokenNative(currency, currency.chainId) ? NativeCurrencies[currency.chainId] : currency
     }
     return undefined
-  }, [chainId, currency])
+  }, [currency])
 }
 
-export function useFarmRewards(farms?: Farm[], onlyCurrentUser = true): Reward[] {
-  if (!farms) {
-    return []
-  }
+export function useFarmRewards(farms?: Farm[]): Reward[] {
+  const result = useMemo(() => {
+    if (!farms) {
+      return []
+    }
 
-  const initialRewards: { [key: string]: Reward } = {}
+    const initialRewards: { [key: string]: Reward } = {}
 
-  const userFarmRewards = farms.reduce((total, farm) => {
-    if (farm.userData?.rewards) {
-      farm.rewardTokens.forEach((token, index) => {
-        if (total[token.address]) {
-          total[token.address].amount = total[token.address].amount.add(BigNumber.from(farm.userData?.rewards?.[index]))
-        } else {
+    const userFarmRewards = farms.reduce((total, farm) => {
+      if (farm.userData?.rewards) {
+        farm.rewardTokens.forEach((token, index) => {
+          if (total[token.address]) {
+            total[token.address].amount = total[token.address].amount.add(
+              BigNumber.from(farm.userData?.rewards?.[index]),
+            )
+          } else {
+            total[token.address] = {
+              token,
+              amount: BigNumber.from(farm.userData?.rewards?.[index]),
+            }
+          }
+        })
+        return total
+      } else {
+        farm.rewardTokens.forEach(token => {
           total[token.address] = {
             token,
-            amount: BigNumber.from(farm.userData?.rewards?.[index]),
+            amount: BigNumber.from(0),
           }
-        }
-      })
+        })
+      }
+
       return total
-    } else {
-      farm.rewardTokens.forEach(token => {
-        total[token.address] = {
-          token,
-          amount: BigNumber.from(0),
-        }
-      })
-    }
+    }, initialRewards)
 
-    return total
-  }, initialRewards)
-
-  const initialAllFarmsRewards: { [key: string]: Reward } = {}
-
-  const allFarmsRewards = farms.reduce((total, farm) => {
-    if (farm.rewardPerSeconds) {
-      farm.rewardTokens.forEach((token, index) => {
-        if (total[token.address]) {
-          total[token.address].amount = total[token.address].amount.add(
-            BigNumber.from(farm.lastRewardTime - farm.startTime).mul(farm.rewardPerSeconds[index]),
-          )
-        } else {
-          total[token.address] = {
-            token,
-            amount: BigNumber.from(farm.lastRewardTime - farm.startTime).mul(farm.rewardPerSeconds[index]),
-          }
-        }
-      })
-    } else {
-      farm.rewardTokens.forEach((token, index) => {
-        if (total[token.address]) {
-          total[token.address].amount = total[token.address].amount.add(
-            BigNumber.from(farm.lastRewardBlock - farm.startBlock).mul(farm.rewardPerBlocks[index]),
-          )
-        } else {
-          total[token.address] = {
-            token,
-            amount: BigNumber.from(farm.lastRewardBlock - farm.startBlock).mul(farm.rewardPerBlocks[index]),
-          }
-        }
-      })
-    }
-
-    return total
-  }, initialAllFarmsRewards)
-
-  return onlyCurrentUser ? Object.values(userFarmRewards) : Object.values(allFarmsRewards)
+    return Object.values(userFarmRewards)
+  }, [farms])
+  return result
 }
 
 export function useFarmRewardsUSD(rewards?: Reward[]): number {
   const { chainId } = useActiveWeb3React()
-  const tokenPrices = useRewardTokenPrices((rewards || []).map(item => item.token))
+  const tokenPrices = useTokenPrices((rewards || []).map(item => item.token.wrapped.address))
   if (!rewards) {
     return 0
   }
 
-  const rewardUSD = rewards.reduce((total, reward, index) => {
+  const rewardUSD = rewards.reduce((total, reward) => {
     if (!reward || !reward.amount || !reward.token) {
       return total
     }
 
-    if (chainId && tokenPrices[index]) {
-      total += parseFloat(getFullDisplayBalance(reward.amount, reward.token.decimals)) * tokenPrices[index]
+    if (chainId && tokenPrices[reward.token.wrapped.address]) {
+      total +=
+        +CurrencyAmount.fromRawAmount(reward.token, reward.amount.toString()).toExact() *
+        tokenPrices[reward.token.wrapped.address]
     }
 
     return total
@@ -505,42 +452,18 @@ export function useRewardTokensFullInfo(): Token[] {
   const rewardTokens = useRewardTokens()
 
   const allTokens = useAllTokens()
-  const nativeName = NETWORKS_INFO[chainId || ChainId.MAINNET].nativeToken.symbol
+  const nativeName = NativeCurrencies[chainId].symbol
 
   return useMemo(
     () =>
       !!rewardTokens && allTokens
         ? rewardTokens.map(address =>
             address.toLowerCase() === ZERO_ADDRESS.toLowerCase()
-              ? new Token(chainId as ChainIdDMM, ZERO_ADDRESS.toLowerCase(), 18, nativeName, nativeName)
+              ? new Token(chainId, ZERO_ADDRESS.toLowerCase(), 18, nativeName, nativeName)
               : allTokens[address],
           )
         : [],
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [chainId, nativeName, JSON.stringify(rewardTokens)],
   )
-}
-
-export function useCheckIsFarmingPool(address: string): boolean {
-  const { data: uniqueAndActiveFarms } = useActiveAndUniqueFarmsData()
-  const uniqueAndActiveFarmAddresses = uniqueAndActiveFarms.map(farm => farm.id)
-
-  return uniqueAndActiveFarmAddresses.includes(address) || uniqueAndActiveFarmAddresses.includes(address.toLowerCase())
-}
-
-export function errorFriendly(text: string): string {
-  const error = text.toLowerCase()
-  if (error.includes('router: expired')) {
-    return 'An error occurred. Refresh the page and try again '
-  } else if (
-    error.includes('mintotalamountout') ||
-    error.includes('err_limit_out') ||
-    error.includes('return amount is not enough') ||
-    error.includes('code=call_exception') ||
-    error.includes('none of the calls threw an error')
-  ) {
-    return 'An error occurred. Try refreshing the price rate or increase max slippage'
-  } else if (error.includes('header not found') || error.includes('swap failed') || error.includes('json-rpc error')) {
-    return 'An error occurred. Refresh the page and try again. If the issue still persists, it might be an issue with your RPC node settings in Metamask.'
-  } else return text
 }

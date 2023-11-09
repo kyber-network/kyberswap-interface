@@ -1,20 +1,21 @@
 import { BigNumber } from '@ethersproject/bignumber'
 import { useCallback, useEffect, useState } from 'react'
 
-import { NETWORKS_INFO } from 'constants/networks'
+import { EVMNetworkInfo } from 'constants/networks/type'
 import { useActiveWeb3React } from 'hooks'
 import { useZapContract } from 'hooks/useContract'
 
 const useZap = (isStaticFeeContract: boolean, isOldStaticFeeContract: boolean) => {
   const zapContract = useZapContract(isStaticFeeContract, isOldStaticFeeContract)
-  const { chainId } = useActiveWeb3React()
+  const { isEVM, networkInfo } = useActiveWeb3React()
   const calculateZapInAmounts = useCallback(
     async (tokenIn: string, tokenOut: string, pool: string, userIn: BigNumber) => {
+      if (!isEVM) return
       try {
         const result =
           isStaticFeeContract && !isOldStaticFeeContract
             ? await zapContract?.calculateZapInAmounts(
-                chainId && NETWORKS_INFO[chainId].classic.static.factory,
+                (networkInfo as EVMNetworkInfo).classic.static.factory,
                 tokenIn,
                 tokenOut,
                 pool,
@@ -28,16 +29,17 @@ const useZap = (isStaticFeeContract: boolean, isOldStaticFeeContract: boolean) =
         throw err
       }
     },
-    [zapContract, chainId, isStaticFeeContract, isOldStaticFeeContract],
+    [zapContract, isEVM, networkInfo, isStaticFeeContract, isOldStaticFeeContract],
   )
 
   const calculateZapOutAmount = useCallback(
     async (tokenIn: string, tokenOut: string, pool: string, lpQty: BigNumber) => {
+      if (!isEVM) return
       try {
         const result =
           isStaticFeeContract && !isOldStaticFeeContract
             ? await zapContract?.calculateZapOutAmount(
-                chainId && NETWORKS_INFO[chainId].classic.static.factory,
+                (networkInfo as EVMNetworkInfo).classic.static.factory,
                 tokenIn,
                 tokenOut,
                 pool,
@@ -51,11 +53,10 @@ const useZap = (isStaticFeeContract: boolean, isOldStaticFeeContract: boolean) =
         throw err
       }
     },
-    [zapContract, chainId, isStaticFeeContract, isOldStaticFeeContract],
+    [zapContract, isEVM, networkInfo, isStaticFeeContract, isOldStaticFeeContract],
   )
 
   return {
-    zapContract,
     calculateZapInAmounts,
     calculateZapOutAmount,
   }
@@ -86,7 +87,7 @@ export const useZapInAmounts = (
 
   useEffect(() => {
     async function handleCalculateZapInAmounts() {
-      if (!userIn) {
+      if (!userIn || userIn?.eq(0)) {
         setResult({
           amounts: {
             tokenInAmount: BigNumber.from(0),
@@ -102,10 +103,11 @@ export const useZapInAmounts = (
         if (tokenIn && tokenOut && pool && userIn?.gt(0)) {
           const amounts = await calculateZapInAmounts(tokenIn, tokenOut, pool, userIn)
 
-          setResult({
-            amounts,
-            error: undefined,
-          })
+          if (amounts)
+            setResult({
+              amounts,
+              error: undefined,
+            })
         }
       } catch (err) {
         setResult({
@@ -170,5 +172,3 @@ export const useZapOutAmount = (
 
   return result
 }
-
-export default useZap

@@ -9,10 +9,13 @@ module.exports = {
     },
   },
   ignorePatterns: [
+    'cypress',
     'src/locales/**/*.js',
     'src/locales/**/en-US.po',
     'node_modules',
     'src/**/charting_library.*',
+    'src/service-worker.ts',
+    'src/serviceWorker/document.ts',
     'src/**/charting_library/**',
     'build',
     'dist',
@@ -33,13 +36,12 @@ module.exports = {
     },
   },
   extends: [
-    'react-app',
     'plugin:react/recommended',
     'plugin:@typescript-eslint/recommended',
     'plugin:react-hooks/recommended',
     'plugin:prettier/recommended',
   ],
-  plugins: ['better-styled-components', 'unused-imports'],
+  plugins: ['better-styled-components', 'unused-imports', 'jsx-a11y'],
   rules: {
     'unused-imports/no-unused-imports': process.env.NODE_ENV === 'production' ? 'error' : 'warn',
     '@typescript-eslint/explicit-function-return-type': 'off',
@@ -58,5 +60,16 @@ module.exports = {
     'react/react-in-jsx-scope': 'off',
     'react/jsx-pascal-case': 'off',
     '@typescript-eslint/no-var-requires': 'off',
+    '@typescript-eslint/no-unused-vars': [
+      'warn',
+      {
+        ignoreRestSiblings: true,
+        argsIgnorePattern: '^_',
+        caughtErrorsIgnorePattern: '^_',
+        destructuredArrayIgnorePattern: '^_',
+      },
+    ],
+    'no-empty-function': 'off',
+    '@typescript-eslint/no-empty-function': 'off',
   },
 }

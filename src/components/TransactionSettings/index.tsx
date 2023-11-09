@@ -1,119 +1,23 @@
-import { parseUnits } from '@ethersproject/units'
 import { Trans, t } from '@lingui/macro'
-import { darken } from 'polished'
-import React, { useCallback, useRef, useState } from 'react'
-import { isMobile } from 'react-device-detect'
+import { rgba } from 'polished'
+import { useCallback, useEffect, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
+import { Flex } from 'rebass'
 import styled, { css } from 'styled-components'
 
 import TransactionSettingsIcon from 'components/Icons/TransactionSettingsIcon'
 import MenuFlyout from 'components/MenuFlyout'
-import LegacyToggle from 'components/Toggle/LegacyToggle'
-import Tooltip from 'components/Tooltip'
-import useTopTrendingSoonTokensInCurrentNetwork from 'components/TopTrendingSoonTokensInCurrentNetwork/useTopTrendingSoonTokensInCurrentNetwork'
+import Toggle from 'components/Toggle'
+import Tooltip, { MouseoverTooltip, TextDashed } from 'components/Tooltip'
+import SlippageSetting from 'components/swapv2/SwapSettingsPanel/SlippageSetting'
+import TransactionTimeLimitSetting from 'components/swapv2/SwapSettingsPanel/TransactionTimeLimitSetting'
 import { StyledActionButtonSwapForm } from 'components/swapv2/styleds'
-import { MAX_SLIPPAGE_IN_BIPS } from 'constants/index'
-import useMixpanel, { MIXPANEL_TYPE } from 'hooks/useMixpanel'
 import useTheme from 'hooks/useTheme'
 import { ApplicationModal } from 'state/application/actions'
 import { useModalOpen, useToggleTransactionSettingsMenu } from 'state/application/hooks'
-import {
-  useExpertModeManager,
-  useShowLiveChart,
-  useShowTokenInfo,
-  useShowTopTrendingSoonTokens,
-  useShowTradeRoutes,
-  useToggleLiveChart,
-  useToggleTokenInfo,
-  useToggleTopTrendingTokens,
-  useToggleTradeRoutes,
-  useUserSlippageTolerance,
-  useUserTransactionTTL,
-} from 'state/user/hooks'
-import { isEqual } from 'utils/numbers'
+import { useAggregatorForZapSetting, useDegenModeManager } from 'state/user/hooks'
 
-import { TYPE } from '../../theme'
-import { AutoColumn } from '../Column'
-import QuestionHelper from '../QuestionHelper'
-import { RowBetween, RowFixed } from '../Row'
 import AdvanceModeModal from './AdvanceModeModal'
-
-enum SlippageError {
-  InvalidInput = 'InvalidInput',
-  RiskyLow = 'RiskyLow',
-  RiskyHigh = 'RiskyHigh',
-}
-
-enum DeadlineError {
-  InvalidInput = 'InvalidInput',
-}
-
-const FancyButton = styled.button`
-  color: ${({ theme }) => theme.text};
-  padding: 0;
-  text-align: center;
-  height: 2rem;
-  border-radius: 36px;
-  width: auto;
-  min-width: 3.5rem;
-  border: 1px solid transparent;
-  outline: none;
-  font-size: 16px;
-  background: ${({ theme }) => theme.buttonBlack};
-  :hover {
-    border: 1px solid ${({ theme }) => theme.bg4};
-  }
-  :focus {
-    border: 1px solid ${({ theme }) => theme.primary};
-  }
-`
-
-const Option = styled(FancyButton)<{ active: boolean }>`
-  margin-right: 6px;
-  :hover {
-    cursor: pointer;
-  }
-  background-color: ${({ active, theme }) => (active ? theme.primary : theme.buttonBlack)};
-  color: ${({ active, theme }) => (active ? theme.textReverse : theme.text)};
-`
-
-const Input = styled.input`
-  background: transparent;
-  font-size: 16px;
-  width: auto;
-  outline: none;
-  &::-webkit-outer-spin-button,
-  &::-webkit-inner-spin-button {
-    -webkit-appearance: none;
-  }
-  color: ${({ theme, color }) => (color === 'red' ? theme.red1 : theme.text)};
-  text-align: right;
-`
-
-const OptionCustom = styled(FancyButton)<{ active?: boolean; warning?: boolean }>`
-  position: relative;
-  padding: 0 0.75rem;
-  flex: 1;
-  min-width: 70px;
-  border: ${({ theme, active, warning }) => active && `1px solid ${warning ? theme.red1 : theme.primary}`};
-  :hover {
-    border: ${({ theme, active, warning }) =>
-      active && `1px solid ${warning ? darken(0.1, theme.red1) : darken(0.1, theme.primary)}`};
-  }
-
-  input {
-    width: 100%;
-    height: 100%;
-    border: 0px;
-    border-radius: 2rem;
-  }
-`
-
-const SlippageEmojiContainer = styled.span`
-  color: #f3841e;
-  ${({ theme }) => theme.mediaWidth.upToSmall`
-    display: none;
-  `}
-`
 
 const StyledMenu = styled.div`
   display: flex;
@@ -122,6 +26,20 @@ const StyledMenu = styled.div`
   position: relative;
   border: none;
   text-align: left;
+`
+
+const SettingsWrapper = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-top: 0.5rem;
+
+  ${Toggle} {
+    background: ${({ theme }) => theme.buttonBlack};
+    &[data-active='true'] {
+      background: ${({ theme }) => rgba(theme.primary, 0.2)};
+    }
+  }
 `
 
 const MenuFlyoutBrowserStyle = css`
@@ -142,358 +60,122 @@ const MenuFlyoutBrowserStyle = css`
   `};
 `
 
-const StyledTitle = styled.div`
-  font-size: ${isMobile ? '16px' : '16px'};
-  font-weight: 500;
-`
-const StyledLabel = styled.div`
-  font-size: ${isMobile ? '14px' : '12px'};
-  color: ${({ theme }) => theme.text};
-  font-weigh: 400;
-  line-height: 20px;
-`
-
-export interface SlippageTabsProps {
-  rawSlippage: number
-  setRawSlippage: (rawSlippage: number) => void
-  deadline: number
-  setDeadline: (deadline: number) => void
-}
-
-export function SlippageTabs({ rawSlippage, setRawSlippage, deadline, setDeadline }: SlippageTabsProps) {
-  const theme = useTheme()
-
-  const inputRef = useRef<HTMLInputElement>()
-
-  const [slippageInput, setSlippageInput] = useState('')
-  const [deadlineInput, setDeadlineInput] = useState('')
-
-  const slippageInputIsValid =
-    slippageInput === '' || isEqual(rawSlippage / 100, Number.parseFloat(slippageInput), 0.01)
-  const deadlineInputIsValid = deadlineInput === '' || (deadline / 60).toString() === deadlineInput
-
-  let slippageError: SlippageError | undefined
-  if (slippageInput !== '' && !slippageInputIsValid) {
-    slippageError = SlippageError.InvalidInput
-  } else if (slippageInputIsValid && rawSlippage < 50) {
-    slippageError = SlippageError.RiskyLow
-  } else if (slippageInputIsValid && rawSlippage > 500) {
-    slippageError = SlippageError.RiskyHigh
-  } else {
-    slippageError = undefined
-  }
-
-  let deadlineError: DeadlineError | undefined
-  if (deadlineInput !== '' && !deadlineInputIsValid) {
-    deadlineError = DeadlineError.InvalidInput
-  } else {
-    deadlineError = undefined
-  }
-
-  function parseCustomSlippage(value: string) {
-    setSlippageInput(value)
-
-    try {
-      /*
-      const valueAsIntFromRoundedFloat = Number.parseInt((Number.parseFloat(value) * 100).toString())
-      This above code will cause unexpected bug when value = 4.1
-      => Number.parseFloat(4.1) * 100 = 409.99999999999994
-      => Number.parseInt(409.99999999999994) = 409
-      => Wrong, expected 410.
-      => Use parseUnits(value, 2) is safe.
-      */
-      const valueAsIntFromRoundedFloat = Number.parseInt(parseUnits(value, 2).toString())
-      if (!Number.isNaN(valueAsIntFromRoundedFloat) && valueAsIntFromRoundedFloat <= MAX_SLIPPAGE_IN_BIPS) {
-        setRawSlippage(valueAsIntFromRoundedFloat)
-      }
-    } catch {}
-  }
-
-  function parseCustomDeadline(value: string) {
-    setDeadlineInput(value)
-
-    try {
-      const valueAsInt: number = Number.parseInt(value) * 60
-      if (!Number.isNaN(valueAsInt) && valueAsInt > 0 && valueAsInt <= 9999 * 60) {
-        setDeadline(valueAsInt)
-      }
-    } catch {}
-  }
-
-  return (
-    <AutoColumn gap="md">
-      <AutoColumn gap="md" style={{ padding: '6px 0' }}>
-        <RowFixed>
-          <StyledLabel>
-            <Trans>Max Slippage</Trans>
-          </StyledLabel>
-          <QuestionHelper
-            text={t`Transaction will revert if there is an adverse rate change that is higher than this %`}
-          />
-        </RowFixed>
-        <RowBetween>
-          <Option
-            onClick={() => {
-              setSlippageInput('')
-              setRawSlippage(10)
-            }}
-            active={rawSlippage === 10}
-          >
-            0.1%
-          </Option>
-          <Option
-            onClick={() => {
-              setSlippageInput('')
-              setRawSlippage(50)
-            }}
-            active={rawSlippage === 50}
-          >
-            0.5%
-          </Option>
-          <Option
-            onClick={() => {
-              setSlippageInput('')
-              setRawSlippage(100)
-            }}
-            active={rawSlippage === 100}
-          >
-            1.0%
-          </Option>
-          <OptionCustom active={![10, 50, 100].includes(rawSlippage)} warning={!slippageInputIsValid} tabIndex={-1}>
-            <RowBetween>
-              {!!slippageInput &&
-              (slippageError === SlippageError.RiskyLow || slippageError === SlippageError.RiskyHigh) ? (
-                <SlippageEmojiContainer>
-                  <span role="img" aria-label="warning">
-                    ⚠️
-                  </span>
-                </SlippageEmojiContainer>
-              ) : null}
-              {/* https://github.com/DefinitelyTyped/DefinitelyTyped/issues/30451 */}
-              <Input
-                ref={inputRef as any}
-                placeholder={(rawSlippage / 100).toFixed(2)}
-                value={slippageInput}
-                onBlur={() => {
-                  parseCustomSlippage((rawSlippage / 100).toFixed(2))
-                }}
-                onChange={e => parseCustomSlippage(e.target.value)}
-                color={!slippageInputIsValid ? 'red' : ''}
-              />
-              %
-            </RowBetween>
-          </OptionCustom>
-        </RowBetween>
-        {!!slippageError && (
-          <RowBetween
-            style={{
-              fontSize: '14px',
-              paddingTop: '7px',
-              color: slippageError === SlippageError.InvalidInput ? 'red' : '#F3841E',
-            }}
-          >
-            {slippageError === SlippageError.InvalidInput
-              ? t`Enter a valid slippage percentage`
-              : slippageError === SlippageError.RiskyLow
-              ? t`Your transaction may fail`
-              : t`Your transaction may be frontrun`}
-          </RowBetween>
-        )}
-      </AutoColumn>
-
-      <AutoColumn gap="sm">
-        <RowFixed>
-          <StyledLabel>
-            <Trans>Transaction time limit</Trans>
-          </StyledLabel>
-          <QuestionHelper text={t`Transaction will revert if it is pending for longer than the indicated time`} />
-        </RowFixed>
-        <RowFixed>
-          <OptionCustom style={{ width: '100px' }} tabIndex={-1}>
-            <Input
-              color={!!deadlineError ? 'red' : undefined}
-              onBlur={() => {
-                parseCustomDeadline((deadline / 60).toString())
-              }}
-              placeholder={(deadline / 60).toString()}
-              value={deadlineInput}
-              onChange={e => parseCustomDeadline(e.target.value)}
-            />
-          </OptionCustom>
-          <TYPE.body style={{ paddingLeft: '8px' }} fontSize={12} color={theme.text11}>
-            <Trans>minutes</Trans>
-          </TYPE.body>
-        </RowFixed>
-      </AutoColumn>
-    </AutoColumn>
-  )
-}
-
-export default function TransactionSettings({
-  isShowDisplaySettings = false,
-  hoverBg,
-}: {
-  isShowDisplaySettings?: boolean
+type Props = {
   hoverBg?: string
-}) {
+}
+
+export default function TransactionSettings({ hoverBg }: Props) {
   const theme = useTheme()
-  const [userSlippageTolerance, setUserSlippageTolerance] = useUserSlippageTolerance()
-  const [ttl, setTtl] = useUserTransactionTTL()
-  const [expertMode, toggleExpertMode] = useExpertModeManager()
+  const [isDegenMode, toggleDegenMode] = useDegenModeManager()
+  const [isUseAggregatorForZap, toggleAggregatorForZap] = useAggregatorForZapSetting()
   const toggle = useToggleTransactionSettingsMenu()
   // show confirmation view before turning on
   const [showConfirmation, setShowConfirmation] = useState(false)
   const open = useModalOpen(ApplicationModal.TRANSACTION_SETTINGS)
-  const node = useRef<HTMLDivElement>()
+
+  const [searchParams, setSearchParams] = useSearchParams()
+
+  const showSetting = searchParams.get('showSetting')
+  useEffect(() => {
+    if (showSetting === 'true') {
+      toggle()
+    }
+    // only toggle one
+    // eslint-disable-next-line
+  }, [showSetting])
 
   const [isShowTooltip, setIsShowTooltip] = useState<boolean>(false)
   const showTooltip = useCallback(() => setIsShowTooltip(true), [setIsShowTooltip])
   const hideTooltip = useCallback(() => setIsShowTooltip(false), [setIsShowTooltip])
 
-  const isShowLiveChart = useShowLiveChart()
+  const handleToggleAdvancedMode = () => {
+    if (isDegenMode /* is already ON */) {
+      toggleDegenMode()
+      setShowConfirmation(false)
+      return
+    }
 
-  const isShowTradeRoutes = useShowTradeRoutes()
-  const isShowTokenInfo = useShowTokenInfo()
+    toggle()
+    if (showSetting === 'true') {
+      searchParams.delete('showSetting')
+      setSearchParams(searchParams, { replace: true })
+    }
 
-  const toggleLiveChart = useToggleLiveChart()
-
-  const toggleTradeRoutes = useToggleTradeRoutes()
-  const toggleTokenInfo = useToggleTokenInfo()
-
-  const isShowTrendingSoonTokens = useShowTopTrendingSoonTokens()
-  const toggleTopTrendingTokens = useToggleTopTrendingTokens()
-  const { mixpanelHandler } = useMixpanel()
-
-  const { data: topTrendingSoonTokens } = useTopTrendingSoonTokensInCurrentNetwork()
-  const isShowTrendingSoonSetting = topTrendingSoonTokens.length > 0
-
+    setShowConfirmation(true)
+  }
   return (
     <>
       <AdvanceModeModal show={showConfirmation} setShow={setShowConfirmation} />
       {/* https://github.com/DefinitelyTyped/DefinitelyTyped/issues/30451 */}
-      <StyledMenu ref={node as any}>
-        <Tooltip text={t`Advanced mode is on!`} show={expertMode && isShowTooltip}>
-          <div onMouseEnter={showTooltip} onMouseLeave={hideTooltip}>
-            <StyledActionButtonSwapForm
-              hoverBg={hoverBg}
-              active={open}
-              onClick={toggle}
-              id="open-settings-dialog-button"
-              aria-label="Transaction Settings"
-            >
-              <TransactionSettingsIcon fill={expertMode ? theme.warning : theme.subText} />
-            </StyledActionButtonSwapForm>
-          </div>
-        </Tooltip>
-
+      <StyledMenu>
         <MenuFlyout
-          node={node}
-          browserCustomStyle={MenuFlyoutBrowserStyle}
+          trigger={
+            <Tooltip
+              width="fit-content"
+              placement="top"
+              text={t`Degen mode is on. Be cautious!`}
+              show={isDegenMode && isShowTooltip}
+            >
+              <div onMouseEnter={showTooltip} onMouseLeave={hideTooltip}>
+                <StyledActionButtonSwapForm
+                  hoverBg={hoverBg}
+                  active={open}
+                  onClick={toggle}
+                  id="open-settings-dialog-button"
+                  aria-label="Transaction Settings"
+                >
+                  <TransactionSettingsIcon fill={isDegenMode ? theme.warning : theme.subText} />
+                </StyledActionButtonSwapForm>
+              </div>
+            </Tooltip>
+          }
+          customStyle={MenuFlyoutBrowserStyle}
           isOpen={open}
-          toggle={toggle}
-          translatedTitle={t`Advanced Settings`}
+          toggle={() => {
+            toggle()
+            if (showSetting === 'true') {
+              searchParams.delete('showSetting')
+              setSearchParams(searchParams, { replace: true })
+            }
+          }}
+          title={t`Advanced Settings`}
           mobileCustomStyle={{ paddingBottom: '40px' }}
           hasArrow
         >
-          <>
-            <SlippageTabs
-              rawSlippage={userSlippageTolerance}
-              setRawSlippage={setUserSlippageTolerance}
-              deadline={ttl}
-              setDeadline={setTtl}
-            />
+          <SettingsWrapper>
+            <SlippageSetting shouldShowPinButton={false} />
+            <TransactionTimeLimitSetting />
 
-            <RowBetween margin="14px 0">
-              <RowFixed>
-                <StyledLabel>
-                  <Trans>Advanced Mode</Trans>
-                </StyledLabel>
-                <QuestionHelper text={t`Enables high slippage trades. Use at your own risk`} />
-              </RowFixed>
-              <LegacyToggle
+            <Flex justifyContent="space-between">
+              <Flex width="fit-content" alignItems="center">
+                <TextDashed fontSize={12} fontWeight={400} color={theme.subText} underlineColor={theme.border}>
+                  <MouseoverTooltip
+                    text={t`You can make trades with high price impact and without any confirmation prompts. Enable at your own risk`}
+                    placement="right"
+                  >
+                    <Trans>Degen Mode</Trans>
+                  </MouseoverTooltip>
+                </TextDashed>
+              </Flex>
+              <Toggle
                 id="toggle-expert-mode-button"
-                isActive={expertMode}
-                toggle={
-                  expertMode
-                    ? () => {
-                        toggleExpertMode()
-                        setShowConfirmation(false)
-                      }
-                    : () => {
-                        toggle()
-                        setShowConfirmation(true)
-                      }
-                }
-                size={isMobile ? 'md' : 'sm'}
+                isActive={isDegenMode}
+                toggle={handleToggleAdvancedMode}
+                highlight={showSetting === 'true'}
               />
-            </RowBetween>
-            {isShowDisplaySettings && (
-              <>
-                <StyledTitle style={{ borderTop: '1px solid ' + theme.border, padding: '16px 0' }}>
-                  <Trans>Display Settings</Trans>
-                </StyledTitle>
-                <AutoColumn gap="md">
-                  {isShowTrendingSoonSetting && (
-                    <RowBetween>
-                      <RowFixed>
-                        <StyledLabel>Trending Soon</StyledLabel>
-                        <QuestionHelper text={t`Turn on to display tokens that could be trending soon`} />
-                      </RowFixed>
-                      <LegacyToggle
-                        isActive={isShowTrendingSoonTokens}
-                        toggle={() => {
-                          toggleTopTrendingTokens()
-                        }}
-                        size={isMobile ? 'md' : 'sm'}
-                      />
-                    </RowBetween>
-                  )}
-                  <RowBetween>
-                    <RowFixed>
-                      <StyledLabel>Live Chart</StyledLabel>
-                      <QuestionHelper text={t`Turn on to display live chart`} />
-                    </RowFixed>
-                    <LegacyToggle
-                      isActive={isShowLiveChart}
-                      toggle={() => {
-                        mixpanelHandler(MIXPANEL_TYPE.LIVE_CHART_ON_OFF, { live_chart_on_or_off: !isShowLiveChart })
-                        toggleLiveChart()
-                      }}
-                      size={isMobile ? 'md' : 'sm'}
-                    />
-                  </RowBetween>
-                  <RowBetween>
-                    <RowFixed>
-                      <StyledLabel>
-                        <Trans>Trade Route</Trans>
-                      </StyledLabel>
-                      <QuestionHelper text={t`Turn on to display trade route`} />
-                    </RowFixed>
-                    <LegacyToggle
-                      isActive={isShowTradeRoutes}
-                      toggle={() => {
-                        mixpanelHandler(MIXPANEL_TYPE.TRADING_ROUTE_ON_OFF, {
-                          trading_route_on_or_off: !isShowTradeRoutes,
-                        })
-                        toggleTradeRoutes()
-                      }}
-                      size={isMobile ? 'md' : 'sm'}
-                    />
-                  </RowBetween>
+            </Flex>
 
-                  <RowBetween>
-                    <RowFixed>
-                      <StyledLabel>
-                        <Trans>Token Info</Trans>
-                      </StyledLabel>
-                      <QuestionHelper text={t`Turn on to display token info`} />
-                    </RowFixed>
-                    <LegacyToggle isActive={isShowTokenInfo} toggle={toggleTokenInfo} size={isMobile ? 'md' : 'sm'} />
-                  </RowBetween>
-                </AutoColumn>
-              </>
-            )}
-          </>
+            <Flex justifyContent="space-between">
+              <Flex width="fit-content" alignItems="center">
+                <TextDashed fontSize={12} fontWeight={400} color={theme.subText} underlineColor={theme.border}>
+                  <MouseoverTooltip text={t`Zap will include DEX aggregator to find the best price.`} placement="right">
+                    <Trans>Use Aggregator for Zaps</Trans>
+                  </MouseoverTooltip>
+                </TextDashed>
+              </Flex>
+              <Toggle id="toggle-aggregator-for-zap" isActive={isUseAggregatorForZap} toggle={toggleAggregatorForZap} />
+            </Flex>
+          </SettingsWrapper>
         </MenuFlyout>
       </StyledMenu>
     </>

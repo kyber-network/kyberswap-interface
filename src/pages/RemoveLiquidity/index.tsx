@@ -1,8 +1,8 @@
 import { Fraction, WETH } from '@kyberswap/ks-sdk-core'
 import { Trans, t } from '@lingui/macro'
 import JSBI from 'jsbi'
-import React, { useEffect, useState } from 'react'
-import { RouteComponentProps } from 'react-router'
+import { useEffect, useState } from 'react'
+import { Navigate, useParams } from 'react-router-dom'
 
 import LiquidityProviderMode from 'components/LiquidityProviderMode'
 import { AddRemoveTabs, LiquidityAction } from 'components/NavigationTabs'
@@ -17,24 +17,21 @@ import TokenPair from './TokenPair'
 import ZapOut from './ZapOut'
 import { Container, LiquidityProviderModeWrapper, PageWrapper, PoolName, TopBar } from './styled'
 
-export default function RemoveLiquidity({
-  match: {
-    params: { currencyIdA, currencyIdB, pairAddress },
-  },
-}: RouteComponentProps<{ currencyIdA: string; currencyIdB: string; pairAddress: string }>) {
-  const [currencyA, currencyB] = [useCurrency(currencyIdA) ?? undefined, useCurrency(currencyIdB) ?? undefined]
-  const { chainId } = useActiveWeb3React()
+export default function RemoveLiquidity() {
+  const { currencyIdA = '', currencyIdB = '', pairAddress = '' } = useParams()
+
+  const currencyA = useCurrency(currencyIdA) ?? undefined
+  const currencyB = useCurrency(currencyIdB) ?? undefined
+  const { chainId, isEVM } = useActiveWeb3React()
 
   const nativeA = useCurrencyConvertedToNative(currencyA)
   const nativeB = useCurrencyConvertedToNative(currencyB)
 
-  const { pair } = useDerivedBurnInfo(currencyA ?? undefined, currencyB ?? undefined, pairAddress)
+  const { pair } = useDerivedBurnInfo(currencyA, currencyB, pairAddress)
 
   const amp = pair?.amp || JSBI.BigInt(0)
 
-  const oneCurrencyIsWETH = Boolean(
-    chainId && ((currencyA && currencyA.equals(WETH[chainId])) || (currencyB && currencyB.equals(WETH[chainId]))),
-  )
+  const oneCurrencyIsWETH = Boolean(chainId && (currencyA?.equals(WETH[chainId]) || currencyB?.equals(WETH[chainId])))
 
   const [activeTab, setActiveTab] = useState(0)
   const { mixpanelHandler } = useMixpanel()
@@ -47,6 +44,7 @@ export default function RemoveLiquidity({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  if (!isEVM) return <Navigate to="/" />
   return (
     <>
       <PageWrapper>
@@ -56,6 +54,7 @@ export default function RemoveLiquidity({
           <TopBar>
             <LiquidityProviderModeWrapper>
               <LiquidityProviderMode
+                zapout
                 activeTab={activeTab}
                 setActiveTab={setActiveTab}
                 singleTokenInfo={t`We will automatically remove your liquidity and convert it into your desired token (either token from the token pair), all in a single transaction`}

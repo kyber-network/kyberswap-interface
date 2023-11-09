@@ -2,14 +2,13 @@ import { FunctionFragment, Interface } from '@ethersproject/abi'
 import { BigNumber } from '@ethersproject/bignumber'
 import { Contract } from '@ethersproject/contracts'
 import { ChainId } from '@kyberswap/ks-sdk-core'
-import { useEffect, useMemo } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
 
 import { EMPTY_ARRAY } from 'constants/index'
+import { useActiveWeb3React } from 'hooks'
+import { AppDispatch, AppState } from 'state/index'
 
-import { useActiveWeb3React } from '../../hooks'
-import { useBlockNumber } from '../application/hooks'
-import { AppDispatch, AppState } from '../index'
 import {
   Call,
   ListenerOptions,
@@ -53,28 +52,30 @@ export const NEVER_RELOAD: ListenerOptions = {
 }
 
 // the lowest level call for subscribing to contract data
-function useCallsData(calls: (Call | undefined)[], options?: ListenerOptions): CallResult[] {
-  const { chainId } = useActiveWeb3React()
+export function useCallsData(calls: (Call | undefined)[], options?: ListenerOptions): CallResult[] {
+  const { chainId, isEVM } = useActiveWeb3React()
   const callResults = useSelector<AppState, AppState['multicall']['callResults'][ChainId]>(
-    state => state.multicall.callResults?.[chainId || ChainId.MAINNET],
+    state => state.multicall.callResults?.[chainId],
   )
   const dispatch = useDispatch<AppDispatch>()
 
   const serializedCallKeys: string = useMemo(
     () =>
       JSON.stringify(
-        calls
-          ?.filter((c): c is Call => Boolean(c))
-          ?.map(toCallKey)
-          ?.sort() ?? [],
+        isEVM
+          ? calls
+              ?.filter((c): c is Call => Boolean(c))
+              ?.map(toCallKey)
+              ?.sort() ?? []
+          : [],
       ),
-    [calls],
+    [isEVM, calls],
   )
 
   // update listeners when there is an actual change that persists for at least 100ms
   useEffect(() => {
     const callKeys: string[] = JSON.parse(serializedCallKeys)
-    if (!chainId || callKeys.length === 0) return undefined
+    if (!isEVM || callKeys.length === 0) return undefined
     const calls = callKeys.map(key => parseCallKey(key))
 
     dispatch(
@@ -94,25 +95,42 @@ function useCallsData(calls: (Call | undefined)[], options?: ListenerOptions): C
         }),
       )
     }
-  }, [chainId, dispatch, options, serializedCallKeys])
+  }, [isEVM, dispatch, options, serializedCallKeys, chainId])
 
-  return useMemo(
-    () =>
-      calls.length
-        ? calls.map<CallResult>(call => {
-            if (!chainId || !call) return INVALID_RESULT
+  const lastResults = useRef<CallResult[]>([])
+  return useMemo(() => {
+    let isChanged = lastResults.current.length !== calls.length
 
-            const result = callResults?.[toCallKey(call)]
-            let data
-            if (result?.data && result?.data !== '0x') {
-              data = result.data
-            }
+    // Construct results using a for-loop to handle sparse arrays.
+    // Array.prototype.map would skip empty entries.
+    const results: CallResult[] = []
+    for (let i = 0; i < calls.length; ++i) {
+      const call = calls[i]
+      let result = INVALID_RESULT
+      if (call) {
+        const callResult = callResults?.[toCallKey(call)]
+        result = {
+          valid: true,
+          data: callResult?.data && callResult.data !== '0x' ? callResult.data : undefined,
+          blockNumber: callResult?.blockNumber,
+        }
+      }
 
-            return { valid: true, data, blockNumber: result?.blockNumber }
-          })
-        : EMPTY_ARRAY,
-    [callResults, calls, chainId],
-  )
+      isChanged = isChanged || !areCallResultsEqual(result, lastResults.current[i])
+      results.push(result)
+    }
+
+    // Force the results to be referentially stable if they have not changed.
+    // This is necessary because *all* callResults are passed as deps when initially memoizing the results.
+    if (isChanged) {
+      lastResults.current = results
+    }
+    return lastResults.current
+  }, [callResults, calls])
+}
+
+function areCallResultsEqual(a: CallResult, b: CallResult) {
+  return a.valid === b.valid && a.data === b.data && a.blockNumber === b.blockNumber
 }
 
 interface CallState {
@@ -122,27 +140,24 @@ interface CallState {
   // true if the result has never been fetched
   readonly loading: boolean
   // true if the result is not for the latest block
-  readonly syncing: boolean
+  // readonly syncing: boolean
   // true if the call was made and is synced, but the return data is invalid
   readonly error: boolean
 }
 
-const INVALID_CALL_STATE: CallState = { valid: false, result: undefined, loading: false, syncing: false, error: false }
-const LOADING_CALL_STATE: CallState = { valid: true, result: undefined, loading: true, syncing: true, error: false }
+const INVALID_CALL_STATE: CallState = { valid: false, result: undefined, loading: false, error: false }
+const LOADING_CALL_STATE: CallState = { valid: true, result: undefined, loading: true, error: false }
 
-function toCallState(
+export function toCallState(
   callResult: CallResult | undefined,
   contractInterface: Interface | undefined,
   fragment: FunctionFragment | undefined,
-  latestBlockNumber: number | undefined,
 ): CallState {
-  if (!callResult) return INVALID_CALL_STATE
-  const { valid, data, blockNumber } = callResult
-  if (!valid) return INVALID_CALL_STATE
-  if (valid && !blockNumber) return LOADING_CALL_STATE
-  if (!contractInterface || !fragment || !latestBlockNumber) return LOADING_CALL_STATE
+  if (!callResult || !callResult.valid) return INVALID_CALL_STATE
+  const { data, blockNumber } = callResult
+  if (!blockNumber || !contractInterface || !fragment) return LOADING_CALL_STATE
   const success = data && data.length > 2
-  const syncing = (blockNumber ?? 0) < latestBlockNumber
+  // const syncing = blockNumber < latestBlockNumber
   let result: Result | undefined = undefined
   if (success && data) {
     try {
@@ -153,7 +168,6 @@ function toCallState(
         valid: true,
         loading: false,
         error: true,
-        syncing,
         result,
       }
     }
@@ -161,7 +175,6 @@ function toCallState(
   return {
     valid: true,
     loading: false,
-    syncing,
     result: result,
     error: !success,
   }
@@ -173,11 +186,15 @@ export function useSingleContractMultipleData(
   callInputs: OptionalMethodInputs[],
   options?: ListenerOptions,
 ): CallState[] {
-  const fragment = useMemo(() => contract?.interface?.getFunction(methodName), [contract, methodName])
+  const { isEVM } = useActiveWeb3React()
+  const fragment = useMemo(
+    () => (isEVM ? contract?.interface?.getFunction(methodName) : undefined),
+    [contract, methodName, isEVM],
+  )
   const { gasRequired } = useMemo(() => options ?? {}, [options])
   const calls = useMemo(
     () =>
-      contract && fragment && callInputs && callInputs.length > 0
+      isEVM && contract && fragment && callInputs && callInputs.length > 0
         ? callInputs.map<Call>(inputs => {
             return {
               address: contract.address,
@@ -186,16 +203,90 @@ export function useSingleContractMultipleData(
             }
           })
         : EMPTY_ARRAY,
-    [callInputs, contract, fragment, gasRequired],
+    [callInputs, isEVM, contract, fragment, gasRequired],
   )
 
   const results = useCallsData(calls, options)
 
-  const latestBlockNumber = useBlockNumber()
+  return useMemo(() => {
+    return isEVM ? results.map(result => toCallState(result, contract?.interface, fragment)) : []
+  }, [isEVM, fragment, contract, results])
+}
+
+export function useMultipleContractSingleData(
+  addresses: (string | undefined)[],
+  contractInterface: Interface,
+  methodName: string,
+  callInputs?: OptionalMethodInputs,
+  options?: ListenerOptions,
+): CallState[] {
+  const { isEVM } = useActiveWeb3React()
+  const fragment = useMemo(
+    () => (isEVM ? contractInterface.getFunction(methodName) : undefined),
+    [isEVM, contractInterface, methodName],
+  )
+
+  const callData: string | undefined = useMemo(
+    () =>
+      isEVM && fragment && isValidMethodArgs(callInputs)
+        ? contractInterface.encodeFunctionData(fragment, callInputs)
+        : undefined,
+    [callInputs, isEVM, contractInterface, fragment],
+  )
+  const { gasRequired } = useMemo(() => options ?? {}, [options])
+  const calls = useMemo(
+    () =>
+      isEVM && fragment && addresses?.length > 0 && callData
+        ? addresses.map<Call | undefined>(address => {
+            return address && callData
+              ? {
+                  address,
+                  callData,
+                  gasRequired,
+                }
+              : undefined
+          })
+        : EMPTY_ARRAY,
+    [addresses, callData, isEVM, fragment, gasRequired],
+  )
+
+  const results = useCallsData(calls, options)
 
   return useMemo(() => {
-    return results.map(result => toCallState(result, contract?.interface, fragment, latestBlockNumber))
-  }, [fragment, contract, results, latestBlockNumber])
+    if (isEVM) return results.map(result => toCallState(result, contractInterface, fragment))
+    return []
+  }, [isEVM, results, contractInterface, fragment])
+}
+
+export function useSingleCallResult(
+  contract: Contract | null | undefined,
+  methodName: string,
+  inputs?: OptionalMethodInputs,
+  options?: ListenerOptions,
+): CallState {
+  const { isEVM } = useActiveWeb3React()
+  const fragment = useMemo(
+    () => (isEVM ? contract?.interface?.getFunction(methodName) : undefined),
+    [contract?.interface, isEVM, methodName],
+  )
+  const { gasRequired } = options ?? {}
+  const calls = useMemo<Call[]>(() => {
+    return isEVM && contract && fragment && isValidMethodArgs(inputs)
+      ? [
+          {
+            address: contract.address,
+            callData: contract.interface.encodeFunctionData(fragment, inputs),
+            gasRequired,
+          },
+        ]
+      : EMPTY_ARRAY
+  }, [isEVM, contract, fragment, inputs, gasRequired])
+
+  const { valid, data, blockNumber } = useCallsData(calls, options)[0] || {}
+
+  return useMemo(() => {
+    return toCallState({ valid, data, blockNumber }, contract?.interface, fragment)
+  }, [valid, data, blockNumber, contract, fragment])
 }
 
 export function useSingleContractWithCallData(
@@ -214,92 +305,15 @@ export function useSingleContractWithCallData(
               gasRequired,
             }
           })
-        : EMPTY_ARRAY,
+        : [],
     [callDatas, contract, gasRequired],
   )
 
   const results = useCallsData(calls, options)
 
-  const latestBlockNumber = useBlockNumber()
-
   return useMemo(() => {
     return results.map((result, i) =>
-      toCallState(
-        result,
-        contract?.interface,
-        contract?.interface?.getFunction(callDatas[i].substring(0, 10)),
-        latestBlockNumber,
-      ),
+      toCallState(result, contract?.interface, contract?.interface?.getFunction(callDatas[i].substring(0, 10))),
     )
-  }, [contract, results, latestBlockNumber, callDatas])
-}
-
-export function useMultipleContractSingleData(
-  addresses: (string | undefined)[],
-  contractInterface: Interface,
-  methodName: string,
-  callInputs?: OptionalMethodInputs,
-  options?: ListenerOptions,
-): CallState[] {
-  const fragment = useMemo(() => contractInterface.getFunction(methodName), [contractInterface, methodName])
-
-  const callData: string | undefined = useMemo(
-    () =>
-      fragment && isValidMethodArgs(callInputs)
-        ? contractInterface.encodeFunctionData(fragment, callInputs)
-        : undefined,
-    [callInputs, contractInterface, fragment],
-  )
-  const { gasRequired } = useMemo(() => options ?? {}, [options])
-  const calls = useMemo(
-    () =>
-      fragment && addresses && addresses.length > 0 && callData
-        ? addresses.map<Call | undefined>(address => {
-            return address && callData
-              ? {
-                  address,
-                  callData,
-                  gasRequired,
-                }
-              : undefined
-          })
-        : EMPTY_ARRAY,
-    [addresses, callData, fragment, gasRequired],
-  )
-
-  const results = useCallsData(calls, options)
-
-  const latestBlockNumber = useBlockNumber()
-
-  return useMemo(() => {
-    return results.map(result => toCallState(result, contractInterface, fragment, latestBlockNumber))
-  }, [fragment, results, contractInterface, latestBlockNumber])
-}
-
-export function useSingleCallResult(
-  contract: Contract | null | undefined,
-  methodName: string,
-  inputs?: OptionalMethodInputs,
-  options?: ListenerOptions,
-): CallState {
-  const fragment = useMemo(() => contract?.interface?.getFunction(methodName), [contract, methodName])
-  const { gasRequired } = options ?? {}
-  const calls = useMemo<Call[]>(() => {
-    return contract && fragment && isValidMethodArgs(inputs)
-      ? [
-          {
-            address: contract.address,
-            callData: contract.interface.encodeFunctionData(fragment, inputs),
-            gasRequired,
-          },
-        ]
-      : EMPTY_ARRAY
-  }, [contract, fragment, inputs, gasRequired])
-
-  const { valid, data, blockNumber } = useCallsData(calls, options)[0] || {}
-  const latestBlockNumber = useBlockNumber()
-
-  return useMemo(() => {
-    return toCallState({ valid, data, blockNumber }, contract?.interface, fragment, latestBlockNumber)
-  }, [valid, data, blockNumber, contract, fragment, latestBlockNumber])
+  }, [contract, results, callDatas])
 }

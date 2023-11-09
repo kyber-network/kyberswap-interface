@@ -3,14 +3,16 @@ import dayjs from 'dayjs'
 import { Flex, Text } from 'rebass'
 
 import useTheme from 'hooks/useTheme'
+import { FULL_DATE_FORMAT } from 'pages/Bridge/consts'
 
-import { FULL_DATE_FORMAT } from '../consts'
+export const formatTimeBridge = (timestamp: number | string | undefined) =>
+  timestamp ? dayjs(timestamp).format(FULL_DATE_FORMAT) : ''
 
 type Props = {
   timestamp?: number | ''
 }
 const TimeStatusCell: React.FC<Props> = ({ timestamp }) => {
-  const dateString = timestamp ? dayjs.utc(timestamp).local().format(FULL_DATE_FORMAT) : ''
+  const dateString = formatTimeBridge(timestamp)
   const theme = useTheme()
   return (
     <Flex

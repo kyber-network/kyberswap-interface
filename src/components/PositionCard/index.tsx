@@ -1,8 +1,7 @@
 import { Pair } from '@kyberswap/ks-sdk-classic'
-import { ChainId, Fraction, Percent, TokenAmount } from '@kyberswap/ks-sdk-core'
+import { Fraction, Percent, TokenAmount } from '@kyberswap/ks-sdk-core'
 import { Trans, t } from '@lingui/macro'
 import JSBI from 'jsbi'
-import { darken } from 'polished'
 import { useState } from 'react'
 import { AlertTriangle } from 'react-feather'
 import { Link } from 'react-router-dom'
@@ -10,35 +9,35 @@ import { useMedia } from 'react-use'
 import { Flex, Text } from 'rebass'
 import styled from 'styled-components'
 
+import { ButtonEmpty, ButtonOutlined, ButtonPrimary } from 'components/Button'
+import { LightCard } from 'components/Card'
+import { AutoColumn } from 'components/Column'
 import CopyHelper from 'components/Copy'
+import CurrencyLogo from 'components/CurrencyLogo'
 import Divider from 'components/Divider'
+import DoubleCurrencyLogo from 'components/DoubleLogo'
 import { FarmingIcon } from 'components/Icons'
 import InfoHelper from 'components/InfoHelper'
+import { RowBetween, RowFixed } from 'components/Row'
 import { MouseoverTooltip } from 'components/Tooltip'
-import { DMM_ANALYTICS_URL, ONE_BIPS } from 'constants/index'
+import { APP_PATHS, DMM_ANALYTICS_URL, ONE_BIPS } from 'constants/index'
+import { useTotalSupply } from 'data/TotalSupply'
+import { useActiveWeb3React } from 'hooks'
 import useTheme from 'hooks/useTheme'
 import { TokenWrapper } from 'pages/AddLiquidity/styled'
 import { IconWrapper } from 'pages/Pools/styleds'
-import { useETHPrice, useTokensPrice } from 'state/application/hooks'
-import { Farm } from 'state/farms/types'
+import { useBlockNumber, useETHPrice } from 'state/application/hooks'
+import { FairLaunchVersion, Farm } from 'state/farms/classic/types'
 import { UserLiquidityPosition, useSinglePoolData } from 'state/pools/hooks'
+import { useTokenPrices } from 'state/tokenPrices/hooks'
+import { useTokenBalance } from 'state/wallet/hooks'
+import { ExternalLink, MEDIA_WIDTHS, UppercaseText } from 'theme'
 import { formattedNum, shortenAddress } from 'utils'
+import { currencyId } from 'utils/currencyId'
 import { getTradingFeeAPR, useCurrencyConvertedToNative } from 'utils/dmm'
+import { unwrappedToken } from 'utils/wrappedCurrency'
 
-import { useTotalSupply } from '../../data/TotalSupply'
-import { useActiveWeb3React } from '../../hooks'
-import { useTokenBalance } from '../../state/wallet/hooks'
-import { ExternalLink, MEDIA_WIDTHS, UppercaseText } from '../../theme'
-import { currencyId } from '../../utils/currencyId'
-import { unwrappedToken } from '../../utils/wrappedCurrency'
-import { ButtonEmpty, ButtonOutlined, ButtonPrimary } from '../Button'
-import Card, { LightCard } from '../Card'
-import { AutoColumn } from '../Column'
-import CurrencyLogo from '../CurrencyLogo'
-import DoubleCurrencyLogo from '../DoubleLogo'
-import { RowBetween, RowFixed } from '../Row'
-
-export const FixedHeightRow = styled(RowBetween)`
+const FixedHeightRow = styled(RowBetween)`
   height: 24px;
 `
 
@@ -48,12 +47,6 @@ const VerticalDivider = styled.div`
   background-color: ${({ theme }) => theme.subText};
 `
 
-export const HoverCard = styled(Card)`
-  border: 1px solid transparent;
-  :hover {
-    border: 1px solid ${({ theme }) => darken(0.06, theme.bg2)};
-  }
-`
 const StyledPositionCard = styled(LightCard)`
   border: none;
   background: ${({ theme }) => theme.background};
@@ -130,14 +123,12 @@ interface PositionCardProps {
 }
 
 export function NarrowPositionCard({ pair, showUnwrapped = false, border }: PositionCardProps) {
-  const { account } = useActiveWeb3React()
-
   const currency0 = showUnwrapped ? pair.token0 : unwrappedToken(pair.token0)
   const currency1 = showUnwrapped ? pair.token1 : unwrappedToken(pair.token1)
 
   const [showMore, setShowMore] = useState(false)
 
-  const userPoolBalance = useTokenBalance(account ?? undefined, pair.liquidityToken)
+  const userPoolBalance = useTokenBalance(pair.liquidityToken)
   const totalPoolTokens = useTotalSupply(pair.liquidityToken)
 
   const poolTokenPercentage =
@@ -168,7 +159,7 @@ export function NarrowPositionCard({ pair, showUnwrapped = false, border }: Posi
           <FixedHeightRow>
             <RowFixed>
               <Text fontWeight={500} fontSize={16}>
-                <Trans>Your position</Trans>
+                <Trans>My position</Trans>
               </Text>
             </RowFixed>
           </FixedHeightRow>
@@ -188,7 +179,7 @@ export function NarrowPositionCard({ pair, showUnwrapped = false, border }: Posi
           <AutoColumn gap="4px">
             <FixedHeightRow>
               <Text fontSize={16} fontWeight={500}>
-                <Trans>Your pool share:</Trans>
+                <Trans>My pool share:</Trans>
               </Text>
               <Text fontSize={16} fontWeight={500}>
                 {poolTokenPercentage ? poolTokenPercentage.toFixed(6) + '%' : '-'}
@@ -230,13 +221,12 @@ export function NarrowPositionCard({ pair, showUnwrapped = false, border }: Posi
 }
 
 export function MinimalPositionCard({ pair, showUnwrapped = false }: PositionCardProps) {
-  const { account } = useActiveWeb3React()
   const theme = useTheme()
 
   const currency0 = showUnwrapped ? pair.token0 : unwrappedToken(pair.token0)
   const currency1 = showUnwrapped ? pair.token1 : unwrappedToken(pair.token1)
 
-  const userPoolBalance = useTokenBalance(account ?? undefined, pair.liquidityToken)
+  const userPoolBalance = useTokenBalance(pair.liquidityToken)
   const totalPoolTokens = useTotalSupply(pair.liquidityToken)
 
   const poolTokenPercentage =
@@ -261,7 +251,7 @@ export function MinimalPositionCard({ pair, showUnwrapped = false }: PositionCar
   const native0 = useCurrencyConvertedToNative(currency0 || undefined)
   const native1 = useCurrencyConvertedToNative(currency1 || undefined)
 
-  const usdPrices = useTokensPrice([pair.token0, pair.token1])
+  const usdPrices = useTokenPrices([pair.token0.wrapped.address, pair.token1.wrapped.address])
 
   return (
     <>
@@ -272,7 +262,7 @@ export function MinimalPositionCard({ pair, showUnwrapped = false }: PositionCar
         paddingY="1rem"
         style={{ borderBottom: `1px solid ${theme.border}` }}
       >
-        <Trans>Your Current Position</Trans>
+        <Trans>My Current Position</Trans>
       </Text>
 
       <StyledMinimalPositionCard>
@@ -311,7 +301,7 @@ export function MinimalPositionCard({ pair, showUnwrapped = false }: PositionCar
                       .lessThan(new Fraction(JSBI.BigInt(1), JSBI.BigInt(100)))
                   ? '<0.01'
                   : token0Deposited?.toSignificant(6)}{' '}
-                {formattedUSDPrice(token0Deposited, usdPrices[0])}
+                {formattedUSDPrice(token0Deposited, usdPrices[pair.token0.wrapped.address])}
               </Text>
             </RowFixed>
           ) : (
@@ -338,7 +328,7 @@ export function MinimalPositionCard({ pair, showUnwrapped = false }: PositionCar
                       .lessThan(new Fraction(JSBI.BigInt(1), JSBI.BigInt(100)))
                   ? '<0.01'
                   : token1Deposited?.toSignificant(6)}{' '}
-                {formattedUSDPrice(token1Deposited, usdPrices[1])}
+                {formattedUSDPrice(token1Deposited, usdPrices[pair.token1.wrapped.address])}
               </Text>
             </RowFixed>
           ) : (
@@ -350,7 +340,7 @@ export function MinimalPositionCard({ pair, showUnwrapped = false }: PositionCar
         <MinimalPositionItem gap="4px" noBorder={true} noPadding={true}>
           <Text fontSize={12} fontWeight={500} color={theme.subText}>
             <UppercaseText>
-              <Trans>Your Share Of Pool</Trans>
+              <Trans>My Share Of Pool</Trans>
             </UppercaseText>
           </Text>
           <Text fontSize={14} fontWeight={400}>
@@ -385,11 +375,19 @@ export default function FullPositionCard({
   farm,
   farmAPR = 0,
 }: PositionCardProps) {
-  const { account, chainId } = useActiveWeb3React()
+  const { chainId, networkInfo } = useActiveWeb3React()
 
   const upToSmall = useMedia(`(max-width: ${MEDIA_WIDTHS.upToSmall}px)`)
 
-  const farmStatus = !farm ? 'NO_FARM' : farm.isEnded ? 'FARM_ENDED' : 'FARM_ACTIVE'
+  const blockNumber = useBlockNumber()
+  const currentTimestamp = Math.round(Date.now() / 1000)
+  const isEnded =
+    farm &&
+    (farm.version === FairLaunchVersion.V1
+      ? farm.endBlock <= (blockNumber || Number.MAX_SAFE_INTEGER)
+      : farm.endTime <= currentTimestamp)
+
+  const farmStatus = !farm ? 'NO_FARM' : isEnded ? 'FARM_ENDED' : 'FARM_ACTIVE'
   const ethPrice = useETHPrice()
 
   const { data: poolData } = useSinglePoolData(pair.address.toLowerCase(), ethPrice.currentPrice)
@@ -403,7 +401,7 @@ export default function FullPositionCard({
   const currency0 = unwrappedToken(pair.token0)
   const currency1 = unwrappedToken(pair.token1)
 
-  const userDefaultPoolBalance = useTokenBalance(account ?? undefined, pair.liquidityToken)
+  const userDefaultPoolBalance = useTokenBalance(pair.liquidityToken)
   const totalPoolTokens = useTotalSupply(pair.liquidityToken)
 
   // if staked balance balance provided, add to standard liquidity amount
@@ -477,7 +475,9 @@ export default function FullPositionCard({
 
   const goToFarmPath =
     farmStatus !== 'NO_FARM'
-      ? `/farms?tab=classic&type=${farmStatus === 'FARM_ACTIVE' ? 'active' : 'ended'}&search=${pair.address}`
+      ? `${APP_PATHS.FARMS}/${networkInfo.route}?tab=classic&type=${
+          farmStatus === 'FARM_ACTIVE' ? 'active' : 'ended'
+        }&search=${pair.address}`
       : ''
 
   const renderFarmIcon = () => {
@@ -504,7 +504,7 @@ export default function FullPositionCard({
     }
 
     return (
-      <MouseoverTooltip width="fit-content" placement="top" text={<Trans>Available for yield farming</Trans>}>
+      <MouseoverTooltip width="fit-content" placement="top" text={<Trans>Available for yield farming.</Trans>}>
         <Link to={goToFarmPath}>
           <FarmingIcon />
         </Link>
@@ -528,7 +528,7 @@ export default function FullPositionCard({
 
             <VerticalDivider />
             <Flex alignItems="center" color={theme.subText} fontSize={12}>
-              <Text>{shortenAddress(pair.address, 3)}</Text>
+              <Text>{shortenAddress(chainId, pair.address, 3)}</Text>
               <CopyHelper toCopy={pair.address} />
             </Flex>
           </Flex>
@@ -544,7 +544,7 @@ export default function FullPositionCard({
             <MouseoverTooltip
               text={
                 warningToken ? (
-                  <WarningMessage>{t`Note: ${warningToken} is now <10% of the pool. Pool might become inactive if ${warningToken} reaches 0%`}</WarningMessage>
+                  <WarningMessage>{t`Note: ${warningToken} is now <10% of the pool. Pool might become inactive if ${warningToken} reaches 0%.`}</WarningMessage>
                 ) : (
                   <WarningMessage>
                     <Trans>One token is close to 0% in the pool ratio. Pool might go inactive.</Trans>
@@ -571,7 +571,7 @@ export default function FullPositionCard({
 
       <Flex alignItems="center" justifyContent="space-between" marginTop="1rem">
         <Text fontSize="1rem" fontWeight={500} color={theme.subText}>
-          {tab === 'ALL' ? <Trans>Your Liquidity</Trans> : <Trans>Your Staked</Trans>}
+          {tab === 'ALL' ? <Trans>My Liquidity</Trans> : <Trans>My Staked</Trans>}
         </Text>
         <Flex fontSize={12} color={theme.subText} marginTop="2px" alignItems="baseline" sx={{ gap: '4px' }}>
           <Flex alignItems="center" flexDirection="row">
@@ -592,7 +592,7 @@ export default function FullPositionCard({
           <>
             <Row>
               <Text>
-                <Trans>Your Liquidity Balance</Trans>
+                <Trans>My Liquidity Balance</Trans>
               </Text>
               <Text fontSize={14} color={theme.text}>
                 {totalDeposit}
@@ -651,7 +651,7 @@ export default function FullPositionCard({
 
             <Row>
               <Text>
-                <Trans>Your Share Of Pool</Trans>
+                <Trans>My Share Of Pool</Trans>
               </Text>
               <Text fontSize={14} color={theme.text}>
                 {poolTokenPercentage
@@ -664,7 +664,7 @@ export default function FullPositionCard({
           <>
             <Row>
               <Text>
-                <Trans>Your Staked Balance</Trans>
+                <Trans>My Staked Balance</Trans>
               </Text>
               <Text fontSize={14} color={theme.text}>
                 {formattedNum(stakedUSD.toString(), true)}
@@ -721,7 +721,10 @@ export default function FullPositionCard({
                 fontSize: '14px',
               }}
               as={Link}
-              to={`/remove/${currencyId(currency0, chainId)}/${currencyId(currency1, chainId)}/${pair.address}`}
+              to={`/${networkInfo.route}${APP_PATHS.CLASSIC_REMOVE_POOL}/${currencyId(currency0, chainId)}/${currencyId(
+                currency1,
+                chainId,
+              )}/${pair.address}`}
             >
               <Text width="max-content">
                 <Trans>Remove Liquidity</Trans>
@@ -745,7 +748,10 @@ export default function FullPositionCard({
             padding="10px"
             style={{ fontSize: '14px' }}
             as={Link}
-            to={`/add/${currencyId(currency0, chainId)}/${currencyId(currency1, chainId)}/${pair.address}`}
+            to={`/${networkInfo.route}${APP_PATHS.CLASSIC_ADD_LIQ}/${currencyId(currency0, chainId)}/${currencyId(
+              currency1,
+              chainId,
+            )}/${pair.address}`}
           >
             <Text width="max-content">
               <Trans>Add Liquidity</Trans>
@@ -766,7 +772,7 @@ export default function FullPositionCard({
         <ButtonEmpty width="max-content" style={{ fontSize: '14px' }} padding="0">
           <ExternalLink
             style={{ width: '100%', textAlign: 'center' }}
-            href={`${DMM_ANALYTICS_URL[chainId as ChainId]}/pool/${poolData?.id ?? ''}`}
+            href={`${DMM_ANALYTICS_URL[chainId]}/pool/${poolData?.id ?? ''}`}
           >
             <Trans>Analytics ↗</Trans>
           </ExternalLink>

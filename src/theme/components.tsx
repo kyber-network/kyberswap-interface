@@ -1,24 +1,35 @@
 import { darken } from 'polished'
 import React, { HTMLProps, useCallback } from 'react'
-import { ArrowLeft, ExternalLink as LinkIconFeather, Trash, X } from 'react-feather'
+import { ArrowLeft, ExternalLink as LinkIconFeather, X } from 'react-feather'
 import { Link } from 'react-router-dom'
 import styled, { css, keyframes } from 'styled-components'
 
-export const ButtonText = styled.button`
+import { navigateToUrl, validateRedirectURL } from 'utils/redirect'
+
+export const ButtonText = styled.button<{ color?: string; gap?: string }>`
   outline: none;
   border: none;
   font-size: inherit;
   padding: 0;
   margin: 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
   background: none;
   cursor: pointer;
-
+  transition: all 0.2s ease;
+  ${({ color }) =>
+    color &&
+    css`
+      color: ${color};
+    `}
+  ${({ gap }) =>
+    gap &&
+    css`
+      gap: ${gap};
+    `}
   :hover {
     opacity: 0.7;
-  }
-
-  :focus {
-    text-decoration: underline;
   }
 `
 
@@ -52,7 +63,7 @@ export const Button = styled.button.attrs<{ warning: boolean }, { backgroundColo
   }
 `
 
-export const CloseIcon = styled(X)<{ onClick: () => void }>`
+export const CloseIcon = styled(X)<{ onClick?: () => void }>`
   cursor: pointer;
 `
 
@@ -78,7 +89,9 @@ export const LinkStyledButton = styled.button<{ disabled?: boolean }>`
 
   cursor: ${({ disabled }) => (disabled ? 'default' : 'pointer')};
   color: ${({ theme, disabled }) => (disabled ? theme.text2 : theme.primary)};
-  font-weight: 500;
+  font-weight: inherit;
+  font-size: inherit;
+  padding: 0;
 
   :hover {
     text-decoration: ${({ disabled }) => (disabled ? null : 'underline')};
@@ -168,22 +181,6 @@ export const LinkIcon = styled(LinkIconFeather)<{ color?: string }>`
   stroke: ${({ theme, color }) => color || theme.primary};
 `
 
-export const TrashIcon = styled(Trash)`
-  height: 16px;
-  width: 18px;
-  margin-left: 10px;
-  stroke: ${({ theme }) => theme.text3};
-
-  cursor: pointer;
-  align-items: center;
-  justify-content: center;
-  display: flex;
-
-  :hover {
-    opacity: 0.7;
-  }
-`
-
 /**
  * Outbound link that handles firing google analytics events
  */
@@ -196,7 +193,7 @@ export function ExternalLink({
 }: Omit<HTMLProps<HTMLAnchorElement>, 'as' | 'ref'> & { href: string }) {
   const handleClick = useCallback(
     (event: React.MouseEvent<HTMLAnchorElement>) => {
-      onClick && onClick(event)
+      onClick?.(event)
       // don't prevent default, don't redirect if it's a new tab
       if (target === '_blank' || event.ctrlKey || event.metaKey) {
       } else {
@@ -205,7 +202,15 @@ export function ExternalLink({
     },
     [target, onClick],
   )
-  return <StyledLink target={target} rel={rel} href={href} onClick={handleClick} {...rest} />
+  return (
+    <StyledLink
+      target={target}
+      rel={rel}
+      href={validateRedirectURL(href, { _dangerousSkipCheckWhitelist: true, allowRelativePath: true })}
+      onClick={handleClick}
+      {...rest}
+    />
+  )
 }
 
 export function ExternalLinkIcon({
@@ -222,14 +227,19 @@ export function ExternalLinkIcon({
         console.debug('Fired outbound link event', href)
       } else {
         event.preventDefault()
-
-        window.location.href = href
+        navigateToUrl(href, { _dangerousSkipCheckWhitelist: true, allowRelativePath: true })
       }
     },
     [href, target],
   )
   return (
-    <LinkIconWrapper target={target} rel={rel} href={href} onClick={handleClick} {...rest}>
+    <LinkIconWrapper
+      target={target}
+      rel={rel}
+      href={validateRedirectURL(href, { _dangerousSkipCheckWhitelist: true, allowRelativePath: true })}
+      onClick={handleClick}
+      {...rest}
+    >
       <LinkIcon color={color} />
     </LinkIconWrapper>
   )

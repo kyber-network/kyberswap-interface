@@ -1,21 +1,21 @@
-import { Price, Token } from '@kyberswap/ks-sdk-core'
+import { Currency, Price } from '@kyberswap/ks-sdk-core'
 
-import { Bound } from 'state/mint/proamm/actions'
+import { Bound } from 'state/mint/proamm/type'
 
-import { formatPrice } from './formatCurrencyAmount'
+import { formatDisplayNumber } from './numbers'
 
 export function formatTickPrice(
-  price: Price<Token, Token> | undefined,
-  atLimit: { [bound in Bound]?: boolean | undefined },
-  direction: Bound,
+  price: Price<Currency, Currency> | undefined,
+  atLimit?: { [bound in Bound]?: boolean | undefined },
+  direction?: Bound,
   placeholder?: string,
 ) {
-  if (atLimit[direction]) {
+  if (direction && atLimit?.[direction]) {
     return direction === Bound.LOWER ? '0' : '∞'
   }
 
   if (!price && placeholder !== undefined) {
     return placeholder
   }
-  return formatPrice(price, 6)
+  return formatDisplayNumber(price, { significantDigits: 6 })
 }

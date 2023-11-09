@@ -1,62 +1,58 @@
 import { BigNumber } from '@ethersproject/bignumber'
 import { TransactionResponse } from '@ethersproject/providers'
-import { ChainId, Currency, Fraction, TokenAmount, WETH } from '@kyberswap/ks-sdk-core'
+import { Currency, Fraction, TokenAmount, WETH } from '@kyberswap/ks-sdk-core'
 import { Trans, t } from '@lingui/macro'
 import { parseUnits } from 'ethers/lib/utils'
 import JSBI from 'jsbi'
-import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { AlertTriangle, Plus } from 'react-feather'
-import { Link, RouteComponentProps } from 'react-router-dom'
+import { Link, Navigate, useNavigate, useParams } from 'react-router-dom'
 import { Flex, Text } from 'rebass'
 
+import { NotificationType } from 'components/Announcement/type'
+import { ButtonError, ButtonLight, ButtonPrimary } from 'components/Button'
+import { BlueCard, LightCard } from 'components/Card'
+import { AutoColumn, ColumnCenter } from 'components/Column'
 import { ConfirmAddModalBottom } from 'components/ConfirmAddModalBottom'
+import CurrencyInputPanel from 'components/CurrencyInputPanel'
 import Loader from 'components/Loader'
+import { AddRemoveTabs, LiquidityAction } from 'components/NavigationTabs'
 import { PoolPriceBar, PoolPriceRangeBarToggle } from 'components/PoolPriceBar'
 import QuestionHelper from 'components/QuestionHelper'
+import Row, { AutoRow, RowBetween, RowFlat } from 'components/Row'
+import TransactionConfirmationModal, { ConfirmationModalContent } from 'components/TransactionConfirmationModal'
 import { TutorialType } from 'components/Tutorial'
-import { NETWORKS_INFO } from 'constants/networks'
-import { nativeOnChain } from 'constants/tokens'
+import { didUserReject } from 'constants/connectors/utils'
+import { APP_PATHS, CREATE_POOL_AMP_HINT } from 'constants/index'
+import { ONLY_DYNAMIC_FEE_CHAINS, ONLY_STATIC_FEE_CHAINS, STATIC_FEE_OPTIONS } from 'constants/networks'
+import { EVMNetworkInfo } from 'constants/networks/type'
+import { NativeCurrencies } from 'constants/tokens'
+import { PairState } from 'data/Reserves'
+import { useActiveWeb3React, useWeb3React } from 'hooks'
+import { useCurrency } from 'hooks/Tokens'
+import { ApprovalState, useApproveCallback } from 'hooks/useApproveCallback'
 import useMixpanel, { MIXPANEL_TYPE } from 'hooks/useMixpanel'
 import useTheme from 'hooks/useTheme'
-import useTokensMarketPrice from 'hooks/useTokensMarketPrice'
+import useTransactionDeadline from 'hooks/useTransactionDeadline'
+import DisclaimerERC20 from 'pages/AddLiquidityV2/components/DisclaimerERC20'
+import { Dots, Wrapper } from 'pages/MyPool/styleds'
+import { useNotify, useWalletModalToggle } from 'state/application/hooks'
+import { Field } from 'state/mint/actions'
+import { useDerivedMintInfo, useMintActionHandlers, useMintState } from 'state/mint/hooks'
 import { useDerivedPairInfo } from 'state/pair/hooks'
+import { useTokenPrices } from 'state/tokenPrices/hooks'
+import { useTransactionAdder } from 'state/transactions/hooks'
+import { TRANSACTION_TYPE } from 'state/transactions/type'
+import { useDegenModeManager, usePairAdderByTokens, useUserSlippageTolerance } from 'state/user/hooks'
+import { StyledInternalLink, TYPE } from 'theme'
+import { calculateGasMargin, calculateSlippageAmount, formattedNum } from 'utils'
+import { currencyId } from 'utils/currencyId'
 import { feeRangeCalc, useCurrencyConvertedToNative } from 'utils/dmm'
+import { friendlyError } from 'utils/errorMessage'
+import { getDynamicFeeRouterContract, getStaticFeeRouterContract } from 'utils/getContract'
 import isZero from 'utils/isZero'
+import { maxAmountSpend } from 'utils/maxAmountSpend'
 
-import { ButtonError, ButtonLight, ButtonPrimary } from '../../components/Button'
-import { BlueCard, LightCard } from '../../components/Card'
-import { AutoColumn, ColumnCenter } from '../../components/Column'
-import CurrencyInputPanel from '../../components/CurrencyInputPanel'
-import { AddRemoveTabs, LiquidityAction } from '../../components/NavigationTabs'
-import Row, { AutoRow, RowBetween, RowFlat } from '../../components/Row'
-import TransactionConfirmationModal, { ConfirmationModalContent } from '../../components/TransactionConfirmationModal'
-import {
-  CREATE_POOL_AMP_HINT,
-  ONLY_DYNAMIC_FEE_CHAINS,
-  ONLY_STATIC_FEE_CHAINS,
-  STATIC_FEE_OPTIONS,
-} from '../../constants'
-import { PairState } from '../../data/Reserves'
-import { useActiveWeb3React } from '../../hooks'
-import { useCurrency } from '../../hooks/Tokens'
-import { ApprovalState, useApproveCallback } from '../../hooks/useApproveCallback'
-import useTransactionDeadline from '../../hooks/useTransactionDeadline'
-import { useTokensPrice, useWalletModalToggle } from '../../state/application/hooks'
-import { Field } from '../../state/mint/actions'
-import { useDerivedMintInfo, useMintActionHandlers, useMintState } from '../../state/mint/hooks'
-import { useTransactionAdder } from '../../state/transactions/hooks'
-import { useIsExpertMode, usePairAdderByTokens, useUserSlippageTolerance } from '../../state/user/hooks'
-import { StyledInternalLink, TYPE } from '../../theme'
-import {
-  calculateGasMargin,
-  calculateSlippageAmount,
-  formattedNum,
-  getDynamicFeeRouterContract,
-  getStaticFeeRouterContract,
-} from '../../utils'
-import { currencyId } from '../../utils/currencyId'
-import { maxAmountSpend } from '../../utils/maxAmountSpend'
-import { Dots, Wrapper } from '../Pool/styleds'
 import FeeTypeSelector from './FeeTypeSelector'
 import StaticFeeSelector from './StaticFeeSelector'
 import {
@@ -77,17 +73,15 @@ export enum FEE_TYPE {
   DYNAMIC = 'dynamic',
 }
 
-export default function CreatePool({
-  match: {
-    params: { currencyIdA, currencyIdB },
-  },
-  history,
-}: RouteComponentProps<{ currencyIdA?: string; currencyIdB?: string }>) {
-  const { account, chainId, library } = useActiveWeb3React()
+export default function CreatePool() {
+  const { currencyIdA, currencyIdB } = useParams()
+  const navigate = useNavigate()
+  const { account, chainId, isEVM, networkInfo } = useActiveWeb3React()
+  const { library } = useWeb3React()
   const theme = useTheme()
   const currencyA = useCurrency(currencyIdA)
   const currencyB = useCurrency(currencyIdB)
-  const [selectedFee, setSelectedFee] = useState(STATIC_FEE_OPTIONS[chainId as ChainId]?.[0])
+  const [selectedFee, setSelectedFee] = useState(STATIC_FEE_OPTIONS[chainId]?.[0])
 
   const onlyStaticFee = !!chainId && ONLY_STATIC_FEE_CHAINS.includes(chainId)
   const onlyDynamicFee = !!chainId && ONLY_DYNAMIC_FEE_CHAINS.includes(chainId)
@@ -101,7 +95,7 @@ export default function CreatePool({
 
   const toggleWalletModal = useWalletModalToggle() // toggle wallet when disconnected
 
-  const expertMode = useIsExpertMode()
+  const [isDegenMode] = useDegenModeManager()
 
   // fee types
   const [feeType, setFeeType] = useState<string>(FEE_TYPE.STATIC)
@@ -176,15 +170,15 @@ export default function CreatePool({
   )
 
   const routerAddress = useMemo(() => {
-    if (!chainId) return
-    if (ONLY_STATIC_FEE_CHAINS.includes(chainId)) return NETWORKS_INFO[chainId].classic.static.router
-    if (ONLY_DYNAMIC_FEE_CHAINS.includes(chainId)) return NETWORKS_INFO[chainId].classic.dynamic?.router
+    if (!isEVM) return
+    if (ONLY_STATIC_FEE_CHAINS.includes(chainId)) return (networkInfo as EVMNetworkInfo).classic.static.router
+    if (ONLY_DYNAMIC_FEE_CHAINS.includes(chainId)) return (networkInfo as EVMNetworkInfo).classic.dynamic?.router
     if (feeType === FEE_TYPE.STATIC) {
-      return NETWORKS_INFO[chainId].classic.static.router
+      return (networkInfo as EVMNetworkInfo).classic.static.router
     } else {
-      return NETWORKS_INFO[chainId].classic.dynamic?.router
+      return (networkInfo as EVMNetworkInfo).classic.dynamic?.router
     }
-  }, [chainId, feeType])
+  }, [chainId, feeType, isEVM, networkInfo])
 
   // check whether the user has approved the router on the tokens
   const [approvalA, approveACallback] = useApproveCallback(parsedAmounts[Field.CURRENCY_A], routerAddress)
@@ -192,10 +186,11 @@ export default function CreatePool({
 
   const addTransactionWithType = useTransactionAdder()
   const addPair = usePairAdderByTokens()
+  const notify = useNotify()
 
   async function onAdd() {
     // if (!pair) return
-    if (!chainId || !library || !account) return
+    if (!library || !account) return
 
     const router =
       feeType === FEE_TYPE.STATIC && !onlyDynamicFee
@@ -263,21 +258,24 @@ export default function CreatePool({
             const cA = currencies[Field.CURRENCY_A]
             const cB = currencies[Field.CURRENCY_B]
             if (!!cA && !!cB) {
+              const tokenAmountIn = parsedAmounts[Field.CURRENCY_A]?.toSignificant(6) ?? ''
+              const tokenAmountOut = parsedAmounts[Field.CURRENCY_B]?.toSignificant(6) ?? ''
               setAttemptingTxn(false)
-              addTransactionWithType(response, {
-                type: 'Create pool',
-                summary:
-                  parsedAmounts[Field.CURRENCY_A]?.toSignificant(6) +
-                  ' ' +
-                  cA.symbol +
-                  ' and ' +
-                  parsedAmounts[Field.CURRENCY_B]?.toSignificant(6) +
-                  ' ' +
-                  cB.symbol,
-                arbitrary: {
-                  token_1: cA.symbol,
-                  token_2: cB.symbol,
-                  amp,
+              addTransactionWithType({
+                hash: response.hash,
+                type: TRANSACTION_TYPE.CLASSIC_CREATE_POOL,
+                extraInfo: {
+                  tokenAddressIn: cA.wrapped.address,
+                  tokenAddressOut: cB.wrapped.address,
+                  tokenAmountIn,
+                  tokenAmountOut,
+                  tokenSymbolIn: cA.symbol ?? '',
+                  tokenSymbolOut: cB.symbol ?? '',
+                  arbitrary: {
+                    token_1: cA.symbol,
+                    token_2: cB.symbol,
+                    amp,
+                  },
                 },
               })
               setTxHash(response.hash)
@@ -293,7 +291,7 @@ export default function CreatePool({
             setAttemptingTxn(false)
             setShowConfirm(false)
             // we only care if the error is something _other_ than the user rejected the tx
-            if (error?.code !== 4001) {
+            if (!didUserReject(error)) {
               console.error(error)
             }
           })
@@ -302,9 +300,18 @@ export default function CreatePool({
         setAttemptingTxn(false)
         setShowConfirm(false)
         // we only care if the error is something _other_ than the user rejected the tx
-        if (error?.code !== 4001) {
+        if (!didUserReject(error)) {
           console.error(error)
         }
+        const message = friendlyError(error)
+        notify(
+          {
+            title: t`Create Classic Pool Error`,
+            summary: message,
+            type: NotificationType.ERROR,
+          },
+          8000,
+        )
       })
   }
 
@@ -356,32 +363,36 @@ export default function CreatePool({
 
       // support WETH
       if (isWrappedTokenInPool(currencyA, selectedCurrencyA)) {
-        history.push(`/create/${newCurrencyIdA}/${currencyIdB}`)
+        navigate(`/${networkInfo.route}${APP_PATHS.CLASSIC_CREATE_POOL}/${newCurrencyIdA}/${currencyIdB}`)
       } else if (newCurrencyIdA === currencyIdB) {
-        history.push(`/create/${currencyIdB}/${currencyIdA}`)
+        navigate(`/${networkInfo.route}${APP_PATHS.CLASSIC_CREATE_POOL}/${currencyIdB}/${currencyIdA}`)
       } else {
-        history.push(`/create/${newCurrencyIdA}/${currencyIdB}`)
+        navigate(`/${networkInfo.route}${APP_PATHS.CLASSIC_CREATE_POOL}/${newCurrencyIdA}/${currencyIdB}`)
       }
     },
-    [currencyIdB, history, currencyIdA, isWrappedTokenInPool, currencyA, chainId],
+    [chainId, isWrappedTokenInPool, currencyA, currencyIdB, navigate, networkInfo.route, currencyIdA],
   )
   const handleCurrencyBSelect = useCallback(
     (selectedCurrencyB: Currency) => {
       const newCurrencyIdB = currencyId(selectedCurrencyB, chainId)
 
       if (isWrappedTokenInPool(currencyB, selectedCurrencyB)) {
-        history.push(`/create/${currencyIdA}/${newCurrencyIdB}`)
+        navigate(`/${networkInfo.route}${APP_PATHS.CLASSIC_CREATE_POOL}/${currencyIdA}/${newCurrencyIdB}`)
       } else if (newCurrencyIdB === currencyIdA) {
         if (currencyIdB) {
-          history.push(`/create/${currencyIdB}/${currencyIdA}`)
+          navigate(`/${networkInfo.route}${APP_PATHS.CLASSIC_CREATE_POOL}/${currencyIdB}/${currencyIdA}`)
         } else {
-          history.push(`/create/${newCurrencyIdB}`)
+          navigate(`/${networkInfo.route}${APP_PATHS.CLASSIC_CREATE_POOL}/${newCurrencyIdB}`)
         }
       } else {
-        history.push(`/create/${currencyIdA ? currencyIdA : 'ETH'}/${newCurrencyIdB}`)
+        navigate(
+          `/${networkInfo.route}${APP_PATHS.CLASSIC_CREATE_POOL}/${
+            currencyIdA ? currencyIdA : 'ETH'
+          }/${newCurrencyIdB}`,
+        )
       }
     },
-    [currencyIdA, history, currencyIdB, isWrappedTokenInPool, currencyB, chainId],
+    [chainId, isWrappedTokenInPool, currencyB, currencyIdA, navigate, networkInfo.route, currencyIdB],
   )
 
   const handleDismissConfirmation = useCallback(() => {
@@ -411,8 +422,13 @@ export default function CreatePool({
     [currencies],
   )
 
-  const usdPrices = useTokensPrice(tokens)
-  const marketPrices = useTokensMarketPrice(tokens)
+  const tokenAddresses: string[] = useMemo(
+    () => tokens.map(token => token?.address as string).filter(item => !!item),
+    [tokens],
+  )
+
+  const marketPriceMap = useTokenPrices(tokenAddresses)
+  const marketPrices = tokens.map(item => marketPriceMap[item?.address || ''] || 0)
 
   const poolRatio = Number(price?.toSignificant(6))
   const marketRatio = marketPrices[1] && marketPrices[0] / marketPrices[1]
@@ -426,6 +442,7 @@ export default function CreatePool({
     }
   }, [chainId])
 
+  if (!isEVM) return <Navigate to="/" />
   return (
     <PageWrapper>
       <Container>
@@ -467,7 +484,7 @@ export default function CreatePool({
                         <StyledInternalLink
                           onClick={handleDismissConfirmation}
                           id="unamplified-pool-link"
-                          to={`/add/${currencyIdA}/${currencyIdB}/${unAmplifiedPairAddress}`}
+                          to={`/${networkInfo.route}${APP_PATHS.CLASSIC_ADD_LIQ}/${currencyIdA}/${currencyIdB}/${unAmplifiedPairAddress}`}
                         >
                           Go to unamplified pool
                         </StyledInternalLink>
@@ -486,7 +503,7 @@ export default function CreatePool({
                   {isPoolExisted && (
                     <TYPE.link fontSize="14px" lineHeight="22px" color={'text1'} fontWeight="normal">
                       <Trans>Note: There are existing pools for this token pair. Please check</Trans>{' '}
-                      <Link to={`/pools/${currencyIdA}/${currencyIdB}`}>
+                      <Link to={`${APP_PATHS.POOLS}/${networkInfo.route}/${currencyIdA}/${currencyIdB}?tab=classic`}>
                         <Trans>here</Trans>
                       </Link>
                     </TYPE.link>
@@ -518,7 +535,6 @@ export default function CreatePool({
                       onFieldAInput(currencyBalances[Field.CURRENCY_A]?.divide(2).toExact() ?? '')
                     }}
                     onCurrencySelect={handleCurrencyASelect}
-                    showMaxButton={true}
                     currency={currencies[Field.CURRENCY_A]}
                     id="create-pool-input-tokena"
                     disableCurrencySelect={false}
@@ -526,8 +542,8 @@ export default function CreatePool({
                   />
                   <Flex justifyContent="space-between" alignItems="center" marginTop="0.5rem">
                     <USDPrice>
-                      {usdPrices[0] ? (
-                        `1 ${nativeA?.symbol} = ${formattedNum(usdPrices[0].toString(), true)}`
+                      {marketPrices[0] ? (
+                        `1 ${nativeA?.symbol} = ${formattedNum(marketPrices[0].toString(), true)}`
                       ) : (
                         <Loader />
                       )}
@@ -539,7 +555,7 @@ export default function CreatePool({
                         to={`/create/${
                           currencyAIsETHER
                             ? currencyId(WETH[chainId], chainId)
-                            : currencyId(nativeOnChain(chainId), chainId)
+                            : currencyId(NativeCurrencies[chainId], chainId)
                         }/${currencyIdB}`}
                       >
                         {currencyAIsETHER ? <Trans>Use Wrapped Token</Trans> : <Trans>Use Native Token</Trans>}
@@ -562,16 +578,15 @@ export default function CreatePool({
                     onHalf={() => {
                       onFieldBInput(currencyBalances[Field.CURRENCY_B]?.divide(2).toExact() ?? '')
                     }}
-                    showMaxButton={true}
                     currency={currencies[Field.CURRENCY_B]}
-                    disableCurrencySelect={false}
                     id="create-pool-input-tokenb"
+                    disableCurrencySelect={false}
                     showCommonBases
                   />
                   <Flex justifyContent="space-between" alignItems="center" marginTop="0.5rem">
                     <USDPrice>
-                      {usdPrices[1] ? (
-                        `1 ${nativeB?.symbol} = ${formattedNum(usdPrices[1].toString(), true)}`
+                      {marketPrices[1] ? (
+                        `1 ${nativeB?.symbol} = ${formattedNum(marketPrices[1].toString(), true)}`
                       ) : (
                         <Loader />
                       )}
@@ -583,7 +598,7 @@ export default function CreatePool({
                         to={`/create/${currencyIdA}/${
                           currencyBIsETHER
                             ? currencyId(WETH[chainId], chainId)
-                            : currencyId(nativeOnChain(chainId), chainId)
+                            : currencyId(NativeCurrencies[chainId], chainId)
                         }`}
                       >
                         {currencyBIsETHER ? <Trans>Use Wrapped Token</Trans> : <Trans>Use Native Token</Trans>}
@@ -733,9 +748,15 @@ export default function CreatePool({
                   </Warning>
                 )}
 
+                <DisclaimerERC20
+                  href="https://docs.kyberswap.com/liquidity-solutions/kyberswap-classic/user-guides/classic-pool-creation#non-standard-tokens"
+                  token0={currencyA?.wrapped.address || ''}
+                  token1={currencyB?.wrapped.address || ''}
+                />
+
                 {!account ? (
                   <ButtonLight onClick={toggleWalletModal}>
-                    <Trans>Connect Wallet</Trans>
+                    <Trans>Connect</Trans>
                   </ButtonLight>
                 ) : (
                   <AutoColumn gap={'md'}>
@@ -776,7 +797,7 @@ export default function CreatePool({
 
                     <ButtonError
                       onClick={() => {
-                        expertMode && !linkToUnamplifiedPool ? onAdd() : setShowConfirm(true)
+                        isDegenMode && !linkToUnamplifiedPool ? onAdd() : setShowConfirm(true)
                       }}
                       disabled={
                         !isValid ||

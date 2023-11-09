@@ -1,11 +1,12 @@
-import { Pair } from '@kyberswap/ks-sdk-classic'
 import { ChainId, Token } from '@kyberswap/ks-sdk-core'
-import flatMap from 'lodash.flatmap'
 import { useCallback, useMemo } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
+import { useGetParticipantInfoQuery, useLazyGetParticipantInfoQuery } from 'services/kyberAISubscription'
 
-import { BASES_TO_TRACK_LIQUIDITY_FOR, PINNED_PAIRS } from 'constants/index'
+import { SUGGESTED_BASES } from 'constants/bases'
+import { TERM_FILES_PATH } from 'constants/index'
 import { SupportedLocale } from 'constants/locales'
+import { PINNED_PAIRS } from 'constants/tokens'
 import { useActiveWeb3React } from 'hooks'
 import { useAllTokens } from 'hooks/Tokens'
 import {
@@ -13,32 +14,45 @@ import {
   useOldStaticFeeFactoryContract,
   useStaticFeeFactoryContract,
 } from 'hooks/useContract'
+import useDebounce from 'hooks/useDebounce'
+import { ParticipantInfo, ParticipantStatus } from 'pages/TrueSightV2/types'
 import { AppDispatch, AppState } from 'state'
+import { useKyberSwapConfig } from 'state/application/hooks'
+import { useIsConnectingWallet, useSessionInfo } from 'state/authen/hooks'
 import { useAppDispatch, useAppSelector } from 'state/hooks'
 import { WrappedTokenInfo } from 'state/lists/wrappedTokenInfo'
 import { useSingleContractMultipleData } from 'state/multicall/hooks'
 import { useUserLiquidityPositions } from 'state/pools/hooks'
+import { useCheckStablePairSwap } from 'state/swap/hooks'
 import {
-  SerializedPair,
   SerializedToken,
   ToggleFavoriteTokenPayload,
   addSerializedPair,
   addSerializedToken,
+  changeViewMode,
+  pinSlippageControl,
   removeSerializedToken,
+  setCrossChainSetting,
   toggleFavoriteToken as toggleFavoriteTokenAction,
+  toggleHolidayMode,
+  toggleKyberAIBanner,
+  toggleKyberAIWidget,
   toggleLiveChart,
-  toggleProLiveChart,
-  toggleTokenInfo,
+  toggleMyEarningChart,
   toggleTopTrendingTokens,
   toggleTradeRoutes,
-  updateUserDarkMode,
+  toggleUseAggregatorForZap,
+  updateAcceptedTermVersion,
+  updateTokenAnalysisSettings,
   updateUserDeadline,
-  updateUserExpertMode,
+  updateUserDegenMode,
   updateUserLocale,
   updateUserSlippageTolerance,
 } from 'state/user/actions'
-import { defaultShowLiveCharts, getFavoriteTokenDefault } from 'state/user/reducer'
-import { isAddress } from 'utils'
+import { CROSS_CHAIN_SETTING_DEFAULT, CrossChainSetting, VIEW_MODE } from 'state/user/reducer'
+import { isAddress, isChristmasTime } from 'utils'
+
+const MAX_FAVORITE_LIMIT = 12
 
 function serializeToken(token: Token | WrappedTokenInfo): SerializedToken {
   return {
@@ -47,12 +61,12 @@ function serializeToken(token: Token | WrappedTokenInfo): SerializedToken {
     decimals: token.decimals,
     symbol: token.symbol,
     name: token.name,
-    logoURI: token instanceof WrappedTokenInfo ? token.tokenInfo.logoURI : undefined,
+    logoURI: token instanceof WrappedTokenInfo ? token.logoURI : undefined,
   }
 }
 
 function deserializeToken(serializedToken: SerializedToken): Token {
-  return serializedToken?.logoURI && serializedToken?.list
+  return serializedToken?.logoURI
     ? new WrappedTokenInfo({
         chainId: serializedToken.chainId,
         address: serializedToken.address,
@@ -68,24 +82,6 @@ function deserializeToken(serializedToken: SerializedToken): Token {
         serializedToken.symbol,
         serializedToken.name,
       )
-}
-
-export function useIsDarkMode(): boolean {
-  const userDarkMode = useSelector<AppState, boolean | null>(state => state.user.userDarkMode)
-  const matchesDarkMode = useSelector<AppState, boolean>(state => state.user.matchesDarkMode)
-
-  return typeof userDarkMode !== 'boolean' ? matchesDarkMode : userDarkMode
-}
-
-export function useDarkModeManager(): [boolean, () => void] {
-  const dispatch = useDispatch<AppDispatch>()
-  const darkMode = useIsDarkMode()
-
-  const toggleSetDarkMode = useCallback(() => {
-    dispatch(updateUserDarkMode({ userDarkMode: !darkMode }))
-  }, [darkMode, dispatch])
-
-  return [darkMode, toggleSetDarkMode]
 }
 
 export function useUserLocale(): SupportedLocale | null {
@@ -106,19 +102,47 @@ export function useUserLocaleManager(): [SupportedLocale | null, (newLocale: Sup
   return [locale, setLocale]
 }
 
-export function useIsExpertMode(): boolean {
-  return useSelector<AppState, AppState['user']['userExpertMode']>(state => state.user.userExpertMode)
+export function useIsAcceptedTerm(): [boolean, (isAcceptedTerm: boolean) => void] {
+  const dispatch = useAppDispatch()
+  const acceptedTermVersion = useSelector<AppState, AppState['user']['acceptedTermVersion']>(
+    state => state.user.acceptedTermVersion,
+  )
+
+  const isAcceptedTerm = !!acceptedTermVersion && acceptedTermVersion === TERM_FILES_PATH.VERSION
+
+  const setIsAcceptedTerm = useCallback(
+    (isAcceptedTerm: boolean) => {
+      dispatch(updateAcceptedTermVersion(isAcceptedTerm ? TERM_FILES_PATH.VERSION : null))
+    },
+    [dispatch],
+  )
+
+  return [isAcceptedTerm, setIsAcceptedTerm]
 }
 
-export function useExpertModeManager(): [boolean, () => void] {
+export function useDegenModeManager(): [boolean, () => void] {
   const dispatch = useDispatch<AppDispatch>()
-  const expertMode = useIsExpertMode()
+  const degenMode = useSelector<AppState, AppState['user']['userDegenMode']>(state => state.user.userDegenMode)
+  const isStablePairSwap = useCheckStablePairSwap()
 
-  const toggleSetExpertMode = useCallback(() => {
-    dispatch(updateUserExpertMode({ userExpertMode: !expertMode }))
-  }, [expertMode, dispatch])
+  const toggleSetDegenMode = useCallback(() => {
+    dispatch(updateUserDegenMode({ userDegenMode: !degenMode, isStablePairSwap }))
+  }, [degenMode, dispatch, isStablePairSwap])
 
-  return [expertMode, toggleSetExpertMode]
+  return [degenMode, toggleSetDegenMode]
+}
+
+export function useAggregatorForZapSetting(): [boolean, () => void] {
+  const dispatch = useDispatch<AppDispatch>()
+  const isUseAggregatorForZap = useSelector<AppState, AppState['user']['useAggregatorForZap']>(
+    state => state.user.useAggregatorForZap,
+  )
+
+  const toggle = useCallback(() => {
+    dispatch(toggleUseAggregatorForZap())
+  }, [dispatch])
+
+  return [isUseAggregatorForZap === undefined ? true : isUseAggregatorForZap, toggle]
 }
 
 export function useUserSlippageTolerance(): [number, (slippage: number) => void] {
@@ -173,32 +197,16 @@ export function useRemoveUserAddedToken(): (chainId: number, address: string) =>
   )
 }
 
-export function useUserAddedTokens(): Token[] {
-  const { chainId } = useActiveWeb3React()
+export function useUserAddedTokens(customChain?: ChainId): Token[] {
+  const { chainId: currentChain } = useActiveWeb3React()
   const serializedTokensMap = useSelector<AppState, AppState['user']['tokens']>(({ user: { tokens } }) => tokens)
-
+  const chainId = customChain || currentChain
   return useMemo(() => {
     if (!chainId) return []
-    return Object.values(serializedTokensMap[chainId as ChainId] ?? {}).map(deserializeToken)
+    return Object.values(serializedTokensMap[chainId] ?? {})
+      .map(deserializeToken)
+      .filter(e => !(!e.symbol && !e.decimals && !e.name))
   }, [serializedTokensMap, chainId])
-}
-
-function serializePair(pair: Pair): SerializedPair {
-  return {
-    token0: serializeToken(pair.token0),
-    token1: serializeToken(pair.token1),
-  }
-}
-
-export function usePairAdder(): (pair: Pair) => void {
-  const dispatch = useDispatch<AppDispatch>()
-
-  return useCallback(
-    (pair: Pair) => {
-      dispatch(addSerializedPair({ serializedPair: serializePair(pair) }))
-    },
-    [dispatch],
-  )
 }
 
 export function usePairAdderByTokens(): (token0: Token, token1: Token) => void {
@@ -225,21 +233,15 @@ export function useToV2LiquidityTokens(
   const oldStaticContract = useOldStaticFeeFactoryContract()
   const staticContract = useStaticFeeFactoryContract()
   const dynamicContract = useDynamicFeeFactoryContract()
-  const result1 = useSingleContractMultipleData(
-    staticContract,
-    'getPools',
-    tokenCouples.map(([tokenA, tokenB]) => [tokenA.address, tokenB.address]),
+
+  const addresses = useMemo(
+    () => tokenCouples.map(([tokenA, tokenB]) => [tokenA.address, tokenB.address]),
+    [tokenCouples],
   )
-  const result2 = useSingleContractMultipleData(
-    dynamicContract,
-    'getPools',
-    tokenCouples.map(([tokenA, tokenB]) => [tokenA.address, tokenB.address]),
-  )
-  const result3 = useSingleContractMultipleData(
-    oldStaticContract,
-    'getPools',
-    tokenCouples.map(([tokenA, tokenB]) => [tokenA.address, tokenB.address]),
-  )
+
+  const result1 = useSingleContractMultipleData(staticContract, 'getPools', addresses)
+  const result2 = useSingleContractMultipleData(dynamicContract, 'getPools', addresses)
+  const result3 = useSingleContractMultipleData(oldStaticContract, 'getPools', addresses)
   const result = useMemo(
     () =>
       result1?.map((call, index) => {
@@ -257,91 +259,24 @@ export function useToV2LiquidityTokens(
       result.map((result, index) => {
         return {
           tokens: tokenCouples[index],
-          liquidityTokens: result?.result?.[0]
-            ? result.result[0].map(
-                (address: string) => new Token(tokenCouples[index][0].chainId, address, 18, 'DMM-LP', 'DMM LP'),
-              )
-            : [],
+          liquidityTokens:
+            result?.result?.[0]?.map(
+              (address: string) => new Token(tokenCouples[index][0].chainId, address, 18, 'DMM-LP', 'DMM LP'),
+            ) ?? [],
         }
       }),
     [tokenCouples, result],
   )
 }
 
-/**
- * Returns all the pairs of tokens that are tracked by the user for the current chain ID.
- */
-export function useTrackedTokenPairs(): [Token, Token][] {
-  const { chainId } = useActiveWeb3React()
-
-  // pinned pairs
-  const pinnedPairs = useMemo(() => (chainId ? PINNED_PAIRS[chainId] ?? [] : []), [chainId])
-
-  // get tracked pairs
-  const generatedPairs: [Token, Token][] = useMemo(() => {
-    if (chainId) {
-      const baseTrackedTokens = BASES_TO_TRACK_LIQUIDITY_FOR[chainId]
-
-      return flatMap(baseTrackedTokens, trackedToken => {
-        return (
-          // loop though all bases on the current chain
-          (BASES_TO_TRACK_LIQUIDITY_FOR[chainId] ?? [])
-            // to construct pairs of the given token with each base
-            .map(base => {
-              if (base.address === trackedToken.address) {
-                return null
-              } else {
-                return [base, trackedToken]
-              }
-            })
-            .filter((p): p is [Token, Token] => p !== null)
-        )
-      })
-    }
-
-    return []
-  }, [chainId])
-
-  // pairs saved by users
-  const savedSerializedPairs = useSelector<AppState, AppState['user']['pairs']>(({ user: { pairs } }) => pairs)
-
-  const userPairs: [Token, Token][] = useMemo(() => {
-    if (!chainId || !savedSerializedPairs) return []
-    const forChain = savedSerializedPairs[chainId]
-    if (!forChain) return []
-
-    return Object.keys(forChain).map(pairId => {
-      return [deserializeToken(forChain[pairId].token0), deserializeToken(forChain[pairId].token1)]
-    })
-  }, [savedSerializedPairs, chainId])
-
-  const combinedList = useMemo(
-    () => userPairs.concat(generatedPairs).concat(pinnedPairs),
-    [generatedPairs, pinnedPairs, userPairs],
-  )
-
-  return useMemo(() => {
-    // dedupes pairs of tokens in the combined list
-    const keyed = combinedList.reduce<{ [key: string]: [Token, Token] }>((memo, [tokenA, tokenB]) => {
-      const sorted = tokenA.sortsBefore(tokenB)
-      const key = sorted ? `${tokenA.address}:${tokenB.address}` : `${tokenB.address}:${tokenA.address}`
-      if (memo[key]) return memo
-      memo[key] = sorted ? [tokenA, tokenB] : [tokenB, tokenA]
-      return memo
-    }, {})
-
-    return Object.keys(keyed).map(key => keyed[key])
-  }, [combinedList])
-}
-
 export function useLiquidityPositionTokenPairs(): [Token, Token][] {
-  const { chainId, account } = useActiveWeb3React()
+  const { chainId } = useActiveWeb3React()
   const allTokens = useAllTokens()
 
   // pinned pairs
   const pinnedPairs = useMemo(() => (chainId ? PINNED_PAIRS[chainId] ?? [] : []), [chainId])
 
-  const { data: userLiquidityPositions } = useUserLiquidityPositions(account)
+  const { data: userLiquidityPositions } = useUserLiquidityPositions()
 
   // get pairs that has liquidity
   const generatedPairs: [Token, Token][] = useMemo(() => {
@@ -349,8 +284,8 @@ export function useLiquidityPositionTokenPairs(): [Token, Token][] {
       const result: [Token, Token][] = []
 
       userLiquidityPositions?.liquidityPositions.forEach(position => {
-        const token0Address = isAddress(position.pool.token0.id)
-        const token1Address = isAddress(position.pool.token1.id)
+        const token0Address = isAddress(chainId, position.pool.token0.id)
+        const token1Address = isAddress(chainId, position.pool.token1.id)
 
         if (token0Address && token1Address && allTokens[token0Address] && allTokens[token1Address]) {
           result.push([allTokens[token0Address], allTokens[token1Address]])
@@ -361,13 +296,13 @@ export function useLiquidityPositionTokenPairs(): [Token, Token][] {
     }
 
     return []
-  }, [allTokens, userLiquidityPositions])
+  }, [chainId, allTokens, userLiquidityPositions])
 
   // pairs saved by users
   const savedSerializedPairs = useSelector<AppState, AppState['user']['pairs']>(({ user: { pairs } }) => pairs)
 
   const userPairs: [Token, Token][] = useMemo(() => {
-    if (!chainId || !savedSerializedPairs) return []
+    if (!savedSerializedPairs) return []
     const forChain = savedSerializedPairs[chainId]
     if (!forChain) return []
 
@@ -396,20 +331,8 @@ export function useLiquidityPositionTokenPairs(): [Token, Token][] {
 }
 
 export function useShowLiveChart(): boolean {
-  const { chainId } = useActiveWeb3React()
-  let showLiveChart = useSelector((state: AppState) => state.user.showLiveCharts)
-  if (typeof showLiveChart?.[chainId || 1] !== 'boolean') {
-    showLiveChart = defaultShowLiveCharts
-  }
-
-  const show = showLiveChart[chainId || 1]
-
-  return !!show
-}
-
-export function useShowProLiveChart(): boolean {
-  const showProLiveChart = useSelector((state: AppState) => state.user.showProLiveChart)
-  return showProLiveChart
+  const showLiveChart = useSelector((state: AppState) => state.user.showLiveChart)
+  return typeof showLiveChart !== 'boolean' || showLiveChart
 }
 
 export function useShowTradeRoutes(): boolean {
@@ -417,32 +340,32 @@ export function useShowTradeRoutes(): boolean {
   return showTradeRoutes
 }
 
-export function useShowTokenInfo(): boolean {
-  return useSelector((state: AppState) => state.user.showTokenInfo) ?? true
+export function useShowKyberAIBanner(): boolean {
+  return useSelector((state: AppState) => state.user.showKyberAIBanner) ?? true
 }
 
-export function useShowTopTrendingSoonTokens(): boolean {
-  const showTrendingSoon = useSelector((state: AppState) => state.user.showTopTrendingSoonTokens)
-  return showTrendingSoon ?? true
+export function useTokenAnalysisSettings(): { [k: string]: boolean } {
+  return useSelector((state: AppState) => state.user.kyberAIDisplaySettings) ?? null
+}
+
+export function useUpdateTokenAnalysisSettings(): (payload: string) => void {
+  const dispatch = useDispatch<AppDispatch>()
+  return useCallback((payload: string) => dispatch(updateTokenAnalysisSettings(payload)), [dispatch])
 }
 
 export function useToggleLiveChart(): () => void {
   const dispatch = useDispatch<AppDispatch>()
-  const { chainId } = useActiveWeb3React()
-  return useCallback(() => dispatch(toggleLiveChart({ chainId: chainId || 1 })), [dispatch, chainId])
+  return useCallback(() => dispatch(toggleLiveChart()), [dispatch])
 }
-export function useToggleProLiveChart(): () => void {
-  const dispatch = useDispatch<AppDispatch>()
-  return useCallback(() => dispatch(toggleProLiveChart()), [dispatch])
-}
+
 export function useToggleTradeRoutes(): () => void {
   const dispatch = useDispatch<AppDispatch>()
   return useCallback(() => dispatch(toggleTradeRoutes()), [dispatch])
 }
 
-export function useToggleTokenInfo(): () => void {
+export function useToggleKyberAIBanner(): () => void {
   const dispatch = useDispatch<AppDispatch>()
-  return useCallback(() => dispatch(toggleTokenInfo()), [dispatch])
+  return useCallback(() => dispatch(toggleKyberAIBanner()), [dispatch])
 }
 
 export function useToggleTopTrendingTokens(): () => void {
@@ -450,21 +373,196 @@ export function useToggleTopTrendingTokens(): () => void {
   return useCallback(() => dispatch(toggleTopTrendingTokens()), [dispatch])
 }
 
-export const useUserFavoriteTokens = (chainId: ChainId | undefined) => {
+export const useUserFavoriteTokens = (customChain?: ChainId) => {
+  const { chainId: currentChain } = useActiveWeb3React()
+  const chainId = customChain || currentChain
   const dispatch = useDispatch<AppDispatch>()
-  const { favoriteTokensByChainId } = useSelector((state: AppState) => state.user)
+  const { favoriteTokensByChainIdv2: favoriteTokensByChainId } = useSelector((state: AppState) => state.user)
+  const { commonTokens } = useKyberSwapConfig(chainId)
+  const defaultTokens = useMemo(() => {
+    return commonTokens || SUGGESTED_BASES[chainId || ChainId.MAINNET].map(e => e.address)
+  }, [commonTokens, chainId])
 
   const favoriteTokens = useMemo(() => {
     if (!chainId) return undefined
-    return favoriteTokensByChainId
-      ? favoriteTokensByChainId[chainId] || getFavoriteTokenDefault(chainId)
-      : getFavoriteTokenDefault(chainId)
-  }, [chainId, favoriteTokensByChainId])
+    const favoritedTokens = favoriteTokensByChainId?.[chainId] || {}
+    const favoritedTokenAddresses = defaultTokens
+      .filter(address => favoritedTokens[address.toLowerCase()] !== false)
+      .concat(Object.keys(favoritedTokens).filter(address => favoritedTokens[address]))
+
+    return [...new Set(favoritedTokenAddresses.map(a => a.toLowerCase()))]
+  }, [chainId, favoriteTokensByChainId, defaultTokens])
 
   const toggleFavoriteToken = useCallback(
-    (payload: ToggleFavoriteTokenPayload) => dispatch(toggleFavoriteTokenAction(payload)),
-    [dispatch],
+    (payload: ToggleFavoriteTokenPayload) => {
+      if (!favoriteTokens) return
+      const address = payload.address.toLowerCase()
+      // Is adding favorite and reached max limit
+      if (favoriteTokens.indexOf(address) < 0 && favoriteTokens.length >= MAX_FAVORITE_LIMIT) {
+        return
+      }
+      const newValue = favoriteTokens.indexOf(address) < 0
+
+      dispatch(toggleFavoriteTokenAction({ ...payload, newValue }))
+    },
+    [dispatch, favoriteTokens],
   )
 
   return { favoriteTokens, toggleFavoriteToken }
+}
+
+export const useViewMode: () => [VIEW_MODE, (mode: VIEW_MODE) => void] = () => {
+  const dispatch = useAppDispatch()
+  const viewMode = useAppSelector(state => state.user.viewMode || VIEW_MODE.GRID)
+
+  const setViewMode = useCallback((mode: VIEW_MODE) => dispatch(changeViewMode(mode)), [dispatch])
+
+  return [viewMode, setViewMode]
+}
+
+export const useHolidayMode: () => [boolean, () => void] = () => {
+  const dispatch = useAppDispatch()
+  const holidayMode = useAppSelector(state => (state.user.holidayMode === undefined ? true : state.user.holidayMode))
+
+  const toggle = useCallback(() => {
+    dispatch(toggleHolidayMode())
+  }, [dispatch])
+
+  return [isChristmasTime() ? holidayMode : false, toggle]
+}
+
+export const useCrossChainSetting = () => {
+  const dispatch = useAppDispatch()
+  const setting = useAppSelector(state => state.user.crossChain) || CROSS_CHAIN_SETTING_DEFAULT
+  const setSetting = useCallback(
+    (data: CrossChainSetting) => {
+      dispatch(setCrossChainSetting(data))
+    },
+    [dispatch],
+  )
+  const setExpressExecutionMode = useCallback(
+    (enableExpressExecution: boolean) => {
+      setSetting({ ...setting, enableExpressExecution })
+    },
+    [setSetting, setting],
+  )
+
+  const setRawSlippage = useCallback(
+    (slippageTolerance: number) => {
+      setSetting({ ...setting, slippageTolerance })
+    },
+    [setSetting, setting],
+  )
+
+  const toggleSlippageControlPinned = useCallback(() => {
+    setSetting({ ...setting, isSlippageControlPinned: !setting.isSlippageControlPinned })
+  }, [setSetting, setting])
+
+  return { setting, setExpressExecutionMode, setRawSlippage, toggleSlippageControlPinned }
+}
+
+export const useSlippageSettingByPage = (isCrossChain = false) => {
+  const dispatch = useDispatch()
+  const isPinSlippageSwap = useAppSelector(state => state.user.isSlippageControlPinned)
+  const [rawSlippageSwap, setRawSlippageSwap] = useUserSlippageTolerance()
+  const togglePinSlippageSwap = () => {
+    dispatch(pinSlippageControl(!isSlippageControlPinned))
+  }
+
+  const {
+    setting: { slippageTolerance: rawSlippageSwapCrossChain, isSlippageControlPinned: isPinSlippageCrossChain },
+    setRawSlippage: setRawSlippageCrossChain,
+    toggleSlippageControlPinned: togglePinnedSlippageCrossChain,
+  } = useCrossChainSetting()
+
+  const isSlippageControlPinned = isCrossChain ? isPinSlippageCrossChain : isPinSlippageSwap
+  const rawSlippage = isCrossChain ? rawSlippageSwapCrossChain : rawSlippageSwap
+  const setRawSlippage = isCrossChain ? setRawSlippageCrossChain : setRawSlippageSwap
+  const togglePinSlippage = isCrossChain ? togglePinnedSlippageCrossChain : togglePinSlippageSwap
+
+  return { setRawSlippage, rawSlippage, isSlippageControlPinned, togglePinSlippage }
+}
+
+const participantDefault = {
+  rankNo: 0,
+  status: ParticipantStatus.UNKNOWN,
+  referralCode: '',
+  id: 0,
+  updatedAt: 0,
+  createdAt: 0,
+}
+export const useGetParticipantKyberAIInfo = (): ParticipantInfo => {
+  const { userInfo } = useSessionInfo()
+  const { currentData } = useGetParticipantInfoQuery(undefined, {
+    skip: !userInfo,
+  })
+  return currentData || participantDefault
+}
+
+export const useIsWhiteListKyberAI = () => {
+  const { isLogin, pendingAuthentication, userInfo } = useSessionInfo()
+  const {
+    currentData: rawData,
+    isFetching,
+    isError,
+  } = useGetParticipantInfoQuery(undefined, {
+    skip: !userInfo || userInfo?.data?.hasAccessToKyberAI,
+  })
+
+  const [getParticipantInfoQuery] = useLazyGetParticipantInfoQuery()
+  // why not use refetch of useGetParticipantInfoQuery: loop api issues, idk.
+  const refetch = useCallback(() => {
+    userInfo && getParticipantInfoQuery()
+  }, [getParticipantInfoQuery, userInfo])
+
+  const [connectingWallet] = useIsConnectingWallet()
+
+  const isLoading = isFetching || pendingAuthentication
+  const loadingDebounced = useDebounce(isLoading, 500) || connectingWallet
+
+  const participantInfo = isError || loadingDebounced ? participantDefault : rawData
+
+  return {
+    loading: loadingDebounced,
+    isWhiteList:
+      isLogin && (participantInfo?.status === ParticipantStatus.WHITELISTED || userInfo?.data?.hasAccessToKyberAI),
+    isWaitList: isLogin && participantInfo?.status === ParticipantStatus.WAITLISTED,
+    refetch,
+  }
+}
+
+export const useKyberAIWidget: () => [boolean, () => void] = () => {
+  const dispatch = useAppDispatch()
+  const kyberAIWidget = useAppSelector(state =>
+    state.user.kyberAIWidget === undefined ? true : state.user.kyberAIWidget,
+  )
+
+  const { isWhiteList } = useIsWhiteListKyberAI()
+
+  const toggle = useCallback(() => {
+    dispatch(toggleKyberAIWidget())
+  }, [dispatch])
+
+  return [kyberAIWidget && !!isWhiteList, toggle]
+}
+
+export const usePermitData: (
+  address?: string,
+) => { rawSignature?: string; deadline?: number; value?: string; errorCount?: number } | null = address => {
+  const { chainId, account } = useActiveWeb3React()
+  const permitData = useAppSelector(state => state.user.permitData)
+
+  return address && account && permitData ? permitData[account]?.[chainId]?.[address] : null
+}
+
+export const useShowMyEarningChart: () => [boolean, () => void] = () => {
+  const dispatch = useAppDispatch()
+
+  const isShowMyEarningChart = useAppSelector(state =>
+    state.user.myEarningChart === undefined ? true : state.user.myEarningChart,
+  )
+  const toggle = useCallback(() => {
+    dispatch(toggleMyEarningChart())
+  }, [dispatch])
+  return [isShowMyEarningChart, toggle]
 }

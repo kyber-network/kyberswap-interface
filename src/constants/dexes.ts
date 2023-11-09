@@ -1,28 +1,22 @@
-import { ChainId } from '@kyberswap/ks-sdk-core'
-
-export const DEX_TO_COMPARE: { [chainId in ChainId]?: string } = {
-  [ChainId.BSCMAINNET]: 'pancake',
-  [ChainId.MATIC]: 'quickswap',
-  [ChainId.AVAXMAINNET]: 'traderjoe',
-  [ChainId.MAINNET]: 'uniswapv3',
-  [ChainId.FANTOM]: 'spookyswap',
-  [ChainId.CRONOS]: 'vvs',
-  [ChainId.AURORA]: 'trisolaris',
-  [ChainId.ARBITRUM]: 'sushiswap',
-  [ChainId.VELAS]: 'wagyuswap',
-  [ChainId.OASIS]: 'valleyswap-v2',
-  [ChainId.OPTIMISM]: 'uniswapv3',
+// To combine all kyber options 1 option on UI
+export const KYBERSWAP_KS_DEXES_TO_UI_DEXES: { [key: string]: string | undefined } = {
+  kyberswap: 'kyberswapv1', // kyberswap classic old contract
+  'kyberswap-static': 'kyberswapv1', // kyberswap classic new contract -> with static fee
+  'kyberswap-elastic': 'kyberswap-elastic',
+  'kyberswap-limit-order': 'kyberswap-limit-order',
+  'kyberswap-limit-order-v2': 'kyberswap-limit-order-v2',
+  'kyber-pmm': 'kyber-pmm',
 }
 
-export const kyberswapDexes = [
-  {
-    name: 'KyberSwap Elastic',
-    id: 'kyberswapv2',
-    logoURL: 'https://kyberswap.com/favicon.ico',
-  },
-  {
+// only put dex need to be custom, otherwise get from admin
+export const KYBERSWAP_UI_DEXES_CUSTOM: {
+  [key: string]: {
+    name: string
+    id: string
+  }
+} = {
+  kyberswapv1: {
     name: 'KyberSwap Classic',
     id: 'kyberswapv1',
-    logoURL: 'https://kyberswap.com/favicon.ico',
   },
-]
+}

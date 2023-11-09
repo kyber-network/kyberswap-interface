@@ -1,10 +1,9 @@
 import { Trans } from '@lingui/macro'
-import React, { useState } from 'react'
-import { isMobile } from 'react-device-detect'
-import { ChevronDown } from 'react-feather'
+import { useState } from 'react'
 import { Flex, Text } from 'rebass'
 import styled from 'styled-components'
 
+import { ReactComponent as DropdownSVG } from 'assets/svg/down.svg'
 import { ReactComponent as ZicZac } from 'assets/svg/ziczac.svg'
 import { BestPrice, LowestSlippage, MoneyBagOutline } from 'components/Icons'
 import AntiSnippingAttack from 'components/Icons/AntiSnippingAttack'
@@ -106,21 +105,20 @@ export const GlobalData = () => {
 }
 
 export const Instruction = () => {
-  const qs = useParsedQueryString()
-  const tab = (qs.tab as string) || VERSION.ELASTIC
+  const { tab = VERSION.ELASTIC } = useParsedQueryString<{ tab: string }>()
 
   const theme = useTheme()
 
-  const [show, setShow] = useState(!isMobile) // hide by default on mobile
+  const [show, setShow] = useState(false)
 
   return (
     <InstructionItem>
-      <Flex justifyContent="space-between" alignItems="center">
+      <Flex alignItems="center">
         <Text lineHeight="24px">
           {tab === VERSION.ELASTIC ? (
             <Trans>Add liquidity to our Elastic Pools and earn trading fees automatically.</Trans>
           ) : (
-            <Trans>Add liquidity to our Classic Pools & earn trading fees automatically.</Trans>
+            <Trans>Add liquidity to our Classic Pools and earn trading fees automatically.</Trans>
           )}
           &nbsp;
           <ExternalLink
@@ -134,7 +132,7 @@ export const Instruction = () => {
           </ExternalLink>
         </Text>
         <ShowDetailBtn isOpen={show} onClick={() => setShow(prev => !prev)}>
-          <ChevronDown size={24} />
+          <DropdownSVG />
         </ShowDetailBtn>
       </Flex>
 
@@ -142,23 +140,23 @@ export const Instruction = () => {
         <DetailWrapper isOpen={show}>
           <DetailItem>
             <BestPrice size={24} />
-            <Text flex={1}>Add liquidity in any price range you want and earn more with concentrated liquidity</Text>
+            <Text flex={1}>Add liquidity in any price range you want and earn more with concentrated liquidity.</Text>
           </DetailItem>
 
           <DetailItem>
             <LowestSlippage size={24} />
-            <Text flex={1}>Your trading fee earnings will be compounded automatically (in the full price range)</Text>
+            <Text flex={1}>Your trading fee earnings will be compounded automatically (in the full price range).</Text>
           </DetailItem>
 
           <DetailItem>
             <MoneyBagOutline size={24} color={theme.primary} />
-            <Text flex={1}>Collect your fee earnings whenever you want, without removing your initial liquidity</Text>
+            <Text flex={1}>Collect your fee earnings whenever you want, without removing your initial liquidity.</Text>
           </DetailItem>
 
           <DetailItem>
             <AntiSnippingAttack size={24} />
             <Text flex={1}>
-              We protect liquidity providers like you from sniping attacks so you continue to earn more trading fees
+              We protect liquidity providers like you from sniping attacks so you continue to earn more trading fees.
             </Text>
           </DetailItem>
         </DetailWrapper>
@@ -168,21 +166,21 @@ export const Instruction = () => {
             <BestPrice size={24} />
             <Text flex={1}>
               We amplify liquidity pools (using the AMP factor) to achieve high capital efficiency so you earn more
-              trading fees even with less liquidity
+              trading fees even with less liquidity.
             </Text>
           </DetailItem>
 
           <DetailItem>
-            <ZicZac />
+            <ZicZac style={{ color: theme.primary }} />
             <Text flex={1}>
               You can create pools by setting your own static fees or by using dynamic fees. With dynamic fees, trading
-              fees are adjusted on-the-fly based on market conditions
+              fees are adjusted on-the-fly based on market conditions.
             </Text>
           </DetailItem>
 
           <DetailItem>
             <LowestSlippage size={24} />
-            <Text flex={1}>Your trading fee earnings will be compounded automatically</Text>
+            <Text flex={1}>Your trading fee earnings will be compounded automatically.</Text>
           </DetailItem>
         </DetailWrapperClassic>
       )}
@@ -210,10 +208,7 @@ const GlobalDataItemValue = styled.span`
 `
 
 const InstructionItem = styled.div`
-  padding: 1rem 0;
   font-size: 12px;
   color: ${({ theme }) => theme.subText};
   line-height: 1.5;
-  border-top: 1px solid ${({ theme }) => theme.border};
-  border-bottom: 1px solid ${({ theme }) => theme.border};
 `

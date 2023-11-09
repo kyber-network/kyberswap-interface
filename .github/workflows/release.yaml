@@ -1,5 +1,7 @@
 name: 'KyberSwap Interface Release'
 
+permissions: write-all
+
 on:
   workflow_dispatch:
     inputs:
@@ -10,7 +12,7 @@ on:
 
 jobs:
   prepare:
-    runs-on: ubuntu-18.04
+    runs-on: ubuntu-20.04
     outputs:
       version_tag: ${{ steps.version_tag.outputs.value }}
       build_date: ${{ steps.build_date.outputs.value }}
@@ -31,15 +33,17 @@ jobs:
   build:
     needs:
       - prepare
-    runs-on: ubuntu-18.04
+    runs-on: ubuntu-20.04
     steps:
       - name: Checkout
         uses: actions/checkout@v2
 
-      - name: Set up Node.js 16.x
+      - name: Set up Node.js
         uses: actions/setup-node@v1
         with:
-          node-version: 16.x
+          node-version: 20.9.0
+          registry-url: 'https://npm.pkg.github.com'
+          scope: '@kybernetwork'
 
       - name: Restore node_modules
         uses: actions/cache@v2
@@ -49,6 +53,8 @@ jobs:
 
       - name: Install dependences
         uses: bahmutov/npm-install@HEAD
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GH_PAT }} ### authen npm
 
       - name: Run Lint
         run: yarn lint --quiet
@@ -56,7 +62,8 @@ jobs:
       - name: Yarn Build
         env:
           CI: false
-          REACT_APP_TAG: ${{ github.event.inputs.version }}
+          VITE_TAG: ${{ github.event.inputs.version }}
+          NODE_OPTIONS: '--max_old_space_size=4096'
         run: yarn build-prod
 
       - name: Save build
@@ -74,7 +81,7 @@ jobs:
       SERVICE: kyberswap-interface
       VERSION_TAG: ${{ needs.prepare.outputs.version_tag }}
       BUILD_DATE: ${{ needs.prepare.outputs.build_date }}
-    runs-on: ubuntu-18.04
+    runs-on: ubuntu-20.04
     steps:
       - name: Checkout
         uses: actions/checkout@v2
@@ -133,7 +140,7 @@ jobs:
     needs:
       - prepare
       - docker
-    runs-on: ubuntu-18.04
+    runs-on: ubuntu-20.04
     env:
       VERSION_TAG: ${{ needs.prepare.outputs.version_tag }}
     steps:
@@ -157,4 +164,5 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           tag_name: ${{ env.VERSION_TAG }}
           prerelease: false
-          title: 'KyberSwap Interface - ${{ env.VERSION_TAG }}'
+          name: 'KyberSwap Interface - ${{ env.VERSION_TAG }}'
+          generate_release_notes: true

@@ -4,11 +4,10 @@ import { useState } from 'react'
 import styled from 'styled-components'
 
 import { ReactComponent as DropdownSvg } from 'assets/svg/down.svg'
+import NetworkModal from 'components/Header/web3/NetworkModal'
 import { NetworkLogo } from 'components/Logo'
-import NetworkModal from 'components/NetworkModal'
+import { NETWORKS_INFO } from 'constants/networks'
 import { useActiveWeb3React } from 'hooks'
-
-import { NETWORKS_INFO } from '../../constants/networks'
 
 const NetworkSwitchContainer = styled.div`
   display: flex;
@@ -27,7 +26,6 @@ const NetworkSwitchContainer = styled.div`
 const NetworkLabel = styled.div`
   white-space: nowrap;
   font-weight: 500;
-  margin-right: 8px;
   font-size: 14px;
 `
 
@@ -40,10 +38,12 @@ function Web3Network({
   chainIds = [],
   onSelectNetwork,
   selectedChainId,
+  tooltipNotSupportChain,
 }: {
   chainIds: ChainId[]
   onSelectNetwork: (chain: ChainId) => void
   selectedChainId?: ChainId
+  tooltipNotSupportChain?: string
 }): JSX.Element | null {
   const { chainId } = useActiveWeb3React()
 
@@ -56,13 +56,15 @@ function Web3Network({
   const { name } = selectedChainId ? NETWORKS_INFO[selectedChainId] : { name: t`Select a network` }
   return (
     <>
-      <NetworkSwitchContainer onClick={() => chainIds.length && toggleNetworkModal()}>
-        <NetworkLogo chainId={selectedChainId} style={{ width: 20, height: 20, marginRight: '8px' }} />
+      <NetworkSwitchContainer data-testid="network-button" onClick={() => chainIds.length && toggleNetworkModal()}>
+        {selectedChainId && (
+          <NetworkLogo chainId={selectedChainId} style={{ width: 20, height: 20, marginRight: '8px' }} />
+        )}
         <NetworkLabel>{name}</NetworkLabel>
         <DropdownIcon open={isOpen} />
       </NetworkSwitchContainer>
       <NetworkModal
-        disabledMsg={t`The token cannot be bridged to this chain`}
+        disabledMsg={tooltipNotSupportChain || t`The token cannot be bridged to this chain`}
         activeChainIds={chainIds}
         isOpen={isOpen}
         selectedId={selectedChainId}

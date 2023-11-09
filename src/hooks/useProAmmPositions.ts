@@ -2,32 +2,25 @@ import { defaultAbiCoder } from '@ethersproject/abi'
 import { getCreate2Address } from '@ethersproject/address'
 import { BigNumber } from '@ethersproject/bignumber'
 import { keccak256 } from '@ethersproject/solidity'
-import { ChainId } from '@kyberswap/ks-sdk-core'
+import { computePoolAddress } from '@kyberswap/ks-sdk-elastic'
 import { useMemo } from 'react'
 
-import { NETWORKS_INFO } from 'constants/networks'
+import { EVMNetworkInfo } from 'constants/networks/type'
 import { useActiveWeb3React } from 'hooks'
+import { useDepositedNfts, useElasticFarms, useJoinedPositions } from 'state/farms/elastic/hooks'
 import { Result, useSingleCallResult, useSingleContractMultipleData } from 'state/multicall/hooks'
 import { PositionDetails } from 'types/position'
 
-import { useProAmmNFTPositionManagerContract } from './useContract'
+import { useProAmmNFTPositionManagerReadingContract } from './useContract'
 
-//           { "internalType": "uint96", "name": "nonce", "type": "uint96" },
-//           { "internalType": "address", "name": "operator", "type": "address" },
-//           { "internalType": "uint80", "name": "poolId", "type": "uint80" },
-//           { "internalType": "int24", "name": "tickLower", "type": "int24" },
-//           { "internalType": "int24", "name": "tickUpper", "type": "int24" },
-//           { "internalType": "uint128", "name": "liquidity", "type": "uint128" },
-//           { "internalType": "uint256", "name": "rTokenOwed", "type": "uint256" },
-//           { "internalType": "uint256", "name": "feeGrowthInsideLast", "type": "uint256" }
 interface UseProAmmPositionsResults {
   loading: boolean
   positions: PositionDetails[] | undefined
 }
 
 export function useProAmmPositionsFromTokenIds(tokenIds: BigNumber[] | undefined): UseProAmmPositionsResults {
-  const positionManager = useProAmmNFTPositionManagerContract()
-  const { chainId } = useActiveWeb3React()
+  const positionManager = useProAmmNFTPositionManagerReadingContract()
+  const { isEVM, networkInfo } = useActiveWeb3React()
 
   const inputs = useMemo(() => (tokenIds ? tokenIds.map(tokenId => [tokenId]) : []), [tokenIds])
   const results = useSingleContractMultipleData(positionManager, 'positions', inputs)
@@ -36,7 +29,7 @@ export function useProAmmPositionsFromTokenIds(tokenIds: BigNumber[] | undefined
   const error = useMemo(() => results.some(({ error }) => error), [results])
 
   const positions = useMemo(() => {
-    if (!loading && !error && tokenIds) {
+    if (!loading && !error && tokenIds && isEVM) {
       return results.map((call, i) => {
         const tokenId = tokenIds[i]
         const result = call.result as Result
@@ -44,7 +37,7 @@ export function useProAmmPositionsFromTokenIds(tokenIds: BigNumber[] | undefined
         return {
           tokenId: tokenId,
           poolId: getCreate2Address(
-            NETWORKS_INFO[chainId || ChainId.MAINNET].elastic.coreFactory,
+            (networkInfo as EVMNetworkInfo).elastic.coreFactory,
             keccak256(
               ['bytes'],
               [
@@ -54,7 +47,7 @@ export function useProAmmPositionsFromTokenIds(tokenIds: BigNumber[] | undefined
                 ),
               ],
             ),
-            NETWORKS_INFO[chainId || ChainId.MAINNET].elastic.initCodeHash,
+            (networkInfo as EVMNetworkInfo).elastic.initCodeHash,
           ),
           feeGrowthInsideLast: result.pos.feeGrowthInsideLast,
           nonce: result.pos.nonce,
@@ -70,7 +63,7 @@ export function useProAmmPositionsFromTokenIds(tokenIds: BigNumber[] | undefined
       })
     }
     return undefined
-  }, [loading, error, results, tokenIds, chainId])
+  }, [loading, error, results, tokenIds, networkInfo, isEVM])
 
   return useMemo(() => {
     return {
@@ -93,47 +86,8 @@ export function useProAmmPositionsFromTokenId(tokenId: BigNumber | undefined): U
   }
 }
 
-export const useTokenIdsOwnedByAddress = (address: string): { loading: boolean; tokenIds: BigNumber[] } => {
-  const positionManager = useProAmmNFTPositionManagerContract()
-  const { loading: balanceLoading, result: balanceResult } = useSingleCallResult(positionManager, 'balanceOf', [
-    address ?? undefined,
-  ])
-
-  // we don't expect any account balance to ever exceed the bounds of max safe int
-  const accountBalance: number | undefined = balanceResult?.[0]?.toNumber()
-
-  const tokenIdsArgs = useMemo(() => {
-    if (accountBalance && address) {
-      const tokenRequests = []
-      for (let i = 0; i < accountBalance; i++) {
-        tokenRequests.push([address, i])
-      }
-      return tokenRequests
-    }
-    return []
-  }, [address, accountBalance])
-
-  const tokenIdResults = useSingleContractMultipleData(positionManager, 'tokenOfOwnerByIndex', tokenIdsArgs)
-
-  const someTokenIdsLoading = useMemo(() => tokenIdResults.some(({ loading }) => loading), [tokenIdResults])
-  const tokenIds = useMemo(() => {
-    if (address) {
-      return tokenIdResults
-        .map(({ result }) => result)
-        .filter((result): result is Result => !!result)
-        .map(result => BigNumber.from(result[0]))
-    }
-    return []
-  }, [address, tokenIdResults])
-
-  return {
-    loading: balanceLoading || someTokenIdsLoading,
-    tokenIds,
-  }
-}
-
 export function useProAmmPositions(account: string | null | undefined): UseProAmmPositionsResults {
-  const positionManager = useProAmmNFTPositionManagerContract()
+  const positionManager = useProAmmNFTPositionManagerReadingContract()
   const { loading: balanceLoading, result: balanceResult } = useSingleCallResult(positionManager, 'balanceOf', [
     account ?? undefined,
   ])
@@ -173,4 +127,69 @@ export function useProAmmPositions(account: string | null | undefined): UseProAm
       positions,
     }
   }, [someTokenIdsLoading, balanceLoading, positionsLoading, positions])
+}
+
+export const useFarmPositions = () => {
+  const { isEVM, networkInfo } = useActiveWeb3React()
+
+  const { farms, loading } = useElasticFarms()
+  const userFarmInfo = useJoinedPositions()
+  const depositedPositions = useDepositedNfts()
+
+  const farmingPools = useMemo(() => farms?.map(farm => farm.pools).flat() || [], [farms])
+
+  const farmPositions: PositionDetails[] = useMemo(() => {
+    if (!isEVM) return []
+    return Object.values(depositedPositions)
+      .flat()
+      .map(pos => {
+        const poolAddress = computePoolAddress({
+          factoryAddress: (networkInfo as EVMNetworkInfo).elastic.coreFactory,
+          tokenA: pos.pool.token0,
+          tokenB: pos.pool.token1,
+          fee: pos.pool.fee,
+          initCodeHashManualOverride: (networkInfo as EVMNetworkInfo).elastic.initCodeHash,
+        })
+        const pool = farmingPools.filter(pool => pool.poolAddress.toLowerCase() === poolAddress.toLowerCase())
+
+        const joinedLiquidity = Object.values(userFarmInfo)
+          .map(item => Object.values(item.joinedPositions).flat())
+          .flat()
+          .filter(joinedPos => joinedPos.nftId.toString() === pos.nftId.toString())
+          .reduce(
+            (acc, cur) =>
+              acc.gt(BigNumber.from(cur.liquidity.toString())) ? acc : BigNumber.from(cur.liquidity.toString()),
+            BigNumber.from(0),
+          )
+
+        return {
+          nonce: BigNumber.from('1'),
+          tokenId: pos.nftId,
+          operator: '0x0000000000000000000000000000000000000000',
+          poolId: poolAddress,
+          tickLower: pos.tickLower,
+          tickUpper: pos.tickUpper,
+          liquidity: BigNumber.from(pos.liquidity.toString()),
+          // not used
+          feeGrowthInsideLast: BigNumber.from(0),
+          stakedLiquidity: joinedLiquidity,
+          // not used
+          rTokenOwed: BigNumber.from(0),
+          token0: pos.pool.token0.address,
+          token1: pos.pool.token1.address,
+          fee: pos.pool.fee,
+          endTime: pool?.[0]?.endTime,
+          rewardPendings: [],
+        }
+      })
+  }, [farmingPools, isEVM, networkInfo, userFarmInfo, depositedPositions])
+
+  return useMemo(() => {
+    return {
+      farms,
+      userFarmInfo,
+      farmPositions,
+      loading: loading,
+    }
+  }, [loading, farmPositions, farms, userFarmInfo])
 }

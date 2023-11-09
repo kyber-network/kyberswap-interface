@@ -1,5 +1,6 @@
 import { NumberValue, ScaleLinear, axisBottom, Axis as d3Axis, select } from 'd3'
-import React, { useMemo } from 'react'
+import Numeral from 'numeral'
+import { useMemo } from 'react'
 import styled from 'styled-components'
 
 const StyledGroup = styled.g`
@@ -32,12 +33,22 @@ export const AxisBottom = ({
   xScale: ScaleLinear<number, number>
   innerHeight: number
   offset?: number
-}) =>
-  useMemo(
+}) => {
+  return useMemo(
     () => (
       <StyledGroup transform={`translate(0, ${innerHeight + offset})`}>
-        <Axis axisGenerator={axisBottom(xScale).ticks(6)} />
+        <Axis
+          axisGenerator={axisBottom(xScale)
+            .tickFormat(domainValue => {
+              const number = Numeral(domainValue.toString())
+              return domainValue.valueOf() > 1e10 || domainValue.valueOf() < -1e10
+                ? number.format('0e+0')
+                : domainValue.toString()
+            })
+            .ticks(6)}
+        />
       </StyledGroup>
     ),
     [innerHeight, offset, xScale],
   )
+}

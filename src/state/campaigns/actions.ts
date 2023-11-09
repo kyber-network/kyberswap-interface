@@ -16,20 +16,21 @@ export enum CampaignState {
 }
 
 export enum CampaignUserInfoStatus {
-  Eligible = 'ELIGIBLE',
-  Ineligible = 'INELIGIBLE',
-  Banned = 'BANNED',
+  Eligible = 'eligible',
+  Ineligible = 'ineligible',
+  Banned = 'banned',
 }
 
-export type CampaignUserInfo = {
+type CampaignUserInfo = {
   address: string
   tradingVolume: number
   tradingNumber: number
   rankNo: number
   status: CampaignUserInfoStatus
+  rewards: CampaignLeaderboardReward[]
 }
 
-export type RewardSingle = {
+type RewardSingle = {
   type: 'Single'
   amount: string
   token: SerializedToken
@@ -37,7 +38,7 @@ export type RewardSingle = {
   rank: number
 }
 
-export type RewardRange = {
+type RewardRange = {
   type: 'Range'
   amount: string
   token: SerializedToken
@@ -76,7 +77,7 @@ export interface CampaignLeaderboardReward {
 }
 
 export interface CampaignLeaderboard {
-  numberOfEligibleParticipants: number
+  totalParticipants: number
   userRank: number
   finalizedAt: number
   distributedRewardsAt: number
@@ -88,6 +89,16 @@ export interface CampaignLuckyWinner {
   userAddress: string
   rewardAmount: Fraction
   token: SerializedToken
+}
+
+export enum ConditionGroupsType {
+  POINT_MULTIPLIER = 'POINT_MULTIPLIER',
+}
+export interface ConditionGroups {
+  conditions?: any[]
+  extra?: any
+  priority: number
+  type: ConditionGroupsType
 }
 
 export interface CampaignData {
@@ -112,7 +123,9 @@ export interface CampaignData {
   tradingVolumeRequired: number
   userInfo?: CampaignUserInfo
   tradingNumberRequired: number
-  leaderboard: CampaignLeaderboard | undefined
+  competitionId?: number
+  competitorId?: number
+  conditionGroups?: ConditionGroups[]
 }
 
 export interface CampaignProofData {
@@ -124,8 +137,15 @@ export interface CampaignProofData {
 }
 
 export const setCampaignData = createAction<{ campaigns: CampaignData[] }>('campaigns/setCampaignData')
+export const setCampaignDataByPage = createAction<{ campaigns: CampaignData[]; isReset: boolean }>(
+  'campaigns/setCampaignDataByPage',
+)
+
 export const setLoadingCampaignData = createAction<boolean>('campaigns/setLoadingCampaignData')
-export const setLoadingCampaignDataError = createAction<Error | undefined>('campaigns/setLoadingCampaignDataError')
+
+export const setLastTimeRefreshData = createAction('campaigns/setLastTimeRefreshData')
+
+export const setLoadingCampaignDataError = createAction<boolean>('campaigns/setLoadingCampaignDataError')
 
 export const setSelectedCampaign = createAction<{ campaign: CampaignData }>('campaigns/setSelectedCampaign')
 
@@ -143,19 +163,6 @@ export const setSelectedCampaignLeaderboardLookupAddress = createAction<string>(
 )
 
 export const setClaimingCampaignRewardId = createAction<number | null>('campaigns/setClaimingCampaignRewardId')
-
-export const setSelectedCampaignLuckyWinners = createAction<{ luckyWinners: CampaignLuckyWinner[] }>(
-  'campaigns/setSelectedCampaignLuckyWinners',
-)
-export const setLoadingSelectedCampaignLuckyWinners = createAction<boolean>(
-  'campaigns/setLoadingSelectedCampaignLuckyWinners',
-)
-export const setSelectedCampaignLuckyWinnersPageNumber = createAction<number>(
-  'campaigns/setSelectedCampaignLuckyWinnersPageNumber',
-)
-export const setSelectedCampaignLuckyWinnersLookupAddress = createAction<string>(
-  'campaigns/setSelectedCampaignLuckyWinnersLookupAddress',
-)
 
 export const setRecaptchaCampaignId = createAction<number | undefined>('campaigns/setRecaptchaCampaignId')
 export const setRecaptchaCampaignLoading = createAction<boolean>('campaigns/setRecaptchaCampaignLoading')

@@ -1,31 +1,38 @@
 import { Trans } from '@lingui/macro'
-import React, { CSSProperties, memo, useEffect, useMemo, useRef, useState } from 'react'
+import React, { memo, useEffect, useMemo, useState } from 'react'
 import { BrowserView } from 'react-device-detect'
 import { ChevronUp } from 'react-feather'
 import { Flex } from 'rebass'
 import styled, { createGlobalStyle } from 'styled-components'
 import { CardinalOrientation, Step, Walktour, WalktourLogic } from 'walktour'
 
+import BtnSettingHeader from 'assets/images/tutorial_swap/btn_setting_header.png'
+import ButtonSwapGuide from 'assets/images/tutorial_swap/btn_swap_guide.png'
+import CampaignLink from 'assets/images/tutorial_swap/campaign_link.png'
+import ConnectWalletImg from 'assets/images/tutorial_swap/connect_wallet.png'
+import Step5 from 'assets/images/tutorial_swap/earn_link.png'
+import Menu from 'assets/images/tutorial_swap/menu.png'
+import SelectChainBtn from 'assets/images/tutorial_swap/select_network.png'
+import SwapSetting from 'assets/images/tutorial_swap/swap_setting.png'
+import SwapSettingBtn from 'assets/images/tutorial_swap/swap_setting_btn.png'
 import WelcomeImage from 'assets/images/tutorial_swap/welcome.png'
 import { ButtonOutlined, ButtonPrimary } from 'components/Button'
 import { ToggleItemType } from 'components/Collapse'
-import { TutorialType, getTutorialVideoId } from 'components/Tutorial'
-import { SUPPORTED_WALLETS } from 'constants/index'
+import { connections } from 'constants/wallets'
 import { useActiveWeb3React } from 'hooks'
 import useMixpanel, { MIXPANEL_TYPE } from 'hooks/useMixpanel'
-import useTheme from 'hooks/useTheme'
 import { useTutorialSwapGuide } from 'state/tutorial/hooks'
-import { useIsDarkMode } from 'state/user/hooks'
 import { ExternalLink } from 'theme'
+import { filterTruthy } from 'utils'
 
 import CustomMask from './CustomMask'
 import CustomPopup from './CustomPopup'
 import TutorialMobile from './TutorialMobile'
-import { LIST_TITLE, StepCustom, TutorialIds, TutorialNumbers } from './constant'
+import { LIST_TITLE, StepTutorial, TutorialIds } from './constant'
 
 const isMobile = window.innerWidth < 1200 // best resolution for this tutorial
 
-const Heading = styled.h5`
+export const Heading = styled.h5`
   color: ${({ theme }) => theme.text};
   user-select: none;
   margin: 5px 0px 10px 0px;
@@ -39,17 +46,6 @@ const LayoutWrapper = styled.div`
   text-align: left;
   font-size: 14px;
 `
-const Title = ({ stepNumber }: { stepNumber: number }) => {
-  const theme = useTheme()
-  return (
-    <Heading style={{ display: 'flex', alignItems: 'flex-end' }}>
-      <Trans>
-        <span>Step: {stepNumber}/</span>
-        <span style={{ color: theme.subText, fontSize: '0.85em' }}>{TutorialNumbers.TOTAL_STEP}</span>
-      </Trans>
-    </Heading>
-  )
-}
 
 const Layout = ({ children, title }: { title?: string; children: React.ReactNode }) => {
   return (
@@ -84,6 +80,9 @@ const NetworkItemWrapper = styled.div`
   padding: 10px 15px;
   gap: 10px;
   cursor: pointer;
+  flex-basis: calc((100% - 10px) / 2); // 10px gap
+  min-width: 160px;
+  box-sizing: border-box;
 `
 
 const NetworkWrapper = styled.div`
@@ -92,17 +91,21 @@ const NetworkWrapper = styled.div`
   padding: 15px;
   gap: 10px;
   display: flex;
-  flex-direction: column;
+  flex-wrap: wrap;
 `
 
-const ImageMobile = ({ imageName, marginTop = false }: { imageName: string; marginTop?: boolean }) =>
+const ImageMobile = ({
+  imgSrc,
+  imageName,
+  marginTop = false,
+}: {
+  imgSrc: string
+  imageName: string
+  marginTop?: boolean
+}) =>
   isMobile ? (
     <Flex justifyContent={'center'}>
-      <img
-        style={{ marginTop: marginTop ? 20 : 0, width: '100%', maxWidth: 800 }}
-        src={require(`../../../assets/images/tutorial_swap/${imageName}`).default}
-        alt={imageName}
-      />
+      <img style={{ marginTop: marginTop ? 20 : 0, width: '100%', maxWidth: 800 }} src={imgSrc} alt={imageName} />
     </Flex>
   ) : null
 
@@ -119,40 +122,38 @@ function Welcome() {
       <img src={WelcomeImage} alt="welcome to kyberswap" style={{ maxWidth: '100%', marginTop: 10 }} />
       <Desc>
         <Trans>
-          KyberSwap is a decentralized exchange (DEX) aggregator. We provide our traders with the{' '}
-          <HighlightText>best token prices</HighlightText> by analyzing rates across thousands of exchanges instantly!
+          KyberSwap is a decentralized exchange (DEX) aggregator and an automated market maker (AMM). We provide our
+          traders with the <HighlightText>superior token prices</HighlightText> by analyzing rates across hundreds of
+          exchanges instantly! On the other hand, our liquidity providers can add liquidity to our pools to{' '}
+          <HighlightText>earn fees and rewards!</HighlightText>
         </Trans>
       </Desc>
+
       <Desc>
         <Trans>
-          KyberSwap is also an automated market maker (AMM) with industry-leading liquidity protocols and{' '}
-          <HighlightText>concentrated liquidity</HighlightText>. Liquidity providers can add liquidity to our pools &{' '}
-          <HighlightText>earn fees</HighlightText>!
+          KyberSwap also allows users to <HighlightText>trade smarter</HighlightText>. We provide various trading
+          insights so our users can get access to <HighlightText>alpha</HighlightText> instantly!
         </Trans>
       </Desc>
+
       <Desc>
         <Trans>
-          We created this <HighlightText>quick tutorial</HighlightText> guide for you to highlight KyberSwap&#39;s main
-          features.
+          Here&apos;s a quick tutorial guide about KyberSwap&apos;s main features. Do you wish to have a look?
         </Trans>
-      </Desc>
-      <Desc>
-        <Trans>Do you wish to have a look?</Trans>
       </Desc>
     </Layout>
   )
 }
 
-function Step1() {
+function ConnectWallet() {
   const [isExpanded, setIsExpanded] = useState(false)
   const toggleExpand = () => setIsExpanded(!isExpanded)
-  const isDarkMode = useIsDarkMode()
   return (
     <Layout title={LIST_TITLE.CONNECT_WALLET}>
       <Desc>
         <Trans>Choose your preferred wallet, connect it, and get started with KyberSwap!</Trans>
       </Desc>
-      <ImageMobile imageName="step1.png" />
+      <ImageMobile imgSrc={ConnectWalletImg} imageName="Step connect wallet" />
       <BrowserView>
         <Heading onClick={toggleExpand} style={{ cursor: 'pointer' }}>
           <Trans>Download Wallet</Trans>
@@ -162,16 +163,11 @@ function Step1() {
         </Heading>
         {isExpanded && (
           <NetworkWrapper>
-            {Object.values(SUPPORTED_WALLETS)
+            {Object.values(connections)
               .filter(e => e.installLink)
               .map(item => (
                 <NetworkItemWrapper key={item.name} onClick={() => window.open(item.installLink)}>
-                  <img
-                    src={require(`../../../assets/images/${isDarkMode ? '' : 'light-'}${item.iconName}`).default}
-                    alt={item.name}
-                    width="20"
-                    height="20"
-                  />
+                  <img src={item.icon} alt={item.name} style={{ width: '20px', maxHeight: '20px' }} />
                   <span>{item.name}</span>
                 </NetworkItemWrapper>
               ))}
@@ -182,53 +178,15 @@ function Step1() {
   )
 }
 
-const TouchAbleVideo = styled.div`
-  position: absolute;
-  top: 0;
-  left: 0;
-  cursor: pointer;
-  width: 100%;
-  height: 100%;
-`
-
-function Step3({ videoStyle = {} }: { videoStyle: CSSProperties }) {
-  const { mixpanelHandler } = useMixpanel()
-  const [playedVideo, setPlayedVideo] = useState(false)
-  const ref = useRef<HTMLIFrameElement | null>(null)
-
-  const playVideo = () => {
-    const iframe = ref.current
-    if (iframe) {
-      // play video
-      iframe.setAttribute('src', iframe.getAttribute('src') + '?autoplay=1')
-      mixpanelHandler(MIXPANEL_TYPE.TUTORIAL_VIEW_VIDEO_SWAP)
-      setPlayedVideo(true)
-    }
-  }
-
+function SwapForm() {
   return (
     <Layout title={LIST_TITLE.START_TRADING}>
       <Desc>
         <Trans>
-          Select from over thousands of tokens and start trading. KyberSwap finds you the best prices across multiple
+          Select from over thousands of tokens and start trading. KyberSwap finds you superior prices across multiple
           exchanges & combines them into one trade!
         </Trans>
       </Desc>
-      <div style={{ position: 'relative' }}>
-        <iframe
-          ref={ref}
-          width="100%"
-          height="100%"
-          style={videoStyle}
-          src={`https://www.youtube.com/embed/${getTutorialVideoId(TutorialType.SWAP)}`}
-          frameBorder="0"
-          title="Tutorial kyberswap"
-          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-          allowFullScreen
-        />
-        {/** because we need tracking we user click video, iframe youtube not fire any event for us. */}
-        {!playedVideo && !isMobile && <TouchAbleVideo onClick={playVideo} />}
-      </div>
     </Layout>
   )
 }
@@ -239,83 +197,80 @@ const CustomCss = createGlobalStyle`
     outline: none;
   };
 `
-const getListSteps = (isLogin: boolean) => {
+
+const Highlight = styled.span`
+  color: ${({ theme }) => theme.text};
+  font-weight: 500;
+`
+const getListSteps = (isLogin: boolean, isSolana: boolean) => {
+  let stepNumber = 0
   const isHighlightBtnConnectWallet = !isLogin || isMobile
-  return [
+  return filterTruthy([
     {
-      title: (
+      customTitleRenderer: () => (
         <Heading style={{ fontSize: 20 }}>
-          <Trans>Welcome to KyberSwap!</Trans>
+          <Trans>{LIST_TITLE.WELCOME}</Trans>
         </Heading>
       ),
       customFooterRenderer: (logic: WalktourLogic) => (
-        <Flex justifyContent={'space-between'} style={{ gap: 25, marginTop: 20 }}>
-          <ButtonOutlined onClick={() => logic.close()}>
+        <Flex justifyContent={'center'} style={{ gap: 25, marginTop: 20 }}>
+          <ButtonOutlined onClick={() => logic.close()} data-testid="button-skip-tutorial" width="160px" height="36px">
             <Trans>Maybe later</Trans>
           </ButtonOutlined>
-          <ButtonPrimary onClick={() => logic.next()}>
+          <ButtonPrimary onClick={() => logic.next()} width="160px" height="36px">
             <Trans>Let’s get started</Trans>
           </ButtonPrimary>
         </Flex>
       ),
-      stepNumber: 0,
+      stepNumber: stepNumber++,
       description: <Welcome />,
       pcOnly: true,
       center: true,
-      popupStyle: { width: 500 },
+      popupStyle: { width: 800 },
     },
     {
       selector: isHighlightBtnConnectWallet ? TutorialIds.BUTTON_CONNECT_WALLET : TutorialIds.BUTTON_ADDRESS_WALLET,
-      title: isMobile ? (
-        isHighlightBtnConnectWallet ? (
-          LIST_TITLE.CONNECT_WALLET
-        ) : (
-          LIST_TITLE.YOUR_WALLET
-        )
-      ) : (
-        <Title stepNumber={1} />
-      ),
-      stepNumber: 1,
-      description: <Step1 />,
+      title: isHighlightBtnConnectWallet ? LIST_TITLE.CONNECT_WALLET : LIST_TITLE.YOUR_WALLET,
+      stepNumber: stepNumber++,
+      description: <ConnectWallet />,
       orientationPreferences: [CardinalOrientation.SOUTHEAST, CardinalOrientation.NORTHWEST],
     },
     {
       selector: TutorialIds.SELECT_NETWORK,
-      title: isMobile ? LIST_TITLE.SELECT_NETWORK : <Title stepNumber={2} />,
-      stepNumber: 2,
+      title: LIST_TITLE.SELECT_NETWORK,
+      stepNumber: stepNumber++,
       description: (
         <Layout title={LIST_TITLE.SELECT_NETWORK}>
           <Desc>
             <Trans>
-              Choose your preferred network. KyberSwap is a multi chain platform that supports over 12 networks!
+              Choose your preferred network. KyberSwap is a multi-chain platform that supports over 13 chains!
             </Trans>
           </Desc>
-          <ImageMobile imageName="step2.png" />
+          <ImageMobile imgSrc={SelectChainBtn} imageName="Step select chain" />
         </Layout>
       ),
       orientationPreferences: [CardinalOrientation.SOUTHEAST, CardinalOrientation.NORTHWEST],
     },
     {
       selector: TutorialIds.SWAP_FORM,
-      title: isMobile ? LIST_TITLE.START_TRADING : <Title stepNumber={3} />,
-      stepNumber: 3,
-      description: <Step3 videoStyle={{ minHeight: Math.min(window.innerHeight / 2, 500) }} />,
-      popupStyle: { width: Math.min(0.8 * window.innerWidth, 700) },
-      requiredClickSelector: '#' + TutorialIds.BUTTON_SETTING_SWAP_FORM,
-      selectorHint: '#' + TutorialIds.SWAP_FORM_CONTENT,
+      title: LIST_TITLE.START_TRADING,
+      stepNumber: stepNumber++,
+      description: <SwapForm />,
+      requiredClickSelector: TutorialIds.BUTTON_SETTING_SWAP_FORM,
+      selectorHint: TutorialIds.SWAP_FORM_CONTENT,
     },
     {
       selector: TutorialIds.BUTTON_SETTING_SWAP_FORM,
-      title: isMobile ? LIST_TITLE.SETTING : <Title stepNumber={4} />,
-      stepNumber: 4,
+      title: LIST_TITLE.SETTING,
+      stepNumber: stepNumber,
       maskPadding: 10,
       description: (
         <Layout title={LIST_TITLE.SETTING}>
           <Desc>
-            <Trans>You can customize advanced settings like slippage and other display settings here.</Trans>
+            <Trans>Customize the layout & the look and feel of your trading interface!</Trans>
           </Desc>
-          <ImageMobile imageName="step4.1.png" />
-          <ImageMobile imageName="step4.2.png" marginTop />
+          <ImageMobile imgSrc={SwapSettingBtn} imageName="Step setting" />
+          <ImageMobile imgSrc={SwapSetting} imageName="Step setting" marginTop />
         </Layout>
       ),
       hasPointer: true,
@@ -324,17 +279,14 @@ const getListSteps = (isLogin: boolean) => {
     },
     {
       selector: TutorialIds.SWAP_FORM,
-      title: isMobile ? LIST_TITLE.SETTING : <Title stepNumber={4} />,
-      stepNumber: 4,
-      requiredClickSelector: '#' + TutorialIds.BUTTON_SETTING_SWAP_FORM,
-      selectorHint: '#' + TutorialIds.TRADING_SETTING_CONTENT,
+      title: LIST_TITLE.SETTING,
+      stepNumber: stepNumber++,
+      requiredClickSelector: TutorialIds.BUTTON_SETTING_SWAP_FORM,
+      selectorHint: TutorialIds.TRADING_SETTING_CONTENT,
       description: (
         <Layout title={LIST_TITLE.SETTING}>
           <Desc>
-            <Trans>Adjust the advanced settings for your trades like the max slippage.</Trans>
-          </Desc>
-          <Desc>
-            <Trans>Personalize your trading interface in the display settings</Trans>
+            <Trans>Customize the layout & the look and feel of your trading interface!</Trans>
           </Desc>
         </Layout>
       ),
@@ -345,24 +297,22 @@ const getListSteps = (isLogin: boolean) => {
     },
     {
       selector: TutorialIds.BRIDGE_LINKS,
-      title: isMobile ? LIST_TITLE.BRIDGE : <Title stepNumber={5} />,
-      stepNumber: 5,
+      title: LIST_TITLE.BRIDGE,
+      stepNumber: stepNumber++,
       description: (
         <Layout title={LIST_TITLE.BRIDGE}>
           <Desc>
-            <Trans>
-              You can <b>Buy crypto easily with over 50+ currencies using a wide range of payment options!</b> or{' '}
-              <b>Easily transfer tokens from one chain to another</b>
-            </Trans>
+            <Trans> You can place limit orders, bridge tokens, or buy crypto with multiple payment options!</Trans>
           </Desc>
         </Layout>
       ),
       orientationPreferences: [CardinalOrientation.SOUTH],
+      popupStyle: { width: 430 },
     },
-    {
+    !isSolana && {
       selector: TutorialIds.EARNING_LINKS,
-      title: isMobile ? LIST_TITLE.EARN : <Title stepNumber={6} />,
-      stepNumber: 6,
+      title: LIST_TITLE.EARN,
+      stepNumber: stepNumber++,
       description: (
         <Layout title={LIST_TITLE.EARN}>
           <Desc>
@@ -370,51 +320,64 @@ const getListSteps = (isLogin: boolean) => {
               Add liquidity into our Pools to earn trading fees & participate in our Farms to earn additional rewards!
             </Trans>
           </Desc>
-          <ImageMobile imageName="step5.png" />
-        </Layout>
-      ),
-      orientationPreferences: [CardinalOrientation.SOUTH],
-    },
-    {
-      selector: TutorialIds.CAMPAIGN_LINK,
-      title: isMobile ? LIST_TITLE.CAMPAIGN : <Title stepNumber={7} />,
-      stepNumber: 7,
-      description: (
-        <Layout title={LIST_TITLE.CAMPAIGN}>
-          <Desc>
-            <Trans>Check out our latest trading campaigns and participate in them to earn rewards!</Trans>
-          </Desc>
-          <ImageMobile imageName="menu.png" />
-          <ImageMobile imageName="step7.png" marginTop />
+          <ImageMobile imgSrc={Step5} imageName="Step earn" />
         </Layout>
       ),
       orientationPreferences: [CardinalOrientation.SOUTH],
     },
     {
       selector: TutorialIds.DISCOVER_LINK,
-      title: isMobile ? LIST_TITLE.DISCOVER : <Title stepNumber={8} />,
-      stepNumber: 8,
+      title: LIST_TITLE.DISCOVER,
+      stepNumber: stepNumber++,
       description: (
         <Layout title={LIST_TITLE.DISCOVER}>
           <Desc>
             <Trans>
-              Discover tokens before they start trending in the future! We analyze thousands of potential tokens &
-              filter out the best ones for you!
+              Whether you&apos;re looking to identify new tokens to trade, or get <Highlight>alpha</Highlight> on a
+              specific token, KyberAI has it all! It provides trading insights on <Highlight>4000+ tokens</Highlight>{' '}
+              across <Highlight>7 blockchains!</Highlight>
             </Trans>
           </Desc>
-          <ImageMobile imageName="menu.png" />
-          <ImageMobile imageName="step6.png" marginTop />
         </Layout>
       ),
       orientationPreferences: [CardinalOrientation.SOUTH, CardinalOrientation.SOUTHEAST],
     },
     {
+      selector: TutorialIds.CAMPAIGN_LINK,
+      title: LIST_TITLE.CAMPAIGN,
+      stepNumber: stepNumber++,
+      description: (
+        <Layout title={LIST_TITLE.CAMPAIGN}>
+          <Desc>
+            <Trans>Check out our latest trading campaigns and participate in them to earn rewards!</Trans>
+          </Desc>
+          <ImageMobile imgSrc={Menu} imageName="Menu" />
+          <ImageMobile imgSrc={CampaignLink} imageName="Step campaign" marginTop />
+        </Layout>
+      ),
+      orientationPreferences: [CardinalOrientation.SOUTH],
+    },
+    {
+      selector: TutorialIds.KYBER_DAO_LINK,
+      title: LIST_TITLE.KYBER_DAO,
+      stepNumber: stepNumber++,
+      description: (
+        <Layout title={LIST_TITLE.KYBER_DAO}>
+          <Desc>
+            <Trans>Stake KNC tokens to vote on proposals that shape Kyber&apos;s future and earn KNC rewards!</Trans>
+          </Desc>
+        </Layout>
+      ),
+      orientationPreferences: [CardinalOrientation.SOUTH],
+    },
+    {
       selector: TutorialIds.BUTTON_VIEW_GUIDE_SWAP,
-      title: isMobile ? LIST_TITLE.VIEW_GUIDE : <Title stepNumber={9} />,
-      stepNumber: 9,
+      title: LIST_TITLE.VIEW_GUIDE,
+      stepNumber: stepNumber++,
       maskPadding: 10,
-      requiredClickSelector: '#' + TutorialIds.BUTTON_SETTING,
+      requiredClickSelector: TutorialIds.BUTTON_MENU_HEADER,
       stopPropagationMouseDown: true,
+      lastStep: true,
       description: (
         <Layout title={LIST_TITLE.VIEW_GUIDE}>
           <Desc>
@@ -428,22 +391,23 @@ const getListSteps = (isLogin: boolean) => {
               <ExternalLink href="https://docs.kyberswap.com/guides/getting-started">click here.</ExternalLink>
             </Trans>
           </Desc>
-          <ImageMobile imageName="step8.1.png" />
-          <ImageMobile imageName="step8.2.png" marginTop />
+          <ImageMobile imgSrc={BtnSettingHeader} imageName="Step review" marginTop />
+          <ImageMobile imgSrc={ButtonSwapGuide} imageName="Step review" />
         </Layout>
       ),
     },
-  ]
+  ])
 }
 
-const TutorialKeys = {
+export const TutorialKeys = {
   SHOWED_SWAP_GUIDE: 'showedTutorialSwapGuide',
+  SHOWED_LO_GUIDE: 'showedTutorialLO',
 }
 
 export default memo(function TutorialSwap() {
   const [{ show = false, step = 0 }, setShowTutorial] = useTutorialSwapGuide()
   const stopTutorial = () => setShowTutorial({ show: false })
-  const { account } = useActiveWeb3React()
+  const { account, isSolana } = useActiveWeb3React()
   const { mixpanelHandler } = useMixpanel()
 
   useEffect(() => {
@@ -455,7 +419,7 @@ export default memo(function TutorialSwap() {
   }, [setShowTutorial])
 
   const steps = useMemo(() => {
-    const list = getListSteps(!!account)
+    const list = getListSteps(!!account, isSolana)
     if (isMobile) {
       return list
         .filter(e => !e.pcOnly)
@@ -464,14 +428,18 @@ export default memo(function TutorialSwap() {
           content: description,
         }))
     }
-    return list.map(e => ({
-      ...e,
-      description: e.description as unknown as string, // because this lib type check description is string but actually it accept any
-      selector: '#' + e.selector,
-    }))
-  }, [account])
+    return list.map(e => {
+      if (e.requiredClickSelector) e.requiredClickSelector = '#' + e.requiredClickSelector
+      if (e.selectorHint) e.selectorHint = '#' + e.selectorHint
+      return {
+        ...e,
+        description: e.description as unknown as string, // because this lib type check description is string but actually it accept any
+        selector: '#' + e.selector,
+      }
+    })
+  }, [account, isSolana])
 
-  const stepInfo = (steps[step] || {}) as StepCustom
+  const stepInfo = (steps[step] || {}) as StepTutorial
 
   const onDismiss = (logic: WalktourLogic) => {
     const { stepNumber } = stepInfo
@@ -485,7 +453,7 @@ export default memo(function TutorialSwap() {
     stopTutorial()
   }
 
-  const checkRequiredClick = (nextStep: StepCustom) => {
+  const checkRequiredClick = (nextStep: StepTutorial) => {
     const { requiredClickSelector, selectorHint } = nextStep
     const needClick = requiredClickSelector && !document.querySelector(selectorHint || nextStep?.selector)
     // target next step has not render yet, => click other button to render it
@@ -504,7 +472,7 @@ export default memo(function TutorialSwap() {
     callbackEndStep && callbackEndStep()
     setTimeout(
       () => {
-        setShowTutorial({ step: nextIndex })
+        setShowTutorial({ step: nextIndex, stepInfo: allSteps[nextIndex] })
         isNext ? next() : prev()
       },
       needClickAnyElement ? 400 : 0,
@@ -512,8 +480,9 @@ export default memo(function TutorialSwap() {
   }
 
   const onNext = (logic: WalktourLogic) => {
-    const { stepIndex, close } = logic
-    if (stepIndex - 1 === TutorialNumbers.TOTAL_STEP) {
+    const { stepIndex, close, allSteps } = logic
+    const { lastStep } = allSteps[stepIndex] as StepTutorial
+    if (lastStep) {
       onFinished()
       close()
       return
@@ -527,7 +496,7 @@ export default memo(function TutorialSwap() {
   }
 
   if (!show) return null
-  if (isMobile) return <TutorialMobile isOpen={show} stopTutorial={stopTutorial} steps={steps as ToggleItemType[]} />
+  if (isMobile) return <TutorialMobile stopTutorial={stopTutorial} steps={steps as ToggleItemType[]} />
   return (
     <>
       <Walktour

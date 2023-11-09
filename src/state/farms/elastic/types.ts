@@ -15,7 +15,6 @@ export interface FarmingPool {
   startTime: number
   endTime: number
   feeTarget: string
-  vestingDuration: number
   rewardTokens: Currency[]
   totalRewards: Array<CurrencyAmount<Currency>>
   token0: Currency
@@ -26,10 +25,12 @@ export interface FarmingPool {
   feesUSD: number
   tvlToken0: TokenAmount
   tvlToken1: TokenAmount
+  stakedTvl?: number // optional as it exists in V2 only
+  apr?: number // optional as it exists in V2 only
+  poolAPR?: number // optional as it exists in V2 only
 }
 export interface ElasticFarm {
-  id: string // farm contract
-  rewardLocker: string
+  id: string // fair launch contract
   pools: Array<FarmingPool>
 }
 
@@ -49,12 +50,14 @@ export class NFTPosition extends Position {
 }
 
 export interface UserInfo {
-  depositedPositions: NFTPosition[]
   joinedPositions: {
     [pid: string]: NFTPosition[]
   }
   rewardPendings: {
     [pid: string]: Array<CurrencyAmount<Currency>>
+  }
+  rewardByNft: {
+    [pid_nftId: string]: Array<CurrencyAmount<Currency>>
   }
 }
 

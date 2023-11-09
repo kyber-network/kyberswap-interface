@@ -1,5 +1,4 @@
 import { lighten, rgba } from 'polished'
-import { Flex } from 'rebass'
 import styled from 'styled-components'
 
 import { ButtonEmpty } from 'components/Button'
@@ -18,20 +17,9 @@ export const PoolsPageWrapper = styled.div`
   gap: 20px;
 `
 
-export const ToolbarWrapper = styled.div`
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-`
-
 export const CurrencyWrapper = styled.div`
   display: flex;
   align-items: center;
-`
-
-export const SearchWrapper = styled(Flex)`
-  align-items: center;
-  gap: 12px;
 `
 
 export const SelectPairInstructionWrapper = styled.div`
@@ -50,17 +38,30 @@ export const IconWrapper = styled.div`
   align-items: center;
 `
 
-export const ButtonIcon = styled(ButtonEmpty)`
-  background: ${({ theme }) => rgba(theme.subText, 0.2)};
+export const ButtonIcon = styled(ButtonEmpty)<{ color?: string }>`
+  background: ${({ theme, color }) => rgba(color || theme.subText, 0.2)};
   width: 28px;
   min-width: 28px;
   height: 28px;
   min-height: 28px;
   border-radius: 50%;
   padding: 0;
-  color: ${({ theme }) => theme.subText} !important;
+  color: ${({ theme, color }) => color || theme.subText} !important;
 
   :hover {
-    background: ${({ theme }) => lighten(0.4, rgba(theme.subText, 0.2))};
+    background: ${({ theme, color }) => lighten(0.4, rgba(color || theme.subText, 0.2))};
   }
+`
+
+export const Tab = styled.div<{ active?: boolean }>`
+  padding: 6px 12px;
+  background: ${({ theme, active }) => (active ? theme.tabActive : 'transparent')};
+  border-radius: 999px;
+  cursor: pointer;
+  color: ${({ active, theme }) => (active ? theme.text : theme.subText)};
+  font-weight: 500;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 `

@@ -5,9 +5,10 @@ export interface Dex {
   name: string
   logoURL: string
   id: string
+  sortId: number
 }
 
-export interface CustomizeDexeState {
+interface CustomizeDexeState {
   excludeDexes: Partial<Record<ChainId, string[]>>
   allDexes: Partial<Record<ChainId, Dex[]>>
 }
@@ -20,7 +21,7 @@ const slice = createSlice({
       if (!state.allDexes) state.allDexes = {}
       state.allDexes[chainId] = dexes
     },
-    updateExcludeDex(state, { payload: { chainId, dexes } }: { payload: { chainId: ChainId; dexes: string[] } }) {
+    updateExcludeDex(state, { payload: { chainId, dexes } }: { payload: { chainId: ChainId; dexes: Dex['name'][] } }) {
       if (!state.excludeDexes) state.excludeDexes = {}
       state.excludeDexes[chainId] = dexes
     },

@@ -1,29 +1,20 @@
 import { gql } from '@apollo/client'
 
-import { BUNDLE_ID } from '../../constants'
-
-export const SUBGRAPH_BLOCK_NUMBER = () => gql`
-  query block_number {
-    _meta {
-      block {
-        number
-      }
-    }
-  }
-`
+import { BUNDLE_ID } from 'constants/index'
+import { Block } from 'data/type'
 
 export const ETH_PRICE = (block?: number) => {
   const queryString = block
     ? `
-    query bundles {
-      bundles(where: { id: ${BUNDLE_ID} } block: {number: ${block}}) {
+    query ethPriceByBlock {
+      bundles(where: { id: ${BUNDLE_ID} }, block: {number: ${block}}, subgraphError: allow) {
         id
         ethPrice
       }
     }
   `
-    : ` query bundles {
-      bundles(where: { id: ${BUNDLE_ID} }) {
+    : ` query ethPrice {
+      bundles(where: { id: ${BUNDLE_ID} }, subgraphError: allow) {
         id
         ethPrice
       }
@@ -35,15 +26,15 @@ export const ETH_PRICE = (block?: number) => {
 export const PROMM_ETH_PRICE = (block?: number) => {
   const queryString = block
     ? `
-    query bundles {
-      bundles(where: { id: ${BUNDLE_ID} } block: {number: ${block}}) {
+    query ethPriceElasticByBlock {
+      bundles(where: { id: ${BUNDLE_ID} }, block: {number: ${block}}, subgraphError: allow) {
         id
         ethPriceUSD
       }
     }
   `
-    : ` query bundles {
-      bundles(where: { id: ${BUNDLE_ID} }) {
+    : ` query ethPriceElastic {
+      bundles(where: { id: ${BUNDLE_ID} }, subgraphError: allow) {
         id
         ethPriceUSD
       }
@@ -54,8 +45,8 @@ export const PROMM_ETH_PRICE = (block?: number) => {
 
 export const TOKEN_DERIVED_ETH = (tokenAddress: string) => {
   const queryString = `
-    query tokens {
-      tokens(where: { id: "${tokenAddress.toLowerCase()}"} ) {
+    query tokenDerivedETH {
+      tokens(where: { id: "${tokenAddress.toLowerCase()}"}, subgraphError: allow) {
         derivedETH
       }
     }
@@ -66,7 +57,7 @@ export const TOKEN_DERIVED_ETH = (tokenAddress: string) => {
 
 export const GLOBAL_DATA_ELASTIC = () => {
   const queryString = `query factories {
-    factories {
+    factories(subgraphError: allow) {
         id
         poolCount
         txCount
@@ -84,7 +75,7 @@ export const GLOBAL_DATA_ELASTIC = () => {
 
 export const GLOBAL_DATA = (block?: number) => {
   const queryString = `query dmmFactories {
-    dmmFactories${block ? `(block: { number: ${block}})` : ``} {
+    dmmFactories${block ? `(block: { number: ${block}}, subgraphError: allow)` : `(subgraphError: allow)`} {
         id
         totalVolumeUSD
         totalFeeUSD
@@ -103,12 +94,13 @@ export const GLOBAL_DATA = (block?: number) => {
 }
 
 export const GET_BLOCK = gql`
-  query blocks($timestampFrom: Int!, $timestampTo: Int!) {
+  query blockByTimestamps($timestampFrom: Int!, $timestampTo: Int!) {
     blocks(
       first: 1
       orderBy: timestamp
       orderDirection: asc
       where: { timestamp_gt: $timestampFrom, timestamp_lt: $timestampTo }
+      subgraphError: allow
     ) {
       id
       number
@@ -117,8 +109,8 @@ export const GET_BLOCK = gql`
   }
 `
 
-export const GET_BLOCKS = (timestamps: number[]) => {
-  let queryString = 'query blocks {'
+export const GET_BLOCKS = (timestamps: number[]): import('graphql').DocumentNode => {
+  let queryString = 'query blocksByTimestamps {'
   queryString += timestamps.map(timestamp => {
     return `t${timestamp}:blocks(first: 1, orderBy: timestamp, orderDirection: desc, where: { timestamp_gt: ${timestamp}, timestamp_lt: ${
       timestamp + 600
@@ -173,8 +165,8 @@ const PoolFields = (withFee?: boolean) => `
 `
 
 export const USER_POSITIONS = gql`
-  query liquidityPositions($user: Bytes!) {
-    liquidityPositions(where: { user: $user }) {
+  query userPositions($user: Bytes!) {
+    liquidityPositions(where: { user: $user }, subgraphError: allow) {
       pair {
         id
         reserve0
@@ -214,24 +206,10 @@ export const USER_POSITIONS = gql`
   }
 `
 
-export const USER_LIQUIDITY_POSITION_SNAPSHOTS = gql`
-  query liquidityPositionSnapshots($account: String!) {
-    liquidityPositionSnapshots(where: { user: $account }) {
-      pool {
-        id
-      }
-      liquidityTokenBalance
-      liquidityTokenTotalSupply
-      reserveUSD
-      timestamp
-    }
-  }
-`
-
 export const POOL_DATA = (poolAddress: string, block: number, withFee?: boolean) => {
   const queryString = `
-    query pools {
-      pools(${block ? `block: {number: ${block}}` : ``} where: { id: "${poolAddress}"} ) {
+    query poolByBlock {
+      pools(${block ? `block: {number: ${block}}` : ``} where: { id: "${poolAddress}"}, subgraphError: allow) {
         ${PoolFields(withFee)}
       }
     }
@@ -240,9 +218,26 @@ export const POOL_DATA = (poolAddress: string, block: number, withFee?: boolean)
   return gql(queryString)
 }
 
+export const HOURLY_POOL_RATES = (blocks: Block[], poolAddress: string): import('graphql').DocumentNode => {
+  let queryString = 'query poolPriceByBlocks {'
+  queryString += blocks.map(
+    block => `
+      t${block.timestamp}: pool(id:"${poolAddress.toLowerCase()}", block: { number: ${
+      block.number
+    } }, subgraphError: allow) {
+        token0Price
+        token1Price
+      }
+    `,
+  )
+
+  queryString += '}'
+  return gql(queryString)
+}
+
 export const POOL_COUNT = gql`
   {
-    dmmFactories {
+    dmmFactories(subgraphError: allow) {
       poolCount
     }
   }
@@ -256,8 +251,10 @@ export const POOLS_BULK_FROM_LIST = (pools: string[], withFee?: boolean) => {
   poolsString += ']'
 
   const queryString = `
-  query pools {
-    pools(first: ${pools.length}, where: {id_in: ${poolsString}}, orderBy: reserveUSD, orderDirection: desc) {
+  query poolsBulk {
+    pools(first: ${
+      pools.length || 1000
+    }, where: {id_in: ${poolsString}}, orderBy: reserveUSD, orderDirection: desc, subgraphError: allow) {
         ${PoolFields(withFee)}
     }
   }
@@ -270,8 +267,8 @@ export const POOLS_BULK_FROM_LIST = (pools: string[], withFee?: boolean) => {
 
 export const POOLS_BULK_WITH_PAGINATION = (first: number, skip: number, withFee?: boolean) => {
   const queryString = `
-  query pools {
-    pools(first: ${first}, skip: ${skip}) {
+  query poolsPagination {
+    pools(first: ${first}, skip: ${skip}, subgraphError: allow) {
       ${PoolFields(withFee)}
     }
   }
@@ -290,10 +287,10 @@ export const POOLS_HISTORICAL_BULK_FROM_LIST = (block: number, pools: string[], 
   poolsString += ']'
 
   const queryString = `
-  query pools {
+  query poolsBulkByBlock {
     pools(first: ${
-      pools.length
-    }, where: {id_in: ${poolsString}}, block: {number: ${block}}, orderBy: reserveUSD, orderDirection: desc) {
+      pools.length || 1000
+    }, where: {id_in: ${poolsString}}, block: {number: ${block}}, orderBy: reserveUSD, orderDirection: desc, subgraphError: allow) {
       id
       reserveUSD
       trackedReserveETH
@@ -316,8 +313,8 @@ export const POOLS_HISTORICAL_BULK_WITH_PAGINATION = (
   withFee?: boolean,
 ) => {
   const queryString = `
-  query pools {
-    pools(first: ${first}, skip: ${skip}, block: {number: ${block}}) {
+  query poolsByBlock {
+    pools(first: ${first}, skip: ${skip}, block: {number: ${block}}, subgraphError: allow) {
       id
       reserveUSD
       trackedReserveETH
@@ -332,29 +329,6 @@ export const POOLS_HISTORICAL_BULK_WITH_PAGINATION = (
 
   return gql(queryString)
 }
-
-export const FARM_DATA = gql`
-  query farmData($poolsList: [Bytes]!) {
-    pools(where: { id_in: $poolsList }) {
-      id
-      token0 {
-        id
-        symbol
-        name
-        decimals
-      }
-      token1 {
-        id
-        symbol
-        name
-        decimals
-      }
-      amp
-      reserveUSD
-      totalSupply
-    }
-  }
-`
 
 export const FARM_HISTORIES = gql`
   query farmHistories($user: String!) {
@@ -423,7 +397,7 @@ export const GET_POOL_VALUES_AFTER_BURNS_SUCCESS = gql`
   }
 `
 export const GET_MINT_VALUES_AFTER_CREATE_POOL_SUCCESS = gql`
-  query getPoolValuesAfterBurnsSuccess($transactionHash: String!) {
+  query getMintValuesAfterBurnsSuccess($transactionHash: String!) {
     transaction(id: $transactionHash) {
       id
       mints {

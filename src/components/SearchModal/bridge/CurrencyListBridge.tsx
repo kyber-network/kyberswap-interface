@@ -1,14 +1,13 @@
-import { Currency, CurrencyAmount } from '@kyberswap/ks-sdk-core'
-import { t } from '@lingui/macro'
+import { ChainId, Currency, CurrencyAmount } from '@kyberswap/ks-sdk-core'
 import { CSSProperties, memo, useCallback } from 'react'
 import AutoSizer from 'react-virtualized-auto-sizer'
 import { FixedSizeList } from 'react-window'
 import { Flex, Text } from 'rebass'
 
-import { useActiveWeb3React } from 'hooks'
 import useTheme from 'hooks/useTheme'
+import { formatPoolValue } from 'pages/Bridge/helpers'
 import { MultiChainTokenInfo } from 'pages/Bridge/type'
-import { useBridgeState } from 'state/bridge/hooks'
+import { useBridgeState } from 'state/crossChain/hooks'
 import { WrappedTokenInfo } from 'state/lists/wrappedTokenInfo'
 import { useCurrencyBalances } from 'state/wallet/hooks'
 
@@ -20,42 +19,48 @@ interface TokenRowPropsBridge {
   style: CSSProperties
 }
 
+export const NUM_TOKEN_SUPPORT_REACT_WINDOW = 10
+
+const EMPTY_ARRAY: WrappedTokenInfo[] = []
 const CurrencyListBridge = memo(function CurrencyListV2({
   currencies,
   isOutput,
   onCurrencySelect,
+  listTokenRef,
+  currency: selectedCurrency,
+  chainId,
 }: {
   currencies: WrappedTokenInfo[]
   onCurrencySelect: (currency: WrappedTokenInfo) => void
   isOutput: boolean | undefined
+  listTokenRef: React.Ref<HTMLDivElement>
+  currency: WrappedTokenInfo | undefined
+  chainId: ChainId | undefined
 }) {
-  const { account } = useActiveWeb3React()
-  const [{ tokenInfoIn, tokenInfoOut, poolValueOut }] = useBridgeState()
-  const currencyBalances = useCurrencyBalances(account || undefined, !isOutput ? currencies : [])
+  const [{ tokenInfoOut, poolValueOutMap }] = useBridgeState()
+  const currencyBalances = useCurrencyBalances(!isOutput ? currencies : EMPTY_ARRAY, chainId)
   const theme = useTheme()
 
   const Row: any = useCallback(
     function TokenRow({ style, currency, currencyBalance }: TokenRowPropsBridge) {
       if (!currency) return
-      const isSelected =
-        tokenInfoIn?.address?.toLowerCase() === currency?.address?.toLowerCase() ||
-        tokenInfoOut?.sortId === currency?.multichainInfo?.sortId
-      const handleSelect = () => currency && onCurrencySelect(currency)
+      const isSelected = isOutput
+        ? tokenInfoOut?.sortId === currency?.multichainInfo?.sortId
+        : selectedCurrency?.equals(currency)
+      const handleSelect = () => onCurrencySelect(currency)
       const { symbol } = getDisplayTokenInfo(currency)
       const { sortId, type, anytoken } = (currency?.multichainInfo || {}) as Partial<MultiChainTokenInfo>
-      const poolLiquidity = isOutput && anytoken?.address ? poolValueOut?.[anytoken?.address] ?? t`Unlimited` : 0
-
+      const poolLiquidity = isOutput ? formatPoolValue(poolValueOutMap?.[anytoken?.address ?? '']) : undefined
       return (
         <CurrencyRow
-          showBalance={!isOutput}
           showFavoriteIcon={false}
           style={style}
           currency={currency}
           currencyBalance={currencyBalance}
-          isSelected={isSelected}
+          isSelected={!!isSelected}
           onSelect={handleSelect}
           otherSelected={false}
-          poolLiquidity={poolLiquidity}
+          customBalance={poolLiquidity}
           customName={
             sortId !== undefined ? (
               <Flex>
@@ -69,12 +74,12 @@ const CurrencyListBridge = memo(function CurrencyListV2({
         />
       )
     },
-    [onCurrencySelect, tokenInfoIn, isOutput, tokenInfoOut, theme, poolValueOut],
+    [onCurrencySelect, isOutput, tokenInfoOut, theme, poolValueOutMap, selectedCurrency],
   )
 
   return (
-    <div style={{ flex: '1', overflow: 'auto', height: '100%' }}>
-      {isOutput ? (
+    <div style={{ flex: '1', overflow: 'hidden', height: '100%' }}>
+      {currencies.length < NUM_TOKEN_SUPPORT_REACT_WINDOW ? (
         currencies.map((item, index) => (
           <Row index={index} currency={item} key={index} currencyBalance={currencyBalances[index]} />
         ))
@@ -82,11 +87,12 @@ const CurrencyListBridge = memo(function CurrencyListV2({
         <AutoSizer>
           {({ height, width }) => (
             <FixedSizeList
-              height={height + 100}
+              height={height}
               width={width}
               itemSize={56}
               itemCount={currencies.length}
               itemData={currencies}
+              outerRef={listTokenRef}
             >
               {({ data, index, style }) => (
                 <Row

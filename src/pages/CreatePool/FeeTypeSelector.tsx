@@ -1,5 +1,5 @@
 import { Trans, t } from '@lingui/macro'
-import React, { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import styled from 'styled-components'
 
 import QuestionHelper from 'components/QuestionHelper'
@@ -43,13 +43,13 @@ const ToggleWrapper = styled.button<{ background?: string }>`
   width: 100%;
 `
 
-export interface FeeTypeSelectorProps {
+interface FeeTypeSelectorProps {
   active?: string
   onChange: (type: string) => void
   bgColor?: 'background' | 'buttonBlack'
 }
 
-export default function FeeTypeSelector({ active = 'static', onChange, bgColor = 'background' }: FeeTypeSelectorProps) {
+export default function FeeTypeSelector({ active = 'static', onChange }: FeeTypeSelectorProps) {
   const buttonsRef = useRef<any>({})
   const [activeElement, setActiveElement] = useState()
 

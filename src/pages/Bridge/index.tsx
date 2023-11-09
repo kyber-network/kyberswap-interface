@@ -1,13 +1,15 @@
 import { ChainId } from '@kyberswap/ks-sdk-core'
 import { Trans } from '@lingui/macro'
 import { useCallback, useEffect, useRef } from 'react'
+import { Navigate } from 'react-router-dom'
 import { Text } from 'rebass'
 import styled from 'styled-components'
 
 import { PageWrapper } from 'components/swapv2/styleds'
 import { useActiveWeb3React } from 'hooks'
 import useTheme from 'hooks/useTheme'
-import { useBridgeState } from 'state/bridge/hooks'
+import CrossChainLink from 'pages/CrossChain/CrossChainLink'
+import { useBridgeState } from 'state/crossChain/hooks'
 import { WrappedTokenInfo } from 'state/lists/wrappedTokenInfo'
 import { isAddress } from 'utils'
 import { isTokenNative } from 'utils/tokenInfo'
@@ -25,6 +27,30 @@ import {
 } from './helpers'
 import { MultiChainTokenInfo } from './type'
 
+const getTokenInfoWithHardcode = (
+  chainId: ChainId | undefined,
+  address: string | undefined,
+  defaultSymbol: string | undefined,
+  defaultLogoUrl: string | undefined,
+): {
+  symbol: string
+  logoUrl: string
+} => {
+  const formatAddress = address?.toLowerCase()
+  // 0x9e2DFb9912DEbB2f8cdAFc05d4c1De6b57F4D404 is WETH of multichain. It's not the official WETH on zkSync
+  if (chainId === ChainId.ZKSYNC && formatAddress === '0x9e2DFb9912DEbB2f8cdAFc05d4c1De6b57F4D404'.toLowerCase()) {
+    return {
+      symbol: 'WETH',
+      logoUrl: defaultLogoUrl || '',
+    }
+  }
+
+  return {
+    symbol: defaultSymbol || '',
+    logoUrl: defaultLogoUrl || '',
+  }
+}
+
 const Container = styled.div`
   display: flex;
   flex-direction: column;
@@ -35,6 +61,7 @@ const Content = styled.div`
   justify-content: center;
   gap: 48px;
   width: 100%;
+  margin-bottom: 24px;
   ${({ theme }) => theme.mediaWidth.upToMedium`
     gap: 24px;
     flex-direction: column;
@@ -56,7 +83,7 @@ function timeout() {
 }
 export default function Bridge() {
   const theme = useTheme()
-  const { chainId } = useActiveWeb3React()
+  const { chainId, isSolana } = useActiveWeb3React()
   const [{ tokenInfoIn, chainIdOut }, setBridgeState] = useBridgeState()
   const curChainId = useRef(chainId)
   curChainId.current = chainId
@@ -68,8 +95,9 @@ export default function Bridge() {
       const result: WrappedTokenInfo[] = []
       Object.keys(tokens).forEach(key => {
         const token = { ...tokens[key] } as MultiChainTokenInfo
-        const { address, logoUrl, name, decimals, symbol } = token
-        if (!isAddress(address)) {
+        const { address, name, decimals } = token
+        const { logoUrl, symbol } = getTokenInfoWithHardcode(chainIdRequest, token.address, token.symbol, token.logoUrl)
+        if (!isAddress(chainId, address)) {
           return
         }
         token.key = key
@@ -90,7 +118,7 @@ export default function Bridge() {
       })
       setBridgeState({ listTokenIn: result, tokenIn: native || result[0], loadingToken: false })
     },
-    [setBridgeState],
+    [chainId, setBridgeState],
   )
 
   useEffect(() => {
@@ -108,10 +136,7 @@ export default function Bridge() {
           setBridgeLocalstorage(BridgeLocalStorageKeys.TOKEN_VERSION, version)
         }
 
-        const data = await Promise.allSettled([
-          getChainlist(isStaleData),
-          chainId ? getTokenlist(chainId, isStaleData) : Promise.reject(),
-        ])
+        const data = await Promise.allSettled([getChainlist(isStaleData), getTokenlist(chainId, isStaleData)])
         if (data[0].status === 'fulfilled') {
           const listChainIn = data[0].value
           setBridgeState({ listChainIn })
@@ -132,7 +157,7 @@ export default function Bridge() {
 
   useEffect(() => {
     const destChainInfo = tokenInfoIn?.destChains || {}
-    if (!chainIdOut || !tokenInfoIn || !chainId) {
+    if (!chainIdOut || !tokenInfoIn) {
       setBridgeState({ listTokenOut: [] })
       return
     }
@@ -142,7 +167,7 @@ export default function Bridge() {
       const token = { ...map[hash] }
       token.key = hash
       const { decimals, name, address, symbol } = token as MultiChainTokenInfo
-      if (!isAddress(address)) return
+      if (!isAddress(chainId, address)) return
       listTokenOut.push(
         new WrappedTokenInfo({
           chainId: chainIdOut,
@@ -158,6 +183,7 @@ export default function Bridge() {
     setBridgeState({ listTokenOut })
   }, [chainIdOut, tokenInfoIn, chainId, setBridgeState])
 
+  if (isSolana) return <Navigate to="/" />
   return (
     <PageWrapper>
       <Disclaimer />
@@ -172,6 +198,7 @@ export default function Bridge() {
             </Text>
           </div>
           <SwapForm />
+          <CrossChainLink />
         </Container>
         <BridgeHistory />
       </Content>

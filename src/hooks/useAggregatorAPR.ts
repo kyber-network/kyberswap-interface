@@ -1,11 +1,15 @@
 import useSWR from 'swr'
 
+import { AGGREGATOR_STATS_API } from 'constants/env'
+import { VERSION } from 'constants/v2'
+
 interface APRResponse {
   max_apr: {
     value: number
     id: string
     chain_id: number
     is_farm: boolean
+    type?: VERSION.CLASSIC | VERSION.ELASTIC
   }
   total_earnings: number
 }
@@ -13,7 +17,7 @@ interface APRResponse {
 export default function useAggregatorAPR(): APRResponse {
   const fetcher = (url: string) => fetch(url).then(r => r.json())
 
-  const url = `${process.env.REACT_APP_AGGREGATOR_STATS_API}/api/max-apr-and-total-earning`
+  const url = `${AGGREGATOR_STATS_API}/api/max-apr-and-total-earning`
 
   const { data, error } = useSWR(url, fetcher, {
     refreshInterval: 10000,

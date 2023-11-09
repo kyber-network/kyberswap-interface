@@ -1,24 +1,17 @@
-import { Trans, t } from '@lingui/macro'
+import { Trans } from '@lingui/macro'
 import React from 'react'
 import { isMobile } from 'react-device-detect'
 import { ChevronRight } from 'react-feather'
 import { Flex } from 'rebass'
 import styled from 'styled-components'
 
-import QuestionHelper from 'components/QuestionHelper'
+import { MouseoverTooltip, TextDashed } from 'components/Tooltip'
 import useTheme from 'hooks/useTheme'
 import { useAllDexes, useExcludeDexes } from 'state/customizeDexes/hooks'
 
 type Props = {
   onClick: () => void
 }
-
-const SettingLabel = styled.span`
-  font-size: ${isMobile ? '14px' : '12px'};
-  color: ${({ theme }) => theme.text};
-  font-weight: 400;
-  line-height: 16px;
-`
 
 const Group = styled.div`
   display: flex;
@@ -56,15 +49,21 @@ const LiquiditySourcesSetting: React.FC<Props> = ({ onClick }) => {
       onClick={onClick}
     >
       <Group>
-        <SettingLabel>
-          <Trans>Liquidity Sources</Trans>
-        </SettingLabel>
-        <QuestionHelper text={t`Your trade is routed through one or more of these liquidity sources`} />
+        <TextDashed fontSize={12} fontWeight={400} color={theme.subText} underlineColor={theme.border}>
+          <MouseoverTooltip
+            text={<Trans>Your trade is routed through one or more of these liquidity sources.</Trans>}
+            placement="right"
+          >
+            <Trans>Liquidity Sources</Trans>
+          </MouseoverTooltip>
+        </TextDashed>
       </Group>
 
       <Group>
         <NumberOfSources>
-          {selectedDexes.length || numberOfDEXes} out of {numberOfDEXes} selected
+          <Trans>
+            {selectedDexes.length || numberOfDEXes} out of {numberOfDEXes} selected
+          </Trans>
         </NumberOfSources>
         <ChevronRight size={20} color={theme.subText} />
       </Group>

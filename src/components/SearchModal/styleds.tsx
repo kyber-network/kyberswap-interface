@@ -1,36 +1,7 @@
 import { Search } from 'react-feather'
 import styled from 'styled-components'
 
-import { AutoColumn } from '../Column'
-import { RowFixed } from '../Row'
-
-export const ModalInfo = styled.div`
-  ${({ theme }) => theme.flexRowNoWrap}
-  align-items: center;
-  padding: 1rem 1rem;
-  margin: 0.25rem 0.5rem;
-  justify-content: center;
-  flex: 1;
-  user-select: none;
-`
-
-export const FadedSpan = styled(RowFixed)`
-  color: ${({ theme }) => theme.primary};
-  font-size: 14px;
-`
-
-export const TextDot = styled.div`
-  height: 3px;
-  width: 3px;
-  background-color: ${({ theme }) => theme.text2};
-  border-radius: 50%;
-`
-
-export const Checkbox = styled.input`
-  border: 1px solid ${({ theme }) => theme.red3};
-  height: 20px;
-  margin: 0;
-`
+import { AutoColumn } from 'components/Column'
 
 export const PaddedColumn = styled(AutoColumn)`
   padding: 20px;
@@ -84,10 +55,4 @@ export const Separator = styled.div`
   width: 100%;
   height: 1px;
   background-color: ${({ theme }) => theme.border};
-`
-
-export const SeparatorDark = styled.div`
-  width: 100%;
-  height: 1px;
-  background-color: ${({ theme }) => theme.bg3};
 `

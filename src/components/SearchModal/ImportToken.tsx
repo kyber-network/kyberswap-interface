@@ -1,26 +1,23 @@
 import { Currency, Token } from '@kyberswap/ks-sdk-core'
 import { Trans, t } from '@lingui/macro'
 import { transparentize } from 'polished'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect } from 'react'
 import { AlertTriangle, ArrowLeft } from 'react-feather'
 import { Flex, Text } from 'rebass'
 import styled from 'styled-components'
 
 import { ButtonPrimary } from 'components/Button'
 import Card from 'components/Card'
-import Checkbox from 'components/CheckBox'
 import { AutoColumn } from 'components/Column'
 import CopyHelper from 'components/Copy'
 import CurrencyLogo from 'components/CurrencyLogo'
-import { RowBetween, RowFixed } from 'components/Row'
-import { SectionBreak } from 'components/swap/styleds'
-import { useActiveWeb3React } from 'hooks'
+import { RowBetween } from 'components/Row'
 import useTheme from 'hooks/useTheme'
 import { useAddUserToken } from 'state/user/hooks'
 import { CloseIcon, TYPE } from 'theme'
+import { ExternalLinkIcon } from 'theme/components'
 import { getEtherscanLink, shortenAddress } from 'utils'
 
-import { ExternalLinkIcon } from '../../theme/components'
 import { PaddedColumn } from './styleds'
 
 const Wrapper = styled.div`
@@ -29,10 +26,15 @@ const Wrapper = styled.div`
   overflow: auto;
 `
 
-const WarningWrapper = styled(Card)<{ highWarning: boolean }>`
-  background-color: ${({ theme, highWarning }) =>
-    highWarning ? transparentize(0.8, theme.red1) : transparentize(0.8, theme.yellow2)};
+const WarningWrapper = styled(Card)`
+  background-color: ${({ theme }) => transparentize(0.8, theme.warning)};
   width: fit-content;
+`
+
+const SectionBreak = styled.div`
+  height: 1px;
+  width: 100%;
+  background-color: ${({ theme }) => theme.bg3};
 `
 
 const AddressText = styled.div`
@@ -42,8 +44,11 @@ const AddressText = styled.div`
 `}
 `
 
-const DescText = styled.p`
+const DescText = styled.div`
   font-size: 14px;
+  color: ${({ theme }) => theme.warning};
+  font-weight: 500;
+  margin-left: 8px;
 `
 
 interface ImportProps {
@@ -51,20 +56,19 @@ interface ImportProps {
   tokens: Token[]
   onBack?: () => void
   onDismiss?: () => void
-  handleCurrencySelect?: (currency: Currency) => void
+  handleCurrencySelect?: (currency: Currency[]) => void
 }
 
 export function ImportToken({ enterToImport = false, tokens, onBack, onDismiss, handleCurrencySelect }: ImportProps) {
   const theme = useTheme()
 
-  const { chainId } = useActiveWeb3React()
-  const [agree, setAgree] = useState(false)
-
   const addToken = useAddUserToken()
+
   const onClickImport = useCallback(() => {
     tokens.forEach(addToken)
-    handleCurrencySelect?.(tokens[0])
+    handleCurrencySelect?.(tokens)
   }, [tokens, addToken, handleCurrencySelect])
+
   useEffect(() => {
     function onKeydown(e: KeyboardEvent) {
       if (e.key === 'Enter' && enterToImport) {
@@ -84,11 +88,21 @@ export function ImportToken({ enterToImport = false, tokens, onBack, onDismiss, 
         <RowBetween>
           {onBack ? <ArrowLeft style={{ cursor: 'pointer' }} onClick={onBack} /> : <div></div>}
           <TYPE.mediumHeader>{tokens.length > 1 ? t`Import Tokens` : t`Import Token`}</TYPE.mediumHeader>
-          {onDismiss ? <CloseIcon onClick={onDismiss} /> : <div></div>}
+          {onDismiss ? <CloseIcon onClick={onDismiss} /> : <div />}
         </RowBetween>
       </PaddedColumn>
       <SectionBreak />
-      <AutoColumn gap="md" style={{ marginBottom: '1rem', padding: '1rem' }}>
+      <Flex flexDirection={'column'} style={{ padding: '1rem', gap: '1rem' }}>
+        <WarningWrapper borderRadius="20px" padding="15px">
+          <Flex alignItems={'flex-start'}>
+            <div>
+              <AlertTriangle stroke={theme.warning} size="17px" />
+            </div>
+            <DescText>
+              <Trans>This token isn’t frequently swapped. Please do your own research before trading.</Trans>
+            </DescText>
+          </Flex>
+        </WarningWrapper>
         {tokens.map(token => {
           return (
             <Card backgroundColor={theme.buttonBlack} key={token.address} padding="2rem">
@@ -101,67 +115,32 @@ export function ImportToken({ enterToImport = false, tokens, onBack, onDismiss, 
                   <Text color={theme.subText} fontWeight={400} fontSize={14}>
                     {token.name}
                   </Text>
-                  {chainId && (
-                    <Flex alignItems={'center'} color={theme.text} style={{ gap: 5 }}>
-                      <AddressText>
-                        <Trans>Address</Trans>: {shortenAddress(token.address, 7)}
-                      </AddressText>
-                      <CopyHelper toCopy={token.address} style={{ color: theme.subText }} />
-                      <ExternalLinkIcon
-                        color={theme.subText}
-                        size={16}
-                        href={getEtherscanLink(chainId, token.address, 'address')}
-                      />
-                    </Flex>
-                  )}
+                  <Flex alignItems={'center'} color={theme.text} style={{ gap: 5 }}>
+                    <AddressText>
+                      <Trans>Address</Trans>: {shortenAddress(token.chainId, token.address, 7)}
+                    </AddressText>
+                    <CopyHelper toCopy={token.address} style={{ color: theme.subText }} />
+                    <ExternalLinkIcon
+                      color={theme.subText}
+                      size={16}
+                      href={getEtherscanLink(token.chainId, token.address, 'address')}
+                    />
+                  </Flex>
                 </AutoColumn>
               </Flex>
             </Card>
           )
         })}
 
-        <WarningWrapper borderRadius="20px" padding="15px" highWarning={true}>
-          <RowFixed>
-            <AlertTriangle stroke={theme.red1} size="20px" />
-            <TYPE.body color={theme.red1} ml="8px" fontSize="20px">
-              <Trans>Trade at your own risk!</Trans>
-            </TYPE.body>
-          </RowFixed>
-          <DescText>
-            <Trans>
-              Anyone can create a token, including creating fake versions of existing tokens that claim to represent
-              projects
-            </Trans>
-          </DescText>
-          <DescText>
-            <Trans>If you purchase this token, you may not be able to sell it back</Trans>
-          </DescText>
-
-          <Flex fontSize={14} alignItems="center" style={{ gap: 10 }}>
-            <Checkbox
-              id="checkboxImported"
-              type="checkbox"
-              checked={agree}
-              onChange={e => {
-                setAgree(e.target.checked)
-              }}
-            />
-            <label htmlFor="checkboxImported">
-              <Trans>I understand</Trans>
-            </label>
-          </Flex>
-        </WarningWrapper>
         <ButtonPrimary
-          disabled={!agree}
           borderRadius="20px"
           padding="10px 1rem"
-          margin="10px 0 0"
           onClick={onClickImport}
-          style={{ position: 'relative' }}
+          data-testid="button-confirm-import-token"
         >
-          <Trans>Import</Trans>
+          <Trans>I understand</Trans>
         </ButtonPrimary>
-      </AutoColumn>
+      </Flex>
     </Wrapper>
   )
 }

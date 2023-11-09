@@ -1,9 +1,10 @@
-import { ChainId, CurrencyAmount, Price, Token } from '@kyberswap/ks-sdk-core'
+import { Currency, CurrencyAmount, Price, Token } from '@kyberswap/ks-sdk-core'
 import { Position } from '@kyberswap/ks-sdk-elastic'
 import { Trans, t } from '@lingui/macro'
-import { useWeb3React } from '@web3-react/core'
-import { stringify } from 'qs'
-import React, { useMemo, useState } from 'react'
+import { BigNumber } from 'ethers'
+import mixpanel from 'mixpanel-browser'
+import { stringify } from 'querystring'
+import React, { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Flex, Text } from 'rebass'
 import styled from 'styled-components'
@@ -11,21 +12,26 @@ import styled from 'styled-components'
 import { ButtonEmpty, ButtonOutlined, ButtonPrimary } from 'components/Button'
 import { LightCard } from 'components/Card'
 import Divider from 'components/Divider'
+import QuickZap, { QuickZapButton } from 'components/ElasticZap/QuickZap'
 import ProAmmFee from 'components/ProAmm/ProAmmFee'
 import ProAmmPoolInfo from 'components/ProAmm/ProAmmPoolInfo'
 import ProAmmPooledTokens from 'components/ProAmm/ProAmmPooledTokens'
 import ProAmmPriceRange from 'components/ProAmm/ProAmmPriceRange'
 import { RowBetween } from 'components/Row'
 import { MouseoverTooltip } from 'components/Tooltip'
-import { PROMM_ANALYTICS_URL } from 'constants/index'
-import { VERSION } from 'constants/v2'
+import { APP_PATHS, PROMM_ANALYTICS_URL } from 'constants/index'
+import { useActiveWeb3React } from 'hooks'
 import { useToken } from 'hooks/Tokens'
+import { useProMMFarmReadingContract } from 'hooks/useContract'
 import useIsTickAtLimit from 'hooks/useIsTickAtLimit'
 import useMixpanel, { MIXPANEL_TYPE } from 'hooks/useMixpanel'
 import { usePool } from 'hooks/usePools'
 import useTheme from 'hooks/useTheme'
-import { useTokensPrice } from 'state/application/hooks'
+import { useElasticFarms } from 'state/farms/elastic/hooks'
 import { UserPositionFarm } from 'state/farms/elastic/types'
+import { useElasticFarmsV2 } from 'state/farms/elasticv2/hooks'
+import { NEVER_RELOAD, useSingleCallResult } from 'state/multicall/hooks'
+import { useTokenPrices } from 'state/tokenPrices/hooks'
 import { ExternalLink, StyledInternalLink } from 'theme'
 import { PositionDetails } from 'types/position'
 import { currencyId } from 'utils/currencyId'
@@ -49,19 +55,20 @@ const StyledPositionCard = styled(LightCard)`
   `}
 `
 
-const TabContainer = styled.div`
+export const TabContainer = styled.div`
   display: flex;
   border-radius: 999px;
-  background-color: ${({ theme }) => theme.tabBackgound};
+  background-color: ${({ theme }) => theme.tabBackground};
   padding: 2px;
 `
 
-const Tab = styled(ButtonEmpty)<{ isActive?: boolean; isLeft?: boolean }>`
+export const Tab = styled(ButtonEmpty)<{ isActive?: boolean; isLeft?: boolean }>`
   display: flex;
   justify-content: center;
   align-items: center;
   flex: 1;
-  background-color: ${({ theme, isActive }) => (isActive ? theme.tabActive : theme.tabBackgound)};
+  background-color: ${({ theme, isActive }) => (isActive ? theme.tabActive : theme.tabBackground)};
+  color: ${({ theme, isActive }) => (isActive ? theme.text : theme.subText)};
   padding: 4px;
   font-size: 12px;
   font-weight: 500;
@@ -71,13 +78,6 @@ const Tab = styled(ButtonEmpty)<{ isActive?: boolean; isLeft?: boolean }>`
   &:hover {
     text-decoration: none;
   }
-`
-
-const TabText = styled.div<{ isActive: boolean }>`
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  color: ${({ theme, isActive }) => (isActive ? theme.text : theme.subText)};
 `
 
 const StakedInfo = styled.div`
@@ -105,15 +105,23 @@ const ButtonGroup = styled.div`
   }
 `
 
+enum TAB {
+  MY_LIQUIDITY = 'my-liquidity',
+  PRICE_RANGE = 'price-range',
+}
+
 interface PositionListItemProps {
   positionDetails: PositionDetails | UserPositionFarm
+  rawFeeRewards: [string, string]
+  liquidityTime?: number
+  farmingTime?: number
+  createdAt?: number
   hasUserDepositedInFarm?: boolean
   stakedLayout?: boolean
   refe?: React.MutableRefObject<any>
-  hasActiveFarm: boolean
 }
 
-export function getPriceOrderingFromPositionForUI(position?: Position): {
+function getPriceOrderingFromPositionForUI(position?: Position): {
   priceLower?: Price<Token, Token>
   priceUpper?: Price<Token, Token>
   quote?: Token
@@ -138,9 +146,12 @@ function PositionListItem({
   hasUserDepositedInFarm,
   positionDetails,
   refe,
-  hasActiveFarm,
+  rawFeeRewards,
+  liquidityTime,
+  farmingTime,
+  createdAt,
 }: PositionListItemProps) {
-  const { chainId } = useWeb3React()
+  const { chainId, networkInfo } = useActiveWeb3React()
   const {
     token0: token0Address,
     token1: token1Address,
@@ -148,8 +159,55 @@ function PositionListItem({
     liquidity,
     tickLower,
     tickUpper,
-    stakedLiquidity,
   } = positionDetails
+
+  const { farms } = useElasticFarms()
+  const { farms: farmV2s, userInfo } = useElasticFarmsV2()
+
+  let farmAddress = ''
+  let pid = ''
+  let rewardTokens: Currency[] = []
+
+  let hasActiveFarm = false
+  farms?.forEach(farm => {
+    farm.pools.forEach(pool => {
+      if (pool.poolAddress.toLowerCase() === positionDetails.poolId.toLowerCase()) {
+        farmAddress = farm.id
+        rewardTokens = pool.rewardTokens
+        if (pool.endTime > Date.now() / 1000) {
+          pid = pool.pid
+          hasActiveFarm = true
+        }
+      }
+    })
+  })
+
+  const hasActiveFarmV2 = !!farmV2s?.filter(
+    f =>
+      f.endTime > Date.now() / 1000 &&
+      f.poolAddress.toLowerCase() === positionDetails.poolId.toLowerCase() &&
+      f.ranges.some(r => positionDetails.tickLower <= r.tickLower && positionDetails.tickUpper >= r.tickUpper),
+  ).length
+
+  const farmContract = useProMMFarmReadingContract(farmAddress)
+
+  const tokenId = positionDetails.tokenId.toString()
+
+  const [farmReward, setFarmReward] = useState<BigNumber[] | null>(null)
+
+  const res = useSingleCallResult(
+    pid !== '' ? farmContract : undefined,
+    'getUserInfo',
+    pid !== '' ? [tokenId, pid] : undefined,
+    NEVER_RELOAD,
+  )
+  useEffect(() => {
+    if (res?.result?.rewardPending) {
+      setFarmReward(res.result.rewardPending)
+    } else {
+      setFarmReward(null)
+    }
+  }, [res])
 
   const token0 = useToken(token0Address)
   const token1 = useToken(token1Address)
@@ -162,9 +220,12 @@ function PositionListItem({
   const currency0 = token0 ? unwrappedToken(token0) : undefined
   const currency1 = token1 ? unwrappedToken(token1) : undefined
 
-  const prices = useTokensPrice([token0, token1], VERSION.ELASTIC)
+  const prices = useTokenPrices([
+    currency0?.wrapped.address || '',
+    currency1?.wrapped.address || '',
+    ...rewardTokens.map(item => item.wrapped.address),
+  ])
 
-  // construct Position from details returned
   const [, pool] = usePool(currency0 ?? undefined, currency1 ?? undefined, feeAmount)
 
   const position = useMemo(() => {
@@ -173,6 +234,9 @@ function PositionListItem({
     }
     return undefined
   }, [liquidity, pool, tickLower, tickUpper])
+
+  const feeValue0 = currency0 && CurrencyAmount.fromRawAmount(currency0, rawFeeRewards[0])
+  const feeValue1 = currency1 && CurrencyAmount.fromRawAmount(currency1, rawFeeRewards[1])
 
   const stakedPosition =
     pool && hasUserDepositedInFarm
@@ -185,14 +249,43 @@ function PositionListItem({
       : undefined
 
   const usd =
-    parseFloat(position?.amount0.toExact() || '0') * prices[0] +
-    parseFloat(position?.amount1.toExact() || '0') * prices[1]
+    parseFloat(position?.amount0.toExact() || '0') * prices[token0?.wrapped.address || ''] +
+    parseFloat(position?.amount1.toExact() || '0') * prices[token1?.wrapped.address || '']
 
   const stakedUsd =
-    parseFloat(stakedPosition?.amount0.toExact() || '0') * prices[0] +
-    parseFloat(stakedPosition?.amount1.toExact() || '0') * prices[1]
+    parseFloat(stakedPosition?.amount0.toExact() || '0') * prices[token0?.wrapped.address || ''] +
+    parseFloat(stakedPosition?.amount1.toExact() || '0') * prices[token1?.wrapped.address || '']
+
+  const currentFeeValue =
+    Number(feeValue0?.toExact() || '0') * prices[token0?.wrapped.address || ''] +
+    Number(feeValue1?.toExact() || '0') * prices[token1?.wrapped.address || '']
+
+  const estimatedOneYearFee = liquidityTime && (currentFeeValue * 365 * 24 * 60 * 60) / liquidityTime
+  const positionAPR = liquidityTime && usd ? (((estimatedOneYearFee || 0) * 100) / usd).toFixed(2) : '--'
+
+  const farmRewardAmount = rewardTokens.map((currency, index) => {
+    return CurrencyAmount.fromRawAmount(currency, farmReward?.[index]?.toString() || 0)
+  })
+
+  const farmRewardValue = rewardTokens.reduce((usdValue, currency, index) => {
+    const temp = farmReward?.[index]
+    return (
+      usdValue +
+      +CurrencyAmount.fromRawAmount(currency, temp?.gt('0') ? temp?.toString() : '0').toExact() *
+        prices[currency.wrapped.address]
+    )
+  }, 0)
+
+  const estimatedOneYearFarmReward = farmingTime && (farmRewardValue * 365 * 24 * 60 * 60) / farmingTime
+  const farmAPR = farmReward !== null && farmingTime && usd ? ((estimatedOneYearFarmReward || 0) * 100) / usd : 0
 
   const tickAtLimit = useIsTickAtLimit(feeAmount, tickLower, tickUpper)
+
+  const v2Reward = userInfo?.find(item => item.nftId.toString() === tokenId.toString())
+  const estimatedOneYearFarmV2Reward =
+    farmingTime && ((v2Reward?.unclaimedRewardsUsd || 0) * 365 * 24 * 60 * 60) / farmingTime
+  const farmV2APR =
+    v2Reward?.unclaimedRewardsUsd && farmingTime && usd ? ((estimatedOneYearFarmV2Reward || 0) * 100) / usd : 0
 
   // prices
   const { priceLower, priceUpper } = getPriceOrderingFromPositionForUI(position)
@@ -202,41 +295,51 @@ function PositionListItem({
 
   const { mixpanelHandler } = useMixpanel()
 
-  const [activeTab, setActiveTab] = useState(0)
+  const [activeTab, setActiveTab] = useState(TAB.MY_LIQUIDITY)
   const now = Date.now() / 1000
 
   const reasonToDisableRemoveLiquidity = (() => {
     if (removed) {
       return t`You have zero liquidity to remove`
     }
-
-    if (stakedLiquidity) {
-      return t`You need to withdraw your deposited liquidity position from the farms first`
-    }
-
     return ''
   })()
 
-  return position && priceLower && priceUpper ? (
+  const [showQuickZap, setShowQuickZap] = useState(false)
+
+  if (!position || !priceLower || !priceUpper) return <ContentLoader />
+
+  return (
     <StyledPositionCard>
+      <QuickZap
+        poolAddress={positionDetails.poolId}
+        tokenId={positionDetails.tokenId.toString()}
+        isOpen={showQuickZap}
+        onDismiss={() => setShowQuickZap(false)}
+      />
       <>
-        <ProAmmPoolInfo position={position} tokenId={positionDetails.tokenId.toString()} isFarmActive={hasActiveFarm} />
+        <ProAmmPoolInfo
+          position={position}
+          tokenId={positionDetails.tokenId.toString()}
+          isFarmActive={hasActiveFarm}
+          isFarmV2Active={hasActiveFarmV2}
+        />
         <TabContainer style={{ marginTop: '1rem' }}>
-          <Tab isActive={activeTab === 0} padding="0" onClick={() => setActiveTab(0)}>
-            <TabText isActive={activeTab === 0} style={{ fontSize: '12px' }}>
-              <Trans>Your Liquidity</Trans>
-            </TabText>
+          <Tab isActive={activeTab === TAB.MY_LIQUIDITY} padding="0" onClick={() => setActiveTab(TAB.MY_LIQUIDITY)}>
+            <Trans>My Liquidity</Trans>
           </Tab>
-          <Tab isActive={activeTab === 1} padding="0" onClick={() => setActiveTab(1)}>
-            <TabText isActive={activeTab === 1} style={{ fontSize: '12px' }}>
-              <Trans>Price Range</Trans>
-            </TabText>
+          <Tab isActive={activeTab === TAB.PRICE_RANGE} padding="0" onClick={() => setActiveTab(TAB.PRICE_RANGE)}>
+            <Trans>Price Range</Trans>
           </Tab>
         </TabContainer>
-        {activeTab === 0 && (
+        {activeTab === TAB.MY_LIQUIDITY && (
           <>
             {!stakedLayout ? (
               <ProAmmPooledTokens
+                positionAPR={positionAPR}
+                createdAt={createdAt}
+                farmAPR={farmAPR || farmV2APR}
+                farmRewardAmount={v2Reward?.unclaimedRewards || farmRewardAmount}
                 valueUSD={usd}
                 stakedUsd={stakedUsd}
                 liquidityValue0={CurrencyAmount.fromRawAmount(
@@ -253,35 +356,39 @@ function PositionListItem({
               <StakedInfo>
                 <StakedRow>
                   <Text color={theme.subText}>
-                    <Trans>Your Staked Balance</Trans>
+                    <Trans>My Staked Balance</Trans>
                   </Text>
                   <Text>{formatDollarAmount(stakedUsd)}</Text>
                 </StakedRow>
 
                 <StakedRow>
                   <Text color={theme.subText}>
-                    <Trans>Your Staked {position.amount0.currency.symbol}</Trans>
+                    <Trans>My Staked {position.amount0.currency.symbol}</Trans>
                   </Text>
                   <Text>{stakedPosition?.amount0.toSignificant(6)}</Text>
                 </StakedRow>
 
                 <StakedRow>
                   <Text color={theme.subText}>
-                    <Trans>Your Staked {position.amount1.currency.symbol}</Trans>
+                    <Trans>My Staked {position.amount1.currency.symbol}</Trans>
                   </Text>
                   <Text>{stakedPosition?.amount1.toSignificant(6)}</Text>
                 </StakedRow>
 
                 <StakedRow>
                   <Text color={theme.subText}>
-                    <Trans>Farm APR</Trans>
+                    <Trans>My Farm APR</Trans>
                   </Text>
-                  <Text color={theme.apr}>--</Text>
+                  <Text color={theme.apr}>{farmAPR || farmV2APR ? (farmAPR || farmV2APR).toFixed(2) + '%' : '--'}</Text>
                 </StakedRow>
               </StakedInfo>
             )}
             {!stakedLayout && (
               <ProAmmFee
+                farmAddress={farmAddress}
+                totalFeeRewardUSD={currentFeeValue}
+                feeValue0={feeValue0}
+                feeValue1={feeValue1}
                 position={position}
                 tokenId={positionDetails.tokenId}
                 layout={1}
@@ -290,7 +397,7 @@ function PositionListItem({
             )}
           </>
         )}
-        {activeTab === 1 && <ProAmmPriceRange position={position} ticksAtLimit={tickAtLimit} layout={1} />}
+        {activeTab === TAB.PRICE_RANGE && <ProAmmPriceRange position={position} ticksAtLimit={tickAtLimit} />}
         <div style={{ marginTop: '20px' }} />
         <Flex flexDirection={'column'} marginTop="auto">
           {stakedLayout ? (
@@ -298,7 +405,7 @@ function PositionListItem({
               style={{ marginBottom: '20px', textDecoration: 'none', color: theme.textReverse, fontSize: '14px' }}
               padding="8px"
               as={StyledInternalLink}
-              to={`/farms?${stringify({
+              to={`${APP_PATHS.FARMS}/${networkInfo.route}?${stringify({
                 tab: 'elastic',
                 type: positionDetails.endTime ? (positionDetails.endTime > now ? 'active' : 'ended') : 'active',
                 search: positionDetails.poolId,
@@ -337,7 +444,7 @@ function PositionListItem({
                 <ButtonOutlined
                   padding="8px"
                   as={Link}
-                  to={`/elastic/remove/${positionDetails.tokenId}`}
+                  to={`/${networkInfo.route}${APP_PATHS.ELASTIC_REMOVE_POOL}/${positionDetails.tokenId}`}
                   onClick={() => {
                     mixpanelHandler(MIXPANEL_TYPE.ELASTIC_REMOVE_LIQUIDITY_INITIATED, {
                       token_1: token0?.symbol || '',
@@ -352,37 +459,41 @@ function PositionListItem({
                 </ButtonOutlined>
               )}
 
-              {removed ? (
-                <ButtonPrimary disabled padding="8px">
-                  <Text width="max-content" fontSize="14px">
-                    <Trans>Increase Liquidity</Trans>
-                  </Text>
-                </ButtonPrimary>
-              ) : (
-                <ButtonPrimary
-                  padding="8px"
-                  style={{
-                    borderRadius: '18px',
-                    fontSize: '14px',
-                  }}
-                  as={Link}
-                  to={`/elastic/increase/${currencyId(currency0, chainId)}/${currencyId(
-                    currency1,
-                    chainId,
-                  )}/${feeAmount}/${positionDetails.tokenId}`}
-                  onClick={() => {
-                    mixpanelHandler(MIXPANEL_TYPE.ELASTIC_INCREASE_LIQUIDITY_INITIATED, {
-                      token_1: token0?.symbol || '',
-                      token_2: token1?.symbol || '',
-                      fee_tier: (pool?.fee as number) / 10000,
-                    })
-                  }}
-                >
-                  <Text width="max-content" fontSize="14px">
-                    <Trans>Increase Liquidity</Trans>
-                  </Text>
-                </ButtonPrimary>
-              )}
+              <ButtonPrimary
+                id="increase-liquidity-button"
+                padding="8px"
+                style={{
+                  borderRadius: '18px',
+                  fontSize: '14px',
+                }}
+                as={Link}
+                to={`/${networkInfo.route}${APP_PATHS.ELASTIC_INCREASE_LIQ}/${currencyId(
+                  currency0,
+                  chainId,
+                )}/${currencyId(currency1, chainId)}/${feeAmount}/${positionDetails.tokenId}`}
+                onClick={() => {
+                  mixpanelHandler(MIXPANEL_TYPE.ELASTIC_INCREASE_LIQUIDITY_INITIATED, {
+                    token_1: token0?.symbol || '',
+                    token_2: token1?.symbol || '',
+                    fee_tier: (pool?.fee as number) / 10000,
+                  })
+                }}
+              >
+                <Text width="max-content" fontSize="14px">
+                  <Trans>Increase Liquidity</Trans>
+                </Text>
+              </ButtonPrimary>
+
+              <QuickZapButton
+                onClick={() => {
+                  setShowQuickZap(true)
+                  mixpanel.track('Zap - Click Quick Zap', {
+                    token0: token0?.symbol || '',
+                    token1: token1?.symbol || '',
+                    source: 'my_pool_page',
+                  })
+                }}
+              />
             </ButtonGroup>
           )}
           <Divider sx={{ marginBottom: '20px' }} />
@@ -390,15 +501,18 @@ function PositionListItem({
             <ButtonEmpty width="max-content" style={{ fontSize: '14px' }} padding="0">
               <ExternalLink
                 style={{ width: '100%', textAlign: 'center' }}
-                href={`${PROMM_ANALYTICS_URL[chainId as ChainId]}/pool/${positionDetails.poolId.toLowerCase()}`}
+                href={`${PROMM_ANALYTICS_URL[chainId]}/pool/${positionDetails.poolId.toLowerCase()}`}
               >
                 <Trans>Pool Analytics ↗</Trans>
               </ExternalLink>
             </ButtonEmpty>
 
-            {hasUserDepositedInFarm && (
+            {(hasUserDepositedInFarm || hasActiveFarm || hasActiveFarmV2) && (
               <ButtonEmpty width="max-content" style={{ fontSize: '14px' }} padding="0">
-                <StyledInternalLink style={{ width: '100%', textAlign: 'center' }} to="/farms">
+                <StyledInternalLink
+                  style={{ width: '100%', textAlign: 'center' }}
+                  to={`${APP_PATHS.FARMS}/${networkInfo.route}`}
+                >
                   <Trans>Go to Farms ↗</Trans>
                 </StyledInternalLink>
               </ButtonEmpty>
@@ -407,8 +521,6 @@ function PositionListItem({
         </Flex>
       </>
     </StyledPositionCard>
-  ) : (
-    <ContentLoader />
   )
 }
 
