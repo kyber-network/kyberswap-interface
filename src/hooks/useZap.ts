@@ -57,7 +57,6 @@ const useZap = (isStaticFeeContract: boolean, isOldStaticFeeContract: boolean) =
   )
 
   return {
-    zapContract,
     calculateZapInAmounts,
     calculateZapOutAmount,
   }
@@ -88,7 +87,7 @@ export const useZapInAmounts = (
 
   useEffect(() => {
     async function handleCalculateZapInAmounts() {
-      if (!userIn) {
+      if (!userIn || userIn?.eq(0)) {
         setResult({
           amounts: {
             tokenInAmount: BigNumber.from(0),

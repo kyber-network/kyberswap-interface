@@ -1,8 +1,10 @@
 import { Trans, t } from '@lingui/macro'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { isMobile } from 'react-device-detect'
+
 import { Award, BookOpen, ChevronDown, Edit, FileText, HelpCircle, Info, MessageCircle, PieChart } from 'react-feather'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
+
 import { useMedia } from 'react-use'
 import { Text } from 'rebass'
 import styled, { css } from 'styled-components'
@@ -353,6 +355,7 @@ export default function Menu() {
                 ]}
               />
             </KyberAIWrapper>
+
 
             {showCampaign && (
               <MenuItem>

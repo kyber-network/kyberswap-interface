@@ -72,6 +72,9 @@ export enum TAB {
   CROSS_CHAIN = 'cross_chain',
 }
 
+export const isSettingTab = (tab: TAB) =>
+  [TAB.INFO, TAB.SETTINGS, TAB.GAS_PRICE_TRACKER, TAB.LIQUIDITY_SOURCES].includes(tab)
+
 export const AppBodyWrapped = styled(BodyWrapper)`
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04);
   padding: 16px;

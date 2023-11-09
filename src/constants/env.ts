@@ -17,6 +17,7 @@ export const AGGREGATOR_API = required('AGGREGATOR_API')
 export const SENTRY_DNS = required('SENTRY_DNS')
 export const REWARD_SERVICE_API = required('REWARD_SERVICE_API')
 export const KS_SETTING_API = required('KS_SETTING_API')
+export const BLACKJACK_API = required('BLACKJACK_API')
 export const BLOCK_SERVICE_API = required('BLOCK_SERVICE_API')
 export const PRICE_CHART_API = required('PRICE_CHART_API')
 export const AGGREGATOR_STATS_API = required('AGGREGATOR_STATS_API')
@@ -73,13 +74,13 @@ export const FIREBASE: { [key in EnvKeys]: { DEFAULT: FirebaseConfig; LIMIT_ORDE
       appId: '1:522790089501:web:524403003ae65c09c727f4',
     },
     DEFAULT: {
-      apiKey: 'AIzaSyD1UhS2D-a5D6e20SuKgx87FGitbQUL_V8',
-      authDomain: 'notification-local-73771.firebaseapp.com',
-      projectId: 'notification-local-73771',
-      storageBucket: 'notification-local-73771.appspot.com',
-      messagingSenderId: '227120017035',
-      appId: '1:227120017035:web:36592ab3e81b5614b7ae8e',
-      measurementId: 'G-Q3EPQSWMM5',
+      apiKey: 'AIzaSyDszHtJ4CJq0mwjBJ1pTt5OOzG5tiooEsg',
+      authDomain: 'test-bace2.firebaseapp.com',
+      databaseURL: 'https://test-bace2-default-rtdb.asia-southeast1.firebasedatabase.app',
+      projectId: 'test-bace2',
+      storageBucket: 'test-bace2.appspot.com',
+      messagingSenderId: '337703820408',
+      appId: '1:337703820408:web:2fb16ef71941817dec618d',
     },
   },
   staging: {

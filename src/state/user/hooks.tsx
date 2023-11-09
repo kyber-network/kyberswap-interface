@@ -41,6 +41,7 @@ import {
   toggleMyEarningChart,
   toggleTopTrendingTokens,
   toggleTradeRoutes,
+  toggleUseAggregatorForZap,
   updateAcceptedTermVersion,
   updateTokenAnalysisSettings,
   updateUserDeadline,
@@ -101,14 +102,12 @@ export function useUserLocaleManager(): [SupportedLocale | null, (newLocale: Sup
   return [locale, setLocale]
 }
 
-// unused for now, but may be added again in the future. So we should keep it here.
 export function useIsAcceptedTerm(): [boolean, (isAcceptedTerm: boolean) => void] {
   const dispatch = useAppDispatch()
   const acceptedTermVersion = useSelector<AppState, AppState['user']['acceptedTermVersion']>(
     state => state.user.acceptedTermVersion,
   )
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const isAcceptedTerm = !!acceptedTermVersion && acceptedTermVersion === TERM_FILES_PATH.VERSION
 
   const setIsAcceptedTerm = useCallback(
@@ -118,8 +117,7 @@ export function useIsAcceptedTerm(): [boolean, (isAcceptedTerm: boolean) => void
     [dispatch],
   )
 
-  // return [isAcceptedTerm, setIsAcceptedTerm]
-  return [true, setIsAcceptedTerm]
+  return [isAcceptedTerm, setIsAcceptedTerm]
 }
 
 export function useDegenModeManager(): [boolean, () => void] {
@@ -132,6 +130,19 @@ export function useDegenModeManager(): [boolean, () => void] {
   }, [degenMode, dispatch, isStablePairSwap])
 
   return [degenMode, toggleSetDegenMode]
+}
+
+export function useAggregatorForZapSetting(): [boolean, () => void] {
+  const dispatch = useDispatch<AppDispatch>()
+  const isUseAggregatorForZap = useSelector<AppState, AppState['user']['useAggregatorForZap']>(
+    state => state.user.useAggregatorForZap,
+  )
+
+  const toggle = useCallback(() => {
+    dispatch(toggleUseAggregatorForZap())
+  }, [dispatch])
+
+  return [isUseAggregatorForZap === undefined ? true : isUseAggregatorForZap, toggle]
 }
 
 export function useUserSlippageTolerance(): [number, (slippage: number) => void] {
@@ -362,7 +373,9 @@ export function useToggleTopTrendingTokens(): () => void {
   return useCallback(() => dispatch(toggleTopTrendingTokens()), [dispatch])
 }
 
-export const useUserFavoriteTokens = (chainId: ChainId) => {
+export const useUserFavoriteTokens = (customChain?: ChainId) => {
+  const { chainId: currentChain } = useActiveWeb3React()
+  const chainId = customChain || currentChain
   const dispatch = useDispatch<AppDispatch>()
   const { favoriteTokensByChainIdv2: favoriteTokensByChainId } = useSelector((state: AppState) => state.user)
   const { commonTokens } = useKyberSwapConfig(chainId)
@@ -502,13 +515,13 @@ export const useIsWhiteListKyberAI = () => {
     userInfo && getParticipantInfoQuery()
   }, [getParticipantInfoQuery, userInfo])
 
-  const { account } = useActiveWeb3React()
   const [connectingWallet] = useIsConnectingWallet()
 
   const isLoading = isFetching || pendingAuthentication
   const loadingDebounced = useDebounce(isLoading, 500) || connectingWallet
 
-  const participantInfo = isError || loadingDebounced || !account ? participantDefault : rawData
+  const participantInfo = isError || loadingDebounced ? participantDefault : rawData
+
   return {
     loading: loadingDebounced,
     isWhiteList:

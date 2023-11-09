@@ -10,7 +10,7 @@ import blockServiceApi from 'services/blockService'
 
 import { GET_BLOCKS } from 'apollo/queries'
 import { ENV_KEY } from 'constants/env'
-import { DEFAULT_GAS_LIMIT_MARGIN, ZERO_ADDRESS } from 'constants/index'
+import { DEFAULT_GAS_LIMIT_MARGIN, ETHER_ADDRESS, ZERO_ADDRESS } from 'constants/index'
 import { NETWORKS_INFO, SUPPORTED_NETWORKS, isEVM } from 'constants/networks'
 import { KNCL_ADDRESS, KNC_ADDRESS } from 'constants/tokens'
 import {
@@ -387,6 +387,13 @@ export const get24hValue = (valueNow: string, value24HoursAgo: string | undefine
   return currentChange
 }
 
+export const getNativeTokenLogo = (chainId: ChainId) => {
+  return (
+    store.getState()?.lists?.mapWhitelistTokens?.[chainId]?.[ETHER_ADDRESS]?.logoURI ||
+    (chainId ? NETWORKS_INFO[chainId].nativeToken.logo : '')
+  )
+}
+
 export const getTokenLogoURL = (inputAddress: string, chainId: ChainId): string => {
   let address = inputAddress
   if (address === ZERO_ADDRESS) {
@@ -479,6 +486,11 @@ export const isChristmasTime = () => {
   return currentTime.month() === 11 && currentTime.date() >= 15
 }
 
+
+export const getLimitOrderContract = (chainId: ChainId) => {
+  const { production, development } = NETWORKS_INFO_CONFIG[chainId]?.limitOrder ?? {}
+  return [ENV_TYPE.PROD, ENV_TYPE.STG, ENV_TYPE.ADPR].includes(ENV_LEVEL) ? production : development
+
 export const isSupportLimitOrder = (chainId: ChainId): boolean => {
   if (!SUPPORTED_NETWORKS.includes(chainId)) return false
   const limitOrder = NETWORKS_INFO[chainId]?.limitOrder
@@ -529,4 +541,5 @@ export function buildFlagsForFarmV21({
   if (isSyncFee) flags = flags | (1 << 2)
   if (isClaimReward) flags = flags | (1 << 1)
   return flags
+
 }

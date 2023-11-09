@@ -18,7 +18,7 @@ import { TooltipTextOfSwapFee } from 'components/SwapForm/TradeSummary'
 import useCheckStablePairSwap from 'components/SwapForm/hooks/useCheckStablePairSwap'
 import { MouseoverTooltip, TextDashed } from 'components/Tooltip'
 import { StyledBalanceMaxMini } from 'components/swapv2/styleds'
-import { CHAINS_SUPPORT_FEE_CONFIGS } from 'constants/index'
+import { APP_PATHS } from 'constants/index'
 import { useActiveWeb3React } from 'hooks'
 import { isSupportKyberDao, useGasRefundTier } from 'hooks/kyberdao'
 import useTheme from 'hooks/useTheme'
@@ -106,6 +106,10 @@ export default function SwapDetails({
 
   const feeAmountWithSymbol =
     feeAmountFromBuild && currencyFromBuild?.symbol ? `${feeAmountFromBuild} ${currencyFromBuild.symbol}` : ''
+
+  const isPartnerSwap = window.location.pathname.includes(APP_PATHS.PARTNER_SWAP)
+
+  const feeAmount = routeSummary?.extraFee?.feeAmount
 
   return (
     <>
@@ -245,7 +249,7 @@ export default function SwapDetails({
           </RowBetween>
         )}
 
-        {CHAINS_SUPPORT_FEE_CONFIGS.includes(chainId) && (
+        {!!feeAmount && feeAmount !== '0' && (
           <RowBetween height="20px" style={{ gap: '16px' }}>
             <RowFixed>
               <TextDashed fontSize={12} fontWeight={400} color={theme.subText}>
@@ -326,7 +330,7 @@ export default function SwapDetails({
           </TYPE.black>
         </RowBetween>
 
-        {isSupportKyberDao(chainId) && account && Number(routeSummary?.amountInUsd || 0) > 200 && (
+        {!isPartnerSwap && isSupportKyberDao(chainId) && account && Number(routeSummary?.amountInUsd || 0) > 200 && (
           <RowBetween height="20px" style={{ gap: '16px' }}>
             <RowFixed>
               <TextDashed fontSize={12} fontWeight={400} color={theme.subText}>

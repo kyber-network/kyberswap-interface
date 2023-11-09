@@ -24,7 +24,7 @@ import { StyledInternalLink } from 'theme'
 import { formattedNumLong } from 'utils'
 import { formatUnitsToFixed } from 'utils/formatBalance'
 
-import SwitchToEthereumModal, { useSwitchToEthereum } from '../StakeKNC/SwitchToEthereumModal'
+import { useSwitchToEthereum } from '../StakeKNC/SwitchToEthereumModal'
 import TimerCountdown from '../TimerCountdown'
 import KNCLogo from '../kncLogo'
 import ClaimConfirmModal from './ClaimConfirmModal'
@@ -137,7 +137,7 @@ export default function Vote() {
   const [pendingText, setPendingText] = useState<string>('')
 
   const [txHash, setTxHash] = useState<string | undefined>(undefined)
-  const [transactionError, setTransactionError] = useState()
+  const [transactionError, setTransactionError] = useState<string | undefined>(undefined)
   const totalStakedAmount = stakerInfo ? stakerInfo?.stake_amount + stakerInfo?.pending_stake_amount : 0
   const votePowerAmount: number = useMemo(
     () =>
@@ -163,7 +163,7 @@ export default function Vote() {
   const isDelegated = stakerInfo && account ? stakerInfo.delegate?.toLowerCase() !== account.toLowerCase() : false
 
   const handleClaim = useCallback(() => {
-    switchToEthereum().then(() => {
+    switchToEthereum(t`Claim reward`).then(() => {
       mixpanelHandler(MIXPANEL_TYPE.KYBER_DAO_CLAIM_CLICK)
       toggleClaimConfirmModal()
     })
@@ -187,7 +187,7 @@ export default function Vote() {
   }, [claimVotingRewards, remainingCumulativeAmount, toggleClaimConfirmModal])
 
   const handleVote = useCallback(
-    async (proposal_id: number, option: number) => {
+    async (proposal_id: number, option: number): Promise<boolean> => {
       // only can vote when user has staked amount
       setPendingText(t`Vote submitting`)
       setShowConfirm(true)
@@ -196,12 +196,13 @@ export default function Vote() {
         const tx = await vote(proposal_id, option)
         setAttemptingTxn(false)
         setTxHash(tx)
-        return Promise.resolve(true)
+        return true
       } catch (error) {
         setShowConfirm(false)
+        setAttemptingTxn(false)
         setTransactionError(error?.message)
         setTxHash(undefined)
-        return Promise.reject(error)
+        throw error
       }
     },
     [vote],
@@ -462,7 +463,6 @@ export default function Vote() {
           <Trans>Note: Voting on KyberDAO is only available on Ethereum chain.</Trans>
         </Text>
         <ProposalListComponent voteCallback={handleVote} />
-        <SwitchToEthereumModal featureText={t`This action`} />
         <ClaimConfirmModal amount={formatUnitsToFixed(remainingCumulativeAmount)} onConfirmClaim={handleConfirmClaim} />
         <TransactionConfirmationModal
           isOpen={showConfirm}
