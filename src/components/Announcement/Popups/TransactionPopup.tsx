@@ -60,7 +60,7 @@ const summaryClaim = (txs: TransactionDetails) => {
 }
 
 const summaryStakeUnstakeFarm = (txs: TransactionDetails) => {
-  return txs.type === TRANSACTION_TYPE.STAKE ? t`Stake liquidity into farm` : t`Unstake liquidity from farm`
+  return txs.type === TRANSACTION_TYPE.STAKE ? t`Stake liquidity into farm` : t`Unstake liquidity from farm.`
 }
 
 // ex: elastic add liquidity 30 knc and 40 usdt
@@ -85,6 +85,19 @@ const summaryLiquidity = (txs: TransactionDetails) => {
   }`
 }
 
+const zapInLiquidity = (txs: TransactionDetails) => {
+  const extraInfo = txs.extraInfo || {}
+  const {
+    tokenAmountIn = '',
+    tokenAmountOut = '',
+    tokenSymbolIn,
+    tokenSymbolOut,
+    zapAmountIn,
+    zapSymbolIn,
+  } = extraInfo as TransactionExtraInfo2Token
+  return t`You have zapped ${zapAmountIn} ${zapSymbolIn} into ${tokenAmountIn} ${tokenSymbolIn} and ${tokenAmountOut} ${tokenSymbolOut} of liquidity to the pool.`
+}
+
 const summaryCrossChain = (txs: TransactionDetails) => {
   const {
     tokenAmountIn,
@@ -105,7 +118,7 @@ const summaryDelegateDao = (txs: TransactionDetails) => {
       ? t`undelegated your voting power`
       : t`delegated voting power to ${contract.slice(0, 6)}...${contract.slice(-4)}`
 
-  return { success: t`You have successfully ${summary}`, error: t`Error ${summary}` }
+  return { success: t`You have successfully ${summary}`, error: t`Error ${summary}.` }
 }
 
 const summaryCancelLimitOrder = (txs: TransactionDetails) => {
@@ -152,6 +165,7 @@ const SUMMARY: { [type in TRANSACTION_TYPE]: SummaryFunction } = {
   [TRANSACTION_TYPE.CLASSIC_REMOVE_LIQUIDITY]: summaryLiquidity,
   [TRANSACTION_TYPE.ELASTIC_REMOVE_LIQUIDITY]: summaryLiquidity,
   [TRANSACTION_TYPE.ELASTIC_INCREASE_LIQUIDITY]: summaryLiquidity,
+  [TRANSACTION_TYPE.ELASTIC_ZAP_IN_LIQUIDITY]: zapInLiquidity,
   [TRANSACTION_TYPE.ELASTIC_COLLECT_FEE]: summaryLiquidity,
 
   [TRANSACTION_TYPE.STAKE]: summaryStakeUnstakeFarm,
@@ -166,6 +180,7 @@ const SUMMARY: { [type in TRANSACTION_TYPE]: SummaryFunction } = {
   [TRANSACTION_TYPE.CANCEL_LIMIT_ORDER]: summaryCancelLimitOrder,
   [TRANSACTION_TYPE.TRANSFER_TOKEN]: summaryTransferToken,
 
+  [TRANSACTION_TYPE.KYBERDAO_CLAIM_GAS_REFUND]: summaryClaim,
   [TRANSACTION_TYPE.KYBERDAO_CLAIM]: summary1Token,
   [TRANSACTION_TYPE.KYBERDAO_UNDELEGATE]: summaryDelegateDao,
   [TRANSACTION_TYPE.KYBERDAO_MIGRATE]: summary2Token,

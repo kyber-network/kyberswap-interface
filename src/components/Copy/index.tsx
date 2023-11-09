@@ -1,14 +1,14 @@
 import React, { CSSProperties, ReactNode, forwardRef, useCallback } from 'react'
 import { CheckCircle } from 'react-feather'
-import { Flex } from 'rebass'
 import styled, { keyframes } from 'styled-components'
 
 import CopyIcon from 'components/Icons/CopyIcon'
+import { RowFit } from 'components/Row'
 import useCopyClipboard from 'hooks/useCopyClipboard'
 
 const Wrapper = styled.div<{ margin?: string; size?: string }>`
   flex-shrink: 0;
-  margin-left: 4px;
+  margin-left: ${({ margin }) => margin || '4px'};
   text-decoration: none;
   cursor: pointer;
   position: relative;
@@ -57,8 +57,8 @@ const check = keyframes`
 
 const CopyIconWrapper = styled.div`
   position: absolute;
-  display:flex;
-  align-items: center
+  display: flex;
+  align-items: center;
   left: 0;
   &.copied {
     animation: ${copy} 1.5s;
@@ -77,7 +77,7 @@ type Props = {
   children?: React.ReactNode
   margin?: string
   style?: CSSProperties
-  size?: string
+  size?: string | number
   text?: ReactNode
   color?: string
 }
@@ -109,9 +109,9 @@ const CopyHelper = forwardRef<HTMLDivElement, Props>(function CopyHelper(
   return (
     <Wrapper ref={ref} onMouseDown={onCopy} margin={margin} style={style}>
       {text ? (
-        <Flex>
+        <RowFit>
           {copyIcon}&nbsp;{text}
-        </Flex>
+        </RowFit>
       ) : (
         copyIcon
       )}

@@ -6,7 +6,6 @@ import {
   DEFAULT_DEADLINE_FROM_NOW,
   DEFAULT_SLIPPAGE,
   DEFAULT_SLIPPAGE_STABLE_PAIR_SWAP,
-  DEFAULT_SLIPPAGE_TESTNET,
   INITIAL_ALLOWED_SLIPPAGE,
   MAX_NORMAL_SLIPPAGE_IN_BIPS,
 } from 'constants/index'
@@ -31,18 +30,16 @@ import {
   toggleKyberAIBanner,
   toggleKyberAIWidget,
   toggleLiveChart,
-  toggleTokenInfo,
+  toggleMyEarningChart,
   toggleTradeRoutes,
+  toggleUseAggregatorForZap,
   updateAcceptedTermVersion,
   updateChainId,
-  updateMatchesDarkMode,
   updateTokenAnalysisSettings,
-  updateUserDarkMode,
   updateUserDeadline,
   updateUserDegenMode,
   updateUserLocale,
   updateUserSlippageTolerance,
-  updateUserSlippageToleranceForLineaTestnet,
 } from './actions'
 
 const currentTimestamp = () => new Date().getTime()
@@ -59,22 +56,18 @@ export type CrossChainSetting = {
   enableExpressExecution: boolean
 }
 
-interface UserState {
+export interface UserState {
   // the timestamp of the last updateVersion action
   lastUpdateVersionTimestamp?: number
-
-  userDarkMode: boolean | null // the user's choice for dark mode or light mode
-  matchesDarkMode: boolean // whether the dark mode media query matches
 
   userLocale: SupportedLocale | null
 
   userDegenMode: boolean
   userDegenModeAutoDisableTimestamp: number
+  useAggregatorForZap: boolean
 
   // user defined slippage tolerance in bips, used in all txns
   userSlippageTolerance: number
-
-  userSlippageToleranceForLineaTestnet: number
 
   // deadline set by user in minutes, used in all txns
   userDeadline: number
@@ -93,21 +86,26 @@ interface UserState {
   }
 
   timestamp: number
-  showLiveCharts: {
-    [chainId: number]: boolean
-  }
+  showLiveChart: boolean
   showTradeRoutes: boolean
-  showTokenInfo: boolean
   showKyberAIBanner: boolean
   kyberAIDisplaySettings: {
     [k: string]: boolean
   }
-  favoriteTokensByChainId: Partial<
+  favoriteTokensByChainId?: Partial<
     Record<
       ChainId,
       {
         includeNativeToken: boolean
         addresses: string[]
+      }
+    >
+  >
+  favoriteTokensByChainIdv2: Partial<
+    Record<
+      ChainId,
+      {
+        [address: string]: boolean
       }
     >
   >
@@ -132,6 +130,7 @@ interface UserState {
   kyberAIWidget: boolean
 
   crossChain: CrossChainSetting
+  myEarningChart: boolean
 }
 
 function pairKey(token0Address: string, token1Address: string) {
@@ -143,30 +142,6 @@ export const getFavoriteTokenDefault = (chainId: ChainId) => ({
   includeNativeToken: true,
 })
 
-export const defaultShowLiveCharts: { [chainId in ChainId]: boolean } = {
-  [ChainId.MAINNET]: true,
-  [ChainId.MATIC]: true,
-  [ChainId.BSCMAINNET]: true,
-  [ChainId.CRONOS]: true,
-  [ChainId.AVAXMAINNET]: true,
-  [ChainId.FANTOM]: true,
-  [ChainId.ARBITRUM]: true,
-  [ChainId.AURORA]: true,
-  [ChainId.BTTC]: false,
-  [ChainId.VELAS]: true,
-  [ChainId.OASIS]: true,
-  [ChainId.OPTIMISM]: true,
-  [ChainId.SOLANA]: true,
-  [ChainId.ZKSYNC]: true,
-
-  [ChainId.GÖRLI]: false,
-  [ChainId.MUMBAI]: false,
-  [ChainId.BSCTESTNET]: false,
-  [ChainId.AVAXTESTNET]: false,
-  [ChainId.LINEA_TESTNET]: false,
-  [ChainId.SOLANA_DEVNET]: false,
-}
-
 export const CROSS_CHAIN_SETTING_DEFAULT = {
   isSlippageControlPinned: true,
   slippageTolerance: INITIAL_ALLOWED_SLIPPAGE,
@@ -174,20 +149,17 @@ export const CROSS_CHAIN_SETTING_DEFAULT = {
 }
 
 const initialState: UserState = {
-  userDarkMode: null, // default to system preference
-  matchesDarkMode: true,
   userDegenMode: false,
+  useAggregatorForZap: true,
   userDegenModeAutoDisableTimestamp: 0,
   userLocale: null,
   userSlippageTolerance: INITIAL_ALLOWED_SLIPPAGE,
-  userSlippageToleranceForLineaTestnet: DEFAULT_SLIPPAGE_TESTNET,
   userDeadline: DEFAULT_DEADLINE_FROM_NOW,
   tokens: {},
   pairs: {},
   timestamp: currentTimestamp(),
-  showLiveCharts: { ...defaultShowLiveCharts },
+  showLiveChart: true,
   showTradeRoutes: true,
-  showTokenInfo: true,
   showKyberAIBanner: true,
   kyberAIDisplaySettings: {
     numberOfTrades: true,
@@ -203,8 +175,11 @@ const initialState: UserState = {
     liveDEXTrades: true,
     fundingRateOnCEX: true,
     liquidationsOnCEX: true,
+    liquidityProfile: true,
+    markets: true,
   },
   favoriteTokensByChainId: {},
+  favoriteTokensByChainIdv2: {},
   chainId: ChainId.MAINNET,
   acceptedTermVersion: null,
   viewMode: VIEW_MODE.GRID,
@@ -213,6 +188,7 @@ const initialState: UserState = {
   isSlippageControlPinned: true,
   kyberAIWidget: true,
   crossChain: CROSS_CHAIN_SETTING_DEFAULT,
+  myEarningChart: true,
 }
 
 export default createReducer(initialState, builder =>
@@ -235,14 +211,6 @@ export default createReducer(initialState, builder =>
       }
 
       state.lastUpdateVersionTimestamp = currentTimestamp()
-    })
-    .addCase(updateUserDarkMode, (state, action) => {
-      state.userDarkMode = action.payload.userDarkMode
-      state.timestamp = currentTimestamp()
-    })
-    .addCase(updateMatchesDarkMode, (state, action) => {
-      state.matchesDarkMode = action.payload.matchesDarkMode
-      state.timestamp = currentTimestamp()
     })
     .addCase(updateUserDegenMode, (state, action) => {
       state.userDegenMode = action.payload.userDegenMode
@@ -268,10 +236,6 @@ export default createReducer(initialState, builder =>
     })
     .addCase(updateUserSlippageTolerance, (state, action) => {
       state.userSlippageTolerance = action.payload.userSlippageTolerance
-      state.timestamp = currentTimestamp()
-    })
-    .addCase(updateUserSlippageToleranceForLineaTestnet, (state, action) => {
-      state.userSlippageToleranceForLineaTestnet = action.payload.userSlippageTolerance
       state.timestamp = currentTimestamp()
     })
     .addCase(updateUserDeadline, (state, action) => {
@@ -307,46 +271,29 @@ export default createReducer(initialState, builder =>
       }
       state.timestamp = currentTimestamp()
     })
-    .addCase(toggleLiveChart, (state, { payload: { chainId } }) => {
-      if (typeof state.showLiveCharts?.[chainId] !== 'boolean') {
-        state.showLiveCharts = { ...defaultShowLiveCharts }
-      }
-      state.showLiveCharts[chainId] = !state.showLiveCharts[chainId]
+    .addCase(toggleLiveChart, state => {
+      state.showLiveChart = !state.showLiveChart
     })
     .addCase(toggleTradeRoutes, state => {
       state.showTradeRoutes = !state.showTradeRoutes
     })
-    .addCase(toggleTokenInfo, state => {
-      state.showTokenInfo = !state.showTokenInfo
-    })
+
     .addCase(toggleKyberAIBanner, state => {
       state.showKyberAIBanner = !state.showKyberAIBanner
     })
-    .addCase(toggleFavoriteToken, (state, { payload: { chainId, isNative, address } }) => {
-      if (!state.favoriteTokensByChainId) {
-        state.favoriteTokensByChainId = {}
+    .addCase(toggleFavoriteToken, (state, { payload: { chainId, address, newValue } }) => {
+      if (!state.favoriteTokensByChainIdv2) {
+        state.favoriteTokensByChainIdv2 = {}
       }
 
-      let favoriteTokens = state.favoriteTokensByChainId[chainId]
-      if (!favoriteTokens) {
-        favoriteTokens = getFavoriteTokenDefault(chainId)
-        state.favoriteTokensByChainId[chainId] = favoriteTokens
+      if (!state.favoriteTokensByChainIdv2[chainId]) {
+        state.favoriteTokensByChainIdv2[chainId] = {}
       }
 
-      if (isNative) {
-        const previousValue = favoriteTokens.includeNativeToken
-        favoriteTokens.includeNativeToken = !previousValue
-        return
-      }
-
-      if (address) {
-        // this is intentionally added, to remove compiler error
-        const index = favoriteTokens.addresses.findIndex(addr => addr === address)
-        if (index === -1) {
-          favoriteTokens.addresses.push(address)
-          return
-        }
-        favoriteTokens.addresses.splice(index, 1)
+      const favoriteTokens = state.favoriteTokensByChainIdv2[chainId]
+      const lowercaseAddress = address.toLowerCase()
+      if (favoriteTokens) {
+        favoriteTokens[lowercaseAddress] = newValue !== undefined ? newValue : !favoriteTokens[lowercaseAddress]
       }
     })
     .addCase(updateChainId, (state, { payload: chainId }) => {
@@ -409,5 +356,15 @@ export default createReducer(initialState, builder =>
     })
     .addCase(toggleKyberAIWidget, state => {
       state.kyberAIWidget = !state.kyberAIWidget
+    })
+    .addCase(toggleMyEarningChart, state => {
+      state.myEarningChart = !state.myEarningChart
+    })
+    .addCase(toggleUseAggregatorForZap, state => {
+      if (state.useAggregatorForZap === undefined) {
+        state.useAggregatorForZap = false
+      } else {
+        state.useAggregatorForZap = !state.useAggregatorForZap
+      }
     }),
 )

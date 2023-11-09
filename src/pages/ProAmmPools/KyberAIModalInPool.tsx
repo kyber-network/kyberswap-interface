@@ -14,12 +14,12 @@ import Row, { RowBetween, RowFit } from 'components/Row'
 import { MouseoverTooltip } from 'components/Tooltip'
 import { APP_PATHS } from 'constants/index'
 import { useActiveWeb3React } from 'hooks'
-import useMixpanel, { MIXPANEL_TYPE } from 'hooks/useMixpanel'
+import { MIXPANEL_TYPE, useMixpanelKyberAI } from 'hooks/useMixpanel'
 import useTheme from 'hooks/useTheme'
 import KyberScoreMeter from 'pages/TrueSightV2/components/KyberScoreMeter'
 import SimpleTooltip from 'pages/TrueSightV2/components/SimpleTooltip'
 import { SUPPORTED_NETWORK_KYBERAI } from 'pages/TrueSightV2/constants/index'
-import { useTokenDetailQuery } from 'pages/TrueSightV2/hooks/useKyberAIData'
+import { useTokenOverviewQuery } from 'pages/TrueSightV2/hooks/useKyberAIData'
 import { calculateValueToColor, formatTokenPrice, navigateToSwapPage } from 'pages/TrueSightV2/utils'
 import { useIsWhiteListKyberAI } from 'state/user/hooks'
 
@@ -94,22 +94,23 @@ const enum TokenTabType {
 const KyberAIModalInPool = ({ currency0, currency1 }: { currency0?: Currency; currency1?: Currency }) => {
   const theme = useTheme()
   const { chainId } = useActiveWeb3React()
-  const { mixpanelHandler } = useMixpanel()
+  const mixpanelHandler = useMixpanelKyberAI()
   const { isWhiteList } = useIsWhiteListKyberAI()
   const [tab, setTab] = useState<TokenTabType>(TokenTabType.First)
   const [openTruesightModal, setOpenTruesightModal] = useState(false)
 
-  const { data: token0Overview } = useTokenDetailQuery(
+  const { data: token0Overview } = useTokenOverviewQuery(
     { address: currency0?.wrapped?.address, chain: SUPPORTED_NETWORK_KYBERAI[chainId] },
     { skip: !currency0?.wrapped?.address && !isWhiteList, refetchOnMountOrArgChange: true },
   )
-  const { data: token1Overview } = useTokenDetailQuery(
+  const { data: token1Overview } = useTokenOverviewQuery(
     { address: currency1?.wrapped?.address, chain: SUPPORTED_NETWORK_KYBERAI[chainId] },
     { skip: !currency1?.wrapped?.address && !isWhiteList, refetchOnMountOrArgChange: true },
   )
 
   const token = tab === TokenTabType.First ? token0Overview || token1Overview : token1Overview
-
+  const address =
+    tab === TokenTabType.First ? currency0?.wrapped.address || currency1?.wrapped.address : currency1?.wrapped.address
   if (!isWhiteList || !token) return null
 
   const kbsColor = calculateValueToColor(token.kyberScore.score || 0, theme)
@@ -164,9 +165,7 @@ const KyberAIModalInPool = ({ currency0, currency1 }: { currency0?: Currency; cu
             <RowFit>
               <ButtonLight
                 height="24px"
-                onClick={() =>
-                  navigateToSwapPage({ address: token.address, chain: SUPPORTED_NETWORK_KYBERAI[chainId] })
-                }
+                onClick={() => navigateToSwapPage({ address: address, chain: SUPPORTED_NETWORK_KYBERAI[chainId] })}
               >
                 <RowFit gap="4px">
                   <Repeat size={14} />
@@ -177,7 +176,7 @@ const KyberAIModalInPool = ({ currency0, currency1 }: { currency0?: Currency; cu
           </RowBetween>
           <Row marginBottom="16px">
             <MouseoverTooltip
-              text={t`KyberScore algorithm measures the current trend of a token by taking into account multiple on-chain and off-chain indicators. The score ranges from 0 to 100. Higher the score, more bullish the token`}
+              text={t`KyberScore algorithm measures the current trend of a token by taking into account multiple on-chain and off-chain indicators. The score ranges from 0 to 100. Higher the score, more bullish the token.`}
               placement="top"
               width="350px"
             >
@@ -219,7 +218,7 @@ const KyberAIModalInPool = ({ currency0, currency1 }: { currency0?: Currency; cu
                 token_name: token.symbol?.toUpperCase(),
               })
               window.open(
-                APP_PATHS.KYBERAI_EXPLORE + '/' + SUPPORTED_NETWORK_KYBERAI[chainId] + '/' + token.address,
+                APP_PATHS.KYBERAI_EXPLORE + '/' + SUPPORTED_NETWORK_KYBERAI[chainId] + '/' + address,
                 '_blank',
               )
             }}

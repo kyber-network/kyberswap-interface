@@ -19,17 +19,13 @@ export interface SerializedPair {
   token1: SerializedToken
 }
 
-export const updateMatchesDarkMode = createAction<{ matchesDarkMode: boolean }>('user/updateMatchesDarkMode')
-export const updateUserDarkMode = createAction<{ userDarkMode: boolean }>('user/updateUserDarkMode')
 export const updateUserDegenMode = createAction<{ userDegenMode: boolean; isStablePairSwap: boolean }>(
   'user/updateUserDegenMode',
 )
+export const toggleUseAggregatorForZap = createAction('user/toggleUseAggregatorForZap')
 export const updateUserLocale = createAction<{ userLocale: SupportedLocale }>('user/updateUserLocale')
 export const updateUserSlippageTolerance = createAction<{ userSlippageTolerance: number }>(
   'user/updateUserSlippageTolerance',
-)
-export const updateUserSlippageToleranceForLineaTestnet = createAction<{ userSlippageTolerance: number }>(
-  'user/updateUserSlippageToleranceForLineaTestnet',
 )
 
 export const updateUserDeadline = createAction<{ userDeadline: number }>('user/updateUserDeadline')
@@ -39,17 +35,18 @@ export const addSerializedPair = createAction<{ serializedPair: SerializedPair }
 export const removeSerializedPair = createAction<{ chainId: number; tokenAAddress: string; tokenBAddress: string }>(
   'user/removeSerializedPair',
 )
-export const toggleLiveChart = createAction<{ chainId: number }>('user/toggleLiveChart')
+export const toggleLiveChart = createAction('user/toggleLiveChart')
 
 export const toggleTradeRoutes = createAction<void>('user/toggleTradeRoutes')
-export const toggleTokenInfo = createAction<void>('user/toggleTokenInfo')
 export const toggleKyberAIBanner = createAction<void>('user/toggleKyberAIBanner')
 
 export const toggleTopTrendingTokens = createAction<void>('user/toggleTopTrendingTokens')
 
 export type ToggleFavoriteTokenPayload = {
   chainId: ChainId
-} & ({ isNative?: false; address: string } | { isNative: true; address?: never })
+  address: string
+  newValue?: boolean
+}
 export const toggleFavoriteToken = createAction<ToggleFavoriteTokenPayload>('user/toggleFavoriteToken')
 export const updateChainId = createAction<ChainId>('user/updateChainId')
 export const updateTokenAnalysisSettings = createAction<string>('user/updateTokenAnalysisSettings')
@@ -68,5 +65,6 @@ export const revokePermit = createAction<{ chainId: number; address: string; acc
 export const permitError = createAction<{ chainId: number; address: string; account: string }>('user/permitError')
 export const pinSlippageControl = createAction<boolean>('user/pinSlippageControl')
 export const toggleKyberAIWidget = createAction<void>('user/toggleKyberAIWidget')
+export const toggleMyEarningChart = createAction<void>('user/toggleMyEarningChart')
 
 export const setCrossChainSetting = createAction<CrossChainSetting>('user/setCrossChainSetting')

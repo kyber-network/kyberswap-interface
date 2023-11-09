@@ -1,7 +1,5 @@
 import { ChainId } from '@kyberswap/ks-sdk-core'
 
-import BTT from 'assets/networks/bttc.png'
-import { KS_SETTING_API } from 'constants/env'
 import { EVMNetworkInfo } from 'constants/networks/type'
 
 const EMPTY = ''
@@ -16,19 +14,18 @@ const bttcInfo: EVMNetworkInfo = {
   poolFarmRoute: 'bttc',
   aggregatorRoute: 'bttc',
   name: 'BitTorrent',
-  icon: BTT,
-  iconDark: NOT_SUPPORT,
+  icon: 'https://storage.googleapis.com/ks-setting-1d682dca/acc93879-119a-48ce-8a91-a4a6c0321c131699420171767.png',
+
   iconSelected: NOT_SUPPORT,
-  iconDarkSelected: NOT_SUPPORT,
+
   defaultBlockSubgraph: 'https://bttc-graph.kyberengineering.io/subgraphs/name/kybernetwork/bttc-blocks',
   etherscanUrl: 'https://bttcscan.com',
   etherscanName: 'Bttcscan',
-  tokenListUrl: `${KS_SETTING_API}/v1/tokens?chainIds=${ChainId.BTTC}&isWhitelisted=${true}`,
-  bridgeURL: EMPTY,
+  bridgeURL: 'https://bttc.bittorrent.com/bridge/',
   nativeToken: {
     symbol: 'BTT',
     name: 'BTT',
-    logo: BTT,
+    logo: 'https://storage.googleapis.com/ks-setting-1d682dca/1d9bbed0-0f29-48b9-b610-1bc35efcc41f.png',
     decimal: 18,
     minForGas: 10 ** 16,
   },
@@ -66,10 +63,7 @@ const bttcInfo: EVMNetworkInfo = {
     routers: '0xF9c2b5746c946EF883ab2660BbbB1f10A5bdeAb4',
     farms: [],
   },
-  limitOrder: {
-    production: NOT_SUPPORT,
-    development: NOT_SUPPORT,
-  },
+  limitOrder: NOT_SUPPORT,
   averageBlockTimeInSeconds: 2, // TODO: check these info
   coingeckoNetworkId: 'tron',
   coingeckoNativeTokenId: 'bittorrent',

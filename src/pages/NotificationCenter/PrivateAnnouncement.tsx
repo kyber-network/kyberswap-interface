@@ -2,19 +2,20 @@ import { t } from '@lingui/macro'
 import { useEffect, useRef, useState } from 'react'
 import {
   useAckPrivateAnnouncementsByIdsMutation,
+  useAckPrivateAnnouncementsMutation,
   useClearAllPrivateAnnouncementByIdMutation,
   useGetPrivateAnnouncementsByIdsQuery,
   useGetPrivateAnnouncementsQuery,
 } from 'services/announcement'
 import styled from 'styled-components'
 
+import { PRIVATE_ANN_TITLE } from 'components/Announcement/PrivateAnnoucement'
 import InboxItemNotificationCenter from 'components/Announcement/PrivateAnnoucement/NotificationCenter'
-import { useInvalidateTagAnnouncement } from 'components/Announcement/helper'
 import { PrivateAnnouncement, PrivateAnnouncementType } from 'components/Announcement/type'
 import { getAnnouncementsTemplateIds } from 'constants/env'
 import { useActiveWeb3React } from 'hooks'
+import { useInvalidateTagAnnouncement } from 'hooks/useInvalidateTags'
 import DeleteAllAlertsButton from 'pages/NotificationCenter/DeleteAllAlertsButton'
-import { MENU_TITLE } from 'pages/NotificationCenter/Menu'
 import NoData from 'pages/NotificationCenter/NoData'
 import CommonPagination from 'pages/NotificationCenter/PriceAlerts/CommonPagination'
 import { ITEMS_PER_PAGE } from 'pages/NotificationCenter/const'
@@ -38,18 +39,12 @@ export default function GeneralAnnouncement({ type }: { type?: PrivateAnnounceme
     data: respNotificationByType,
     refetch: refetchById,
     isLoading,
-  } = useGetPrivateAnnouncementsByIdsQuery(
-    { page, account: account ?? '', templateIds, pageSize: ITEMS_PER_PAGE },
-    { skip: !account || !templateIds },
-  )
+  } = useGetPrivateAnnouncementsByIdsQuery({ page, templateIds, pageSize: ITEMS_PER_PAGE }, { skip: !templateIds })
   const {
     data: dataAllNotification,
     refetch: refetchAll,
     isLoading: isLoadingAll,
-  } = useGetPrivateAnnouncementsQuery(
-    { page, account: account ?? '', pageSize: ITEMS_PER_PAGE },
-    { skip: !account || !!templateIds },
-  )
+  } = useGetPrivateAnnouncementsQuery({ page, pageSize: ITEMS_PER_PAGE }, { skip: !!templateIds })
 
   const [ackAnnouncement] = useAckPrivateAnnouncementsByIdsMutation()
   const [clearAllAnnouncement] = useClearAllPrivateAnnouncementByIdMutation()
@@ -65,7 +60,7 @@ export default function GeneralAnnouncement({ type }: { type?: PrivateAnnounceme
     if (!account || numberOfUnread === 0 || loadingRef.current) return
     // mark all as read
     loadingRef.current = true
-    ackAnnouncement({ templateIds: templateIds || undefined, account })
+    ackAnnouncement({ templateIds: templateIds || undefined })
       .then(() => {
         refetch()
       })
@@ -78,11 +73,12 @@ export default function GeneralAnnouncement({ type }: { type?: PrivateAnnounceme
   }, [numberOfUnread, templateIds, account, ackAnnouncement, refetch, resetUnread])
 
   const totalAnnouncement = data?.notifications?.length ?? 0
+  const [clearAllRequest] = useAckPrivateAnnouncementsMutation()
 
   const [loading, setLoading] = useState(false)
   const clearAll = async () => {
     setLoading(true)
-    return clearAllAnnouncement({ account: account ?? '', templateIds })
+    return (templateIds ? clearAllAnnouncement({ templateIds }) : clearAllRequest({ action: 'clear-all' }))
       .then(() => {
         refetch()
       })
@@ -101,7 +97,7 @@ export default function GeneralAnnouncement({ type }: { type?: PrivateAnnounceme
           <DeleteAllAlertsButton
             disabled={totalAnnouncement === 0 || loading}
             onClear={clearAll}
-            notificationName={type ? MENU_TITLE[type] : t`Notifications`}
+            notificationName={type ? PRIVATE_ANN_TITLE[type] : t`Notifications`}
           />
         </HeaderWrapper>
         {data?.notifications?.length ? (

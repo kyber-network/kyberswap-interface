@@ -3,7 +3,8 @@ import dayjs from 'dayjs'
 
 // ex: 60 => 1 minute
 export const formatTimeDuration = (t: number) => {
-  return dayjs.duration(t, 'seconds').humanize().replace('a ', '1 ').replace('an ', '1 ')
+  const str = dayjs.duration(t, 'seconds').humanize()
+  return str.includes('few') ? str : str.replace('a ', '1 ').replace('an ', '1 ')
 }
 
 const formatMulti = (n: number, str: string) => (n === 1 ? str : str + 's')
@@ -16,4 +17,13 @@ export const formatTime = (time: number) => {
   if (hour < 24) return t`${hour} ${formatMulti(hour, 'hour')} ago`
   const day = Math.floor(delta / (24 * 3600))
   return t`${day} ${formatMulti(day, 'day')} ago`
+}
+
+// 1800 => 00:03:00
+const pad = (n: number) => (n < 10 ? `0${n}` : n)
+export const formatRemainTime = (timeInSeconds: number) => {
+  const hours = Math.floor(timeInSeconds / 3600)
+  const minutes = Math.floor((timeInSeconds % 3600) / 60)
+  const seconds = timeInSeconds % 60
+  return `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`
 }

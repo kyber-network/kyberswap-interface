@@ -8,33 +8,9 @@ import { useIsAcceptedTerm } from 'state/user/hooks'
 import { useActivationWallet } from './useActivationWallet'
 import useDisconnectWallet from './useDisconnectWallet'
 
-export async function isAuthorized(): Promise<string | boolean> {
-  if (localStorage.getItem(LOCALSTORAGE_LAST_WALLETKEY_EVM) === 'WALLET_CONNECT') {
-    try {
-      const sessionKey = Object.keys(localStorage).find(key => key.match(/wc@2(.*)session/g))
-      return sessionKey
-        ? JSON.parse(localStorage[sessionKey])[0].namespaces?.eip155?.accounts[0].split(':').pop() // account address, tricky for now, will remove after profile feature release
-        : true
-    } catch (error) {
-      return true
-    }
-  }
-  if (!window.ethereum) {
-    return false
-  }
-
-  try {
-    const accounts = await window.ethereum.request({ method: 'eth_accounts' })
-    if (accounts?.length > 0) return accounts[0]
-    return false
-  } catch {
-    return false
-  }
-}
-
 // make sure this hook will be ran only once globally
 let trying = false
-let tried = false
+const tried = { current: false } // global ref
 export function useEagerConnect() {
   const { active } = useWeb3React()
   const disconnect = useDisconnectWallet()
@@ -43,7 +19,10 @@ export function useEagerConnect() {
   const { tryActivation } = useActivationWallet()
 
   const setTried = () => {
-    tried = true
+    try {
+      tried.current = true
+      Object.freeze(tried)
+    } catch {}
     reRender({})
   }
 
@@ -56,26 +35,34 @@ export function useEagerConnect() {
         return
       }
       try {
-        if (trying || tried) return
+        if (trying || tried.current) return
         trying = true
-        let activated = false
+        let activatedSuccess = false
+        // must retrieve this before activate safe, or will be overriden to SAFE
         const lastWalletKeyEVM = localStorage.getItem(LOCALSTORAGE_LAST_WALLETKEY_EVM)
         const lastWalletKeySolana = localStorage.getItem(LOCALSTORAGE_LAST_WALLETKEY_SOLANA)
+
+        try {
+          await tryActivation('SAFE', true)
+          activatedSuccess = true
+          setTried()
+        } catch {}
+
         await Promise.all([
           (async () => {
             if (lastWalletKeyEVM) {
               await tryActivation(lastWalletKeyEVM, true)
-              activated = true
+              activatedSuccess = true
             }
           })(),
           (async () => {
             if (lastWalletKeySolana) {
               await tryActivation(lastWalletKeySolana)
-              activated = true
+              activatedSuccess = true
             }
           })(),
         ])
-        if (!activated) {
+        if (!activatedSuccess) {
           if (isMobile && window.ethereum) {
             await tryActivation('INJECTED', true)
           }

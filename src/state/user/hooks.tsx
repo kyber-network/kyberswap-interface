@@ -1,9 +1,10 @@
 import { ChainId, Token } from '@kyberswap/ks-sdk-core'
 import { useCallback, useMemo } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
-import { useGetParticipantInfoQuery } from 'services/kyberAISubscription'
+import { useGetParticipantInfoQuery, useLazyGetParticipantInfoQuery } from 'services/kyberAISubscription'
 
-import { DEFAULT_SLIPPAGE_TESTNET, TERM_FILES_PATH } from 'constants/index'
+import { SUGGESTED_BASES } from 'constants/bases'
+import { TERM_FILES_PATH } from 'constants/index'
 import { SupportedLocale } from 'constants/locales'
 import { PINNED_PAIRS } from 'constants/tokens'
 import { useActiveWeb3React } from 'hooks'
@@ -16,6 +17,7 @@ import {
 import useDebounce from 'hooks/useDebounce'
 import { ParticipantInfo, ParticipantStatus } from 'pages/TrueSightV2/types'
 import { AppDispatch, AppState } from 'state'
+import { useKyberSwapConfig } from 'state/application/hooks'
 import { useIsConnectingWallet, useSessionInfo } from 'state/authen/hooks'
 import { useAppDispatch, useAppSelector } from 'state/hooks'
 import { WrappedTokenInfo } from 'state/lists/wrappedTokenInfo'
@@ -36,26 +38,21 @@ import {
   toggleKyberAIBanner,
   toggleKyberAIWidget,
   toggleLiveChart,
-  toggleTokenInfo,
+  toggleMyEarningChart,
   toggleTopTrendingTokens,
   toggleTradeRoutes,
+  toggleUseAggregatorForZap,
   updateAcceptedTermVersion,
   updateTokenAnalysisSettings,
-  updateUserDarkMode,
   updateUserDeadline,
   updateUserDegenMode,
   updateUserLocale,
   updateUserSlippageTolerance,
-  updateUserSlippageToleranceForLineaTestnet,
 } from 'state/user/actions'
-import {
-  CROSS_CHAIN_SETTING_DEFAULT,
-  CrossChainSetting,
-  VIEW_MODE,
-  defaultShowLiveCharts,
-  getFavoriteTokenDefault,
-} from 'state/user/reducer'
+import { CROSS_CHAIN_SETTING_DEFAULT, CrossChainSetting, VIEW_MODE } from 'state/user/reducer'
 import { isAddress, isChristmasTime } from 'utils'
+
+const MAX_FAVORITE_LIMIT = 12
 
 function serializeToken(token: Token | WrappedTokenInfo): SerializedToken {
   return {
@@ -85,24 +82,6 @@ function deserializeToken(serializedToken: SerializedToken): Token {
         serializedToken.symbol,
         serializedToken.name,
       )
-}
-
-export function useIsDarkMode(): boolean {
-  const userDarkMode = useSelector<AppState, boolean | null>(state => state.user.userDarkMode)
-  const matchesDarkMode = useSelector<AppState, boolean>(state => state.user.matchesDarkMode)
-
-  return typeof userDarkMode !== 'boolean' ? matchesDarkMode : userDarkMode
-}
-
-export function useDarkModeManager(): [boolean, () => void] {
-  const dispatch = useDispatch<AppDispatch>()
-  const darkMode = useIsDarkMode()
-
-  const toggleSetDarkMode = useCallback(() => {
-    dispatch(updateUserDarkMode({ userDarkMode: !darkMode }))
-  }, [darkMode, dispatch])
-
-  return [darkMode, toggleSetDarkMode]
 }
 
 export function useUserLocale(): SupportedLocale | null {
@@ -153,25 +132,30 @@ export function useDegenModeManager(): [boolean, () => void] {
   return [degenMode, toggleSetDegenMode]
 }
 
+export function useAggregatorForZapSetting(): [boolean, () => void] {
+  const dispatch = useDispatch<AppDispatch>()
+  const isUseAggregatorForZap = useSelector<AppState, AppState['user']['useAggregatorForZap']>(
+    state => state.user.useAggregatorForZap,
+  )
+
+  const toggle = useCallback(() => {
+    dispatch(toggleUseAggregatorForZap())
+  }, [dispatch])
+
+  return [isUseAggregatorForZap === undefined ? true : isUseAggregatorForZap, toggle]
+}
+
 export function useUserSlippageTolerance(): [number, (slippage: number) => void] {
   const dispatch = useDispatch<AppDispatch>()
-  const { chainId } = useActiveWeb3React()
-  const isLineaTestnet = chainId === ChainId.LINEA_TESTNET
   const userSlippageTolerance = useSelector<AppState, AppState['user']['userSlippageTolerance']>(state => {
-    return isLineaTestnet
-      ? state.user.userSlippageToleranceForLineaTestnet || DEFAULT_SLIPPAGE_TESTNET
-      : state.user.userSlippageTolerance
+    return state.user.userSlippageTolerance
   })
 
   const setUserSlippageTolerance = useCallback(
     (userSlippageTolerance: number) => {
-      if (isLineaTestnet) {
-        dispatch(updateUserSlippageToleranceForLineaTestnet({ userSlippageTolerance }))
-      } else {
-        dispatch(updateUserSlippageTolerance({ userSlippageTolerance }))
-      }
+      dispatch(updateUserSlippageTolerance({ userSlippageTolerance }))
     },
-    [dispatch, isLineaTestnet],
+    [dispatch],
   )
 
   return [userSlippageTolerance, setUserSlippageTolerance]
@@ -275,11 +259,10 @@ export function useToV2LiquidityTokens(
       result.map((result, index) => {
         return {
           tokens: tokenCouples[index],
-          liquidityTokens: result?.result?.[0]
-            ? result.result[0].map(
-                (address: string) => new Token(tokenCouples[index][0].chainId, address, 18, 'DMM-LP', 'DMM LP'),
-              )
-            : [],
+          liquidityTokens:
+            result?.result?.[0]?.map(
+              (address: string) => new Token(tokenCouples[index][0].chainId, address, 18, 'DMM-LP', 'DMM LP'),
+            ) ?? [],
         }
       }),
     [tokenCouples, result],
@@ -348,24 +331,13 @@ export function useLiquidityPositionTokenPairs(): [Token, Token][] {
 }
 
 export function useShowLiveChart(): boolean {
-  const { chainId } = useActiveWeb3React()
-  let showLiveChart = useSelector((state: AppState) => state.user.showLiveCharts)
-  if (typeof showLiveChart?.[chainId] !== 'boolean') {
-    showLiveChart = defaultShowLiveCharts
-  }
-
-  const show = showLiveChart[chainId]
-
-  return !!show
+  const showLiveChart = useSelector((state: AppState) => state.user.showLiveChart)
+  return typeof showLiveChart !== 'boolean' || showLiveChart
 }
 
 export function useShowTradeRoutes(): boolean {
   const showTradeRoutes = useSelector((state: AppState) => state.user.showTradeRoutes)
   return showTradeRoutes
-}
-
-export function useShowTokenInfo(): boolean {
-  return useSelector((state: AppState) => state.user.showTokenInfo) ?? true
 }
 
 export function useShowKyberAIBanner(): boolean {
@@ -383,8 +355,7 @@ export function useUpdateTokenAnalysisSettings(): (payload: string) => void {
 
 export function useToggleLiveChart(): () => void {
   const dispatch = useDispatch<AppDispatch>()
-  const { chainId } = useActiveWeb3React()
-  return useCallback(() => dispatch(toggleLiveChart({ chainId: chainId })), [dispatch, chainId])
+  return useCallback(() => dispatch(toggleLiveChart()), [dispatch])
 }
 
 export function useToggleTradeRoutes(): () => void {
@@ -392,10 +363,6 @@ export function useToggleTradeRoutes(): () => void {
   return useCallback(() => dispatch(toggleTradeRoutes()), [dispatch])
 }
 
-export function useToggleTokenInfo(): () => void {
-  const dispatch = useDispatch<AppDispatch>()
-  return useCallback(() => dispatch(toggleTokenInfo()), [dispatch])
-}
 export function useToggleKyberAIBanner(): () => void {
   const dispatch = useDispatch<AppDispatch>()
   return useCallback(() => dispatch(toggleKyberAIBanner()), [dispatch])
@@ -406,20 +373,39 @@ export function useToggleTopTrendingTokens(): () => void {
   return useCallback(() => dispatch(toggleTopTrendingTokens()), [dispatch])
 }
 
-export const useUserFavoriteTokens = (chainId: ChainId) => {
+export const useUserFavoriteTokens = (customChain?: ChainId) => {
+  const { chainId: currentChain } = useActiveWeb3React()
+  const chainId = customChain || currentChain
   const dispatch = useDispatch<AppDispatch>()
-  const { favoriteTokensByChainId } = useSelector((state: AppState) => state.user)
+  const { favoriteTokensByChainIdv2: favoriteTokensByChainId } = useSelector((state: AppState) => state.user)
+  const { commonTokens } = useKyberSwapConfig(chainId)
+  const defaultTokens = useMemo(() => {
+    return commonTokens || SUGGESTED_BASES[chainId || ChainId.MAINNET].map(e => e.address)
+  }, [commonTokens, chainId])
 
   const favoriteTokens = useMemo(() => {
     if (!chainId) return undefined
-    return favoriteTokensByChainId
-      ? favoriteTokensByChainId[chainId] || getFavoriteTokenDefault(chainId)
-      : getFavoriteTokenDefault(chainId)
-  }, [chainId, favoriteTokensByChainId])
+    const favoritedTokens = favoriteTokensByChainId?.[chainId] || {}
+    const favoritedTokenAddresses = defaultTokens
+      .filter(address => favoritedTokens[address.toLowerCase()] !== false)
+      .concat(Object.keys(favoritedTokens).filter(address => favoritedTokens[address]))
+
+    return [...new Set(favoritedTokenAddresses.map(a => a.toLowerCase()))]
+  }, [chainId, favoriteTokensByChainId, defaultTokens])
 
   const toggleFavoriteToken = useCallback(
-    (payload: ToggleFavoriteTokenPayload) => dispatch(toggleFavoriteTokenAction(payload)),
-    [dispatch],
+    (payload: ToggleFavoriteTokenPayload) => {
+      if (!favoriteTokens) return
+      const address = payload.address.toLowerCase()
+      // Is adding favorite and reached max limit
+      if (favoriteTokens.indexOf(address) < 0 && favoriteTokens.length >= MAX_FAVORITE_LIMIT) {
+        return
+      }
+      const newValue = favoriteTokens.indexOf(address) < 0
+
+      dispatch(toggleFavoriteTokenAction({ ...payload, newValue }))
+    },
+    [dispatch, favoriteTokens],
   )
 
   return { favoriteTokens, toggleFavoriteToken }
@@ -497,34 +483,44 @@ export const useSlippageSettingByPage = (isCrossChain = false) => {
   return { setRawSlippage, rawSlippage, isSlippageControlPinned, togglePinSlippage }
 }
 
-const participantDefault = { rankNo: 0, status: ParticipantStatus.UNKNOWN, referralCode: '', id: 0 }
+const participantDefault = {
+  rankNo: 0,
+  status: ParticipantStatus.UNKNOWN,
+  referralCode: '',
+  id: 0,
+  updatedAt: 0,
+  createdAt: 0,
+}
 export const useGetParticipantKyberAIInfo = (): ParticipantInfo => {
   const { userInfo } = useSessionInfo()
-  const { data: data = participantDefault, isError } = useGetParticipantInfoQuery(undefined, {
+  const { currentData } = useGetParticipantInfoQuery(undefined, {
     skip: !userInfo,
   })
-  return isError ? participantDefault : data
+  return currentData || participantDefault
 }
 
 export const useIsWhiteListKyberAI = () => {
-  const { userInfo } = useSessionInfo()
-  const { isLogin, pendingAuthentication } = useSessionInfo()
+  const { isLogin, pendingAuthentication, userInfo } = useSessionInfo()
   const {
-    data: rawData,
+    currentData: rawData,
     isFetching,
     isError,
-    refetch,
   } = useGetParticipantInfoQuery(undefined, {
-    skip: !userInfo,
+    skip: !userInfo || userInfo?.data?.hasAccessToKyberAI,
   })
 
-  const { account } = useActiveWeb3React()
+  const [getParticipantInfoQuery] = useLazyGetParticipantInfoQuery()
+  // why not use refetch of useGetParticipantInfoQuery: loop api issues, idk.
+  const refetch = useCallback(() => {
+    userInfo && getParticipantInfoQuery()
+  }, [getParticipantInfoQuery, userInfo])
+
   const [connectingWallet] = useIsConnectingWallet()
 
   const isLoading = isFetching || pendingAuthentication
   const loadingDebounced = useDebounce(isLoading, 500) || connectingWallet
 
-  const participantInfo = isError || loadingDebounced || !account ? participantDefault : rawData
+  const participantInfo = isError || loadingDebounced ? participantDefault : rawData
 
   return {
     loading: loadingDebounced,
@@ -557,4 +553,16 @@ export const usePermitData: (
   const permitData = useAppSelector(state => state.user.permitData)
 
   return address && account && permitData ? permitData[account]?.[chainId]?.[address] : null
+}
+
+export const useShowMyEarningChart: () => [boolean, () => void] = () => {
+  const dispatch = useAppDispatch()
+
+  const isShowMyEarningChart = useAppSelector(state =>
+    state.user.myEarningChart === undefined ? true : state.user.myEarningChart,
+  )
+  const toggle = useCallback(() => {
+    dispatch(toggleMyEarningChart())
+  }, [dispatch])
+  return [isShowMyEarningChart, toggle]
 }

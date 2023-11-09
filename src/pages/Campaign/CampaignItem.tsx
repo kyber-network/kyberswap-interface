@@ -10,13 +10,13 @@ import { Flex, Text } from 'rebass'
 import styled, { CSSProperties, css } from 'styled-components'
 
 import { ReactComponent as GrantCampaignIcon } from 'assets/svg/grant_campaign.svg'
+import { ReactComponent as StarMultiplierIcon } from 'assets/svg/star_multiplier.svg'
 import ProgressBar from 'components/ProgressBar'
 import { MouseoverTooltip } from 'components/Tooltip'
 import { DEFAULT_SIGNIFICANT, RESERVE_USD_DECIMALS } from 'constants/index'
-import { NETWORKS_INFO } from 'constants/networks'
+import { NETWORKS_INFO } from 'hooks/useChainsConfig'
 import useTheme from 'hooks/useTheme'
-import { CampaignData, CampaignStatus, CampaignUserInfoStatus } from 'state/campaigns/actions'
-import { useIsDarkMode } from 'state/user/hooks'
+import { CampaignData, CampaignStatus, CampaignUserInfoStatus, ConditionGroupsType } from 'state/campaigns/actions'
 
 import CampaignActions from './CampaignActions'
 
@@ -32,7 +32,7 @@ const CampaignItemWrapper = styled.div<{ selected?: boolean }>`
     border-bottom: none;
   }
   position: relative;
-  background: ${({ theme, selected }) => (selected ? rgba(theme.bg8, 0.12) : 'transparent')};
+  background: ${({ theme, selected }) => (selected ? rgba(theme.bg6, 0.12) : 'transparent')};
 
   ${({ theme, selected }) =>
     selected &&
@@ -93,7 +93,6 @@ export const getCampaignInfo = (campaign: CampaignData, account: string | undefi
 function CampaignItem({ campaign, onSelectCampaign, isSelected, style }: CampaignItemProps) {
   const { account } = useWeb3React()
   const theme = useTheme()
-  const isDarkMode = useIsDarkMode()
   const isRewardInUSD = campaign.rewardDistribution[0]?.rewardInUSD
   let totalRewardAmount: Fraction = new Fraction(0)
   let percentTradingVolume = 0
@@ -125,11 +124,11 @@ function CampaignItem({ campaign, onSelectCampaign, isSelected, style }: Campaig
   const rCampaignName = campaign.name
   const rCampaignStatus = campaign.status === CampaignStatus.UPCOMING ? t`Upcoming` : isOngoing ? t`Ongoing` : t`Ended`
   const rChainIdImages = campaign?.chainIds?.split?.(',').map(chainId => {
-    const { iconDark, icon, name } = NETWORKS_INFO[chainId as unknown as ChainId]
+    const { icon, name } = NETWORKS_INFO[chainId as unknown as ChainId]
     return (
       <img
         key={chainId}
-        src={isDarkMode && iconDark ? iconDark : icon}
+        src={icon}
         alt={name + ' icon'}
         style={{ width: '16px', minWidth: '16px', height: '16px', minHeight: '16px' }}
       />
@@ -148,6 +147,9 @@ function CampaignItem({ campaign, onSelectCampaign, isSelected, style }: Campaig
     (isPassedVolume && !tradingNumberRequired) ||
     (isPassedNumberOfTrade && !tradingVolumeRequired)
   const { showProgressBarVolume, showProgressBarNumberTrade, isShowProgressBar } = getCampaignInfo(campaign, account)
+  const hasBonusMultiplier = !!campaign?.conditionGroups?.find(
+    item => item.type === ConditionGroupsType.POINT_MULTIPLIER && !!item.conditions?.length,
+  )
 
   return (
     <CampaignItemWrapper
@@ -168,11 +170,16 @@ function CampaignItem({ campaign, onSelectCampaign, isSelected, style }: Campaig
           {campaign.competitionId && campaign.competitorId && campaign.status !== CampaignStatus.ENDED ? (
             <MouseoverTooltip
               placement="top"
-              text={<Trans>This campaign is participating in the Grant Campaign</Trans>}
+              text={<Trans>This campaign is participating in the Grant Campaign.</Trans>}
             >
               <GrantCampaignIcon width="16px" height="16px" />
             </MouseoverTooltip>
           ) : null}
+          {hasBonusMultiplier && (
+            <MouseoverTooltip placement="top" text={<Trans>Point multiplier is in effect.</Trans>}>
+              <StarMultiplierIcon />
+            </MouseoverTooltip>
+          )}
           <CampaignStatusText status={campaign.status}>{rCampaignStatus}</CampaignStatusText>
         </Flex>
       </Container>

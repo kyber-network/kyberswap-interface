@@ -18,13 +18,14 @@ export function useSyncNetworkParamWithStore() {
   const location = useLocation()
   const [requestingNetwork, setRequestingNetwork] = useState<string>()
   const triedSync = useRef(false)
+  const tried = triedEager.current
 
   useEffect(() => {
-    if (!paramChainId) {
+    if (!networkParam || !paramChainId) {
       triedSync.current = true
       return
     }
-    if (!triedEager) {
+    if (!tried) {
       return
     }
 
@@ -35,18 +36,16 @@ export function useSyncNetworkParamWithStore() {
      */
     ;(async () => {
       if (triedSync.current) return
-      triedSync.current = true
       setRequestingNetwork(networkParam)
       await changeNetwork(paramChainId, undefined, () => {
-        if (networkParam) {
-          navigate(
-            { ...location, pathname: location.pathname.replace(networkParam, networkInfo.route) },
-            { replace: true },
-          )
-        }
+        navigate(
+          { ...location, pathname: location.pathname.replace(networkParam, networkInfo.route) },
+          { replace: true },
+        )
       })
+      triedSync.current = true
     })()
-  }, [changeNetwork, location, navigate, networkInfo.route, networkParam, paramChainId, triedEager])
+  }, [changeNetwork, location, navigate, networkInfo.route, networkParam, paramChainId, tried])
 
   useEffect(() => {
     if (NETWORKS_INFO[chainId].route === requestingNetwork) setRequestingNetwork(undefined)
@@ -61,12 +60,12 @@ export function useSyncNetworkParamWithStore() {
       networkParam &&
       networkInfo.route !== networkParam &&
       triedSync.current &&
-      triedEager
+      tried
     ) {
       navigate(
         { ...location, pathname: location.pathname.replace(encodeURIComponent(networkParam), networkInfo.route) },
         { replace: true },
       )
     }
-  }, [location, networkInfo.route, navigate, triedEager, networkParam, requestingNetwork])
+  }, [location, networkInfo.route, navigate, tried, networkParam, requestingNetwork])
 }

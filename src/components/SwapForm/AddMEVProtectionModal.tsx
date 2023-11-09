@@ -1,6 +1,5 @@
 import { ChainId } from '@kyberswap/ks-sdk-core'
 import { Trans, t } from '@lingui/macro'
-import { Connector } from '@web3-react/types'
 import { darken } from 'polished'
 import { useCallback, useState } from 'react'
 import { X } from 'react-feather'
@@ -14,12 +13,12 @@ import { NotificationType } from 'components/Announcement/type'
 import { ButtonEmpty, ButtonOutlined, ButtonPrimary } from 'components/Button'
 import Modal from 'components/Modal'
 import Row, { RowBetween } from 'components/Row'
-import { didUserReject } from 'constants/connectors/utils'
 import { Z_INDEXS } from 'constants/styles'
 import useMixpanel, { MIXPANEL_TYPE } from 'hooks/useMixpanel'
 import { useChangeNetwork } from 'hooks/web3/useChangeNetwork'
 import { useNotify } from 'state/application/hooks'
 import { ExternalLink, MEDIA_WIDTHS } from 'theme'
+import { friendlyError } from 'utils/errorMessage'
 
 const Wrapper = styled.div`
   padding: 20px;
@@ -60,7 +59,7 @@ const RPCOption = styled(ButtonEmpty)<{ selected: boolean }>`
   ${({ theme, selected }) =>
     selected &&
     css`
-      background-color: ${theme.darkMode ? theme.buttonBlack : theme.buttonGray};
+      background-color: ${theme.buttonBlack};
       & > div {
         color: ${theme.text};
       }
@@ -113,10 +112,9 @@ export default function AddMEVProtectionModal({ isOpen, onClose }: { isOpen: boo
         onClose?.()
         mixpanelHandler(MIXPANEL_TYPE.MEV_ADD_RESULT, { type: addingOption.name, result: 'success' })
       },
-      (connector: Connector, error: Error) => {
-        let reason = error?.message || 'Unknown reason'
-        if (didUserReject(connector, error)) reason = 'User rejected'
-        mixpanelHandler(MIXPANEL_TYPE.MEV_ADD_RESULT, { type: addingOption.name, result: 'fail', reason })
+      (error: Error) => {
+        const message = friendlyError(error)
+        mixpanelHandler(MIXPANEL_TYPE.MEV_ADD_RESULT, { type: addingOption.name, result: 'fail', reason: message })
       },
     )
   }, [addNewNetwork, notify, onClose, selectedOption, mixpanelHandler])
@@ -140,17 +138,20 @@ export default function AddMEVProtectionModal({ isOpen, onClose }: { isOpen: boo
         <Row gap="12px">
           <Text fontSize={12} lineHeight="16px">
             <Trans>
-              We suggest using the{' '}
+              <ExternalLink href="https://docs.kyberswap.com/getting-started/foundational-topics/decentralized-finance/maximal-extractable-value-mev">
+                MEV
+              </ExternalLink>{' '}
+              Protection safeguards you from front-running attacks on Ethereum. We suggest you employing the{' '}
               <ExternalLink href="https://docs.kyberswap.com/getting-started/foundational-topics/decentralized-technologies/rpc">
                 RPC endpoint
               </ExternalLink>{' '}
-              of trusted third-parties like{' '}
+              of reliable third-parties such as{' '}
               <ExternalLink href="https://docs.flashbots.net/flashbots-protect/overview">Flashbots</ExternalLink> or{' '}
-              <ExternalLink href="https://mevblocker.io/#faq">MEVBlocker</ExternalLink> to protect you from MEV Bots.{' '}
+              <ExternalLink href="https://mevblocker.io/#faq">MEVBlocker</ExternalLink>.
               <br />
               <br />
-              Please note that adding a RPC endpoint automatically is only supported via the MetaMask wallet. If you
-              wish to add the RPC endpoint to your wallet manually, refer to this{' '}
+              Note that adding the RPC endpoint automatically is only available via the MetaMask wallet. If you would
+              like to add the RPC endpoint to your wallet manually, please refer to this{' '}
               <ExternalLink href="https://docs.kyberswap.com/getting-started/quickstart/faq#how-to-change-rpc-in-metamask">
                 guide
               </ExternalLink>

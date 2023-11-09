@@ -48,7 +48,9 @@ const useGetElasticFarms = () => {
     : ''
 
   return useSWR<Response>(endpoint, (url: string) => fetch(url).then(resp => resp.json()), {
-    refreshInterval: 10_000,
+    revalidateIfStale: false,
+    revalidateOnFocus: false,
+    revalidateOnReconnect: false,
   })
 }
 
@@ -97,8 +99,8 @@ const FarmUpdaterV2: React.FC<CommonProps> = ({}) => {
       const formattedPoolData: ElasticFarm[] = Object.values(poolsByFairLaunchContract).map(
         ({ id, pools: rawPools }) => {
           const pools = rawPools.map(rawPool => {
-            const token0Address = isAddressString(chainId, rawPool.pool.token0.id)
-            const token1Address = isAddressString(chainId, rawPool.pool.token1.id)
+            const token0Address = isAddressString(chainId, rawPool.pool.token0?.id)
+            const token1Address = isAddressString(chainId, rawPool.pool.token1?.id)
 
             const token0 =
               token0Address === WETH[chainId].address

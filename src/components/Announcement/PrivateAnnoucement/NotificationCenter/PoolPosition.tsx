@@ -7,33 +7,16 @@ import styled from 'styled-components'
 import { ReactComponent as DropdownSVG } from 'assets/svg/down.svg'
 import InboxIcon from 'components/Announcement/PrivateAnnoucement/Icon'
 import { PrivateAnnouncementPropCenter } from 'components/Announcement/PrivateAnnoucement/NotificationCenter'
-import { useNavigateToUrl } from 'components/Announcement/helper'
 import { AnnouncementTemplatePoolPosition } from 'components/Announcement/type'
 import { DoubleCurrencyLogoV2 } from 'components/DoubleLogo'
 import { MoneyBag } from 'components/Icons'
 import { APP_PATHS } from 'constants/index'
 import { NETWORKS_INFO } from 'constants/networks'
 import useTheme from 'hooks/useTheme'
+import { useNavigateToUrl } from 'utils/redirect'
 import { formatTime } from 'utils/time'
 
-import { Desc, Time, Title, Wrapper } from './styled'
-
-const ArrowWrapper = styled.div`
-  width: 20px;
-  height: 20px;
-  color: ${({ theme }) => theme.subText};
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  svg {
-    transition: all 150ms ease-in-out;
-  }
-  &[data-expanded='true'] {
-    svg {
-      transform: rotate(180deg);
-    }
-  }
-`
+import { ArrowWrapper, Desc, Time, Title, Wrapper } from './styled'
 
 const Detail = styled(Desc)`
   flex-direction: column;
@@ -48,7 +31,7 @@ export default function AnnouncementItem({
 }: PrivateAnnouncementPropCenter<AnnouncementTemplatePoolPosition>) {
   const [expand, setExpand] = useState(false)
   const { sentAt, templateType } = announcement
-  const { position } = announcement.templateBody
+  const { position } = announcement.templateBody || {}
   const {
     token0LogoURL,
     token0Symbol,
@@ -60,7 +43,7 @@ export default function AnnouncementItem({
     minPrice,
     currentPrice,
     poolAddress,
-  } = position
+  } = position || {}
   const isInRange = type === 'IN_RANGE'
   const statusMessage = isInRange ? t`Back in range` : t`Out of range`
   const chainId = Number(rawChain) as ChainId
@@ -97,13 +80,19 @@ export default function AnnouncementItem({
       {expand && (
         <Detail>
           <Text>
-            <Trans>Current Market Price is {currentPrice} USDT per stMatic</Trans>
+            <Trans>
+              Current Market Price is {currentPrice} {token0Symbol} per {token1Symbol}
+            </Trans>
           </Text>
           <Text>
-            <Trans>Min Price of your range is {minPrice} USDT per stMatic</Trans>
+            <Trans>
+              Min Price of your range is {minPrice} {token0Symbol} per {token1Symbol}
+            </Trans>
           </Text>
           <Text>
-            <Trans>Max Price of your range is {maxPrice} USDT per stMatic</Trans>
+            <Trans>
+              Max Price of your range is {maxPrice} {token0Symbol} per {token1Symbol}
+            </Trans>
           </Text>
         </Detail>
       )}

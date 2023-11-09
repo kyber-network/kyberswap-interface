@@ -1,4 +1,3 @@
-import KyberOauth2 from '@kybernetwork/oauth2'
 import { Trans, t } from '@lingui/macro'
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
@@ -6,19 +5,18 @@ import { Text } from 'rebass'
 import { useRequestWhiteListMutation } from 'services/kyberAISubscription'
 import styled from 'styled-components'
 
-import { ButtonPrimary } from 'components/Button'
+import { ButtonLight, ButtonPrimary } from 'components/Button'
 import { APP_PATHS } from 'constants/index'
-import { useActiveWeb3React } from 'hooks'
-import useMixpanel, { MIXPANEL_TYPE } from 'hooks/useMixpanel'
+import { MIXPANEL_TYPE, useMixpanelKyberAI } from 'hooks/useMixpanel'
 import useTheme from 'hooks/useTheme'
+import SignInForm from 'pages/TrueSightV2/pages/RegisterWhitelist/SignInForm'
 import SubscribeForm from 'pages/TrueSightV2/pages/RegisterWhitelist/SubscribeForm'
 import WaitListForm from 'pages/TrueSightV2/pages/RegisterWhitelist/WaitListForm'
 import VerifyCodeModal from 'pages/Verify/VerifyCodeModal'
-import { useWalletModalToggle } from 'state/application/hooks'
 import { useSessionInfo } from 'state/authen/hooks'
 import { useIsWhiteListKyberAI } from 'state/user/hooks'
 
-const ConnectWalletButton = styled(ButtonPrimary)`
+const ConnectWalletButton = styled(ButtonLight)`
   height: 36px;
   width: 236px;
 `
@@ -26,9 +24,7 @@ const ConnectWalletButton = styled(ButtonPrimary)`
 export default function RegisterWhitelist({ showForm = true }: { showForm?: boolean }) {
   const navigate = useNavigate()
   const theme = useTheme()
-  const { mixpanelHandler } = useMixpanel()
-  const { account } = useActiveWeb3React()
-  const toggleWalletModal = useWalletModalToggle()
+  const mixpanelHandler = useMixpanelKyberAI()
   const { isLogin } = useSessionInfo()
 
   const { isWhiteList, isWaitList, loading: isCheckingPermission } = useIsWhiteListKyberAI()
@@ -60,7 +56,7 @@ export default function RegisterWhitelist({ showForm = true }: { showForm?: bool
         <>
           <WaitListForm
             labelColor={theme.text}
-            style={{ maxWidth: '100%' }}
+            style={{ width: '100%' }}
             desc={
               <Text fontSize={14} color={theme.text} lineHeight={'16px'} style={{ lineHeight: '18px' }}>
                 <Trans>
@@ -92,19 +88,7 @@ export default function RegisterWhitelist({ showForm = true }: { showForm?: bool
       </ConnectWalletButton>
     )
 
-  if (!account)
-    return (
-      <ConnectWalletButton onClick={toggleWalletModal}>
-        <Trans>Connect Wallet</Trans>
-      </ConnectWalletButton>
-    )
-
-  if (!isLogin)
-    return (
-      <ConnectWalletButton onClick={() => KyberOauth2.authenticate({ wallet_address: account ?? '' })}>
-        <Trans>Sign-In to Continue</Trans>
-      </ConnectWalletButton>
-    )
+  if (!isLogin) return <SignInForm />
 
   const btnGetStart = (
     <ConnectWalletButton

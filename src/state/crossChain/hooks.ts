@@ -1,8 +1,9 @@
-import { RouteData } from '@0xsquid/sdk'
+import { RouteResponse } from '@0xsquid/sdk'
 import { ChainId, NativeCurrency } from '@kyberswap/ks-sdk-core'
 import { useCallback, useMemo } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
 
+import { CHAINS_SUPPORT_CROSS_CHAIN } from 'constants/index'
 import { useActiveWeb3React } from 'hooks'
 import { MultiChainTokenInfo } from 'pages/Bridge/type'
 import { AppDispatch, AppState } from 'state'
@@ -100,7 +101,10 @@ export function useCrossChainState(): [
   const { chainId } = useActiveWeb3React()
   const setState = useCallback((data: CrossChainStateParams) => dispatch(setCrossChainState(data)), [dispatch])
 
-  const listChainOut = useMemo(() => chains.filter(e => e !== chainId), [chains, chainId])
+  const listChainOut = useMemo(
+    () => chains.filter(e => e !== chainId && CHAINS_SUPPORT_CROSS_CHAIN.includes(e)),
+    [chains, chainId],
+  )
   const listTokenOut = useMemo(() => tokens.filter(e => e.chainId === chainIdOut), [tokens, chainIdOut])
   const listTokenIn = useMemo(() => tokens.filter(e => e.chainId === chainId), [tokens, chainId])
 
@@ -128,7 +132,7 @@ export function useCrossChainHandlers() {
     [dispatch],
   )
 
-  const setTradeRoute = useCallback((data: RouteData | undefined) => dispatch(setRoute(data)), [dispatch])
+  const setTradeRoute = useCallback((data: RouteResponse | undefined) => dispatch(setRoute(data)), [dispatch])
   const setInputAmount = useCallback((data: string) => dispatch(setInputAmountCrossChain(data)), [dispatch])
 
   return { selectDestChain, setTradeRoute, setInputAmount, selectCurrencyIn, selectCurrencyOut }

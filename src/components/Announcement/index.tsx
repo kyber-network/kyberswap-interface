@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useMedia, usePrevious } from 'react-use'
 import {
-  useAckPrivateAnnouncementsMutation,
+  ANNOUNCEMENT_TAGS,
+  useAckPrivateAnnouncementsByIdsMutation,
   useLazyGetAnnouncementsQuery,
   useLazyGetPrivateAnnouncementsQuery,
 } from 'services/announcement'
@@ -9,17 +10,18 @@ import styled, { css } from 'styled-components'
 
 import AnnouncementView, { Tab } from 'components/Announcement/AnnoucementView'
 import DetailAnnouncementPopup from 'components/Announcement/Popups/DetailAnnouncementPopup'
-import { formatNumberOfUnread, useInvalidateTagAnnouncement } from 'components/Announcement/helper'
+import { formatNumberOfUnread } from 'components/Announcement/helper'
 import { Announcement, PrivateAnnouncement } from 'components/Announcement/type'
 import NotificationIcon from 'components/Icons/NotificationIcon'
 import MenuFlyout from 'components/MenuFlyout'
 import Modal from 'components/Modal'
 import { RTK_QUERY_TAGS } from 'constants/index'
-import { useActiveWeb3React } from 'hooks'
 import useInterval from 'hooks/useInterval'
+import { useInvalidateTagAnnouncement } from 'hooks/useInvalidateTags'
 import useMixpanel, { MIXPANEL_TYPE } from 'hooks/useMixpanel'
 import { ApplicationModal } from 'state/application/actions'
 import { useDetailAnnouncement, useModalOpen, useToggleNotificationCenter } from 'state/application/hooks'
+import { useSessionInfo } from 'state/authen/hooks'
 import { MEDIA_WIDTHS } from 'theme'
 
 const StyledMenuButton = styled.button<{ active?: boolean }>`
@@ -31,7 +33,7 @@ const StyledMenuButton = styled.button<{ active?: boolean }>`
   display: flex;
   align-items: center;
   justify-content: center;
-  color: ${({ theme }) => theme.text};
+  color: ${({ theme }) => theme.subText};
   border-radius: 999px;
   position: relative;
   outline: none;
@@ -39,20 +41,15 @@ const StyledMenuButton = styled.button<{ active?: boolean }>`
   border: 1px solid transparent;
   :hover {
     cursor: pointer;
-    background-color: ${({ theme }) => theme.buttonBlack};
-    border: 1px solid ${({ theme }) => theme.primary};
   }
-
   ${({ active }) =>
-    active
-      ? css`
-          background-color: ${({ theme }) => theme.buttonBlack};
-        `
-      : ''}
+    active &&
+    css`
+      color: ${({ theme }) => theme.text};
+    `}
 `
 
 const StyledMenu = styled.div`
-  margin-left: 0.5rem;
   display: flex;
   justify-content: center;
   align-items: center;
@@ -85,12 +82,11 @@ const browserCustomStyle = css`
 const responseDefault = { numberOfUnread: 0, pagination: { totalItems: 0 }, notifications: [] }
 
 export default function AnnouncementComponent() {
-  const { account, chainId } = useActiveWeb3React()
   const [activeTab, setActiveTab] = useState(Tab.ANNOUNCEMENT)
   const { mixpanelHandler } = useMixpanel()
   const scrollRef = useRef<HTMLDivElement>(null)
 
-  const isOpenNotificationCenter = useModalOpen(ApplicationModal.NOTIFICATION_CENTER)
+  const isOpenInbox = useModalOpen(ApplicationModal.NOTIFICATION_CENTER)
   const toggleNotificationCenter = useToggleNotificationCenter()
   const isMobile = useMedia(`(max-width: ${MEDIA_WIDTHS.upToSmall}px)`)
 
@@ -103,8 +99,6 @@ export default function AnnouncementComponent() {
   const [fetchPrivateAnnouncement, { data: respPrivateAnnouncement = responseDefault, isError }] =
     useLazyGetPrivateAnnouncementsQuery()
 
-  const [ackAnnouncement] = useAckPrivateAnnouncementsMutation()
-
   const isMyInboxTab = activeTab === Tab.INBOX
   const loadingAnnouncement = useRef(false)
 
@@ -115,11 +109,7 @@ export default function AnnouncementComponent() {
         const isMyInboxTab = tab === Tab.INBOX
         loadingAnnouncement.current = true
         const page = isReset ? 1 : curPage + 1
-        const promise = isMyInboxTab
-          ? account
-            ? fetchPrivateAnnouncement({ page, account })
-            : null
-          : fetchGeneralAnnouncement({ page })
+        const promise = isMyInboxTab ? fetchPrivateAnnouncement({ page }) : fetchGeneralAnnouncement({ page })
 
         if (!promise) return
         const { data } = await promise
@@ -141,15 +131,7 @@ export default function AnnouncementComponent() {
       }
       return
     },
-    [
-      account,
-      announcements,
-      privateAnnouncements,
-      curPage,
-      activeTab,
-      fetchGeneralAnnouncement,
-      fetchPrivateAnnouncement,
-    ],
+    [announcements, privateAnnouncements, curPage, activeTab, fetchGeneralAnnouncement, fetchPrivateAnnouncement],
   )
 
   const {
@@ -160,9 +142,9 @@ export default function AnnouncementComponent() {
     numberOfUnread,
     pagination: { totalItems: totalPrivateAnnouncement },
   } = isError ? responseDefault : respPrivateAnnouncement
-  const refreshAnnouncement = () => {
+  const refreshAnnouncement = useCallback(() => {
     fetchAnnouncementsByTab(true)
-  }
+  }, [fetchAnnouncementsByTab])
 
   const loadMoreAnnouncements = useCallback(() => {
     fetchAnnouncementsByTab()
@@ -195,17 +177,18 @@ export default function AnnouncementComponent() {
     tab !== activeTab && fetchAnnouncementsByTab(true, tab)
   }
 
-  const resetUnread = useInvalidateTagAnnouncement()
+  const invalidateTag = useInvalidateTagAnnouncement()
+  const { userInfo } = useSessionInfo()
 
   const prefetchPrivateAnnouncements = useCallback(async () => {
     try {
-      if (!account) return []
-      const { data } = await fetchPrivateAnnouncement({ account, page: 1 })
+      if (!userInfo?.identityId) return []
+      const { data } = await fetchPrivateAnnouncement({ page: 1 })
       const notifications = (data?.notifications ?? []) as PrivateAnnouncement[]
       const hasNewMsg = data?.numberOfUnread !== numberOfUnread
       if (hasNewMsg) {
-        resetUnread(RTK_QUERY_TAGS.GET_PRIVATE_ANN_BY_ID)
-        resetUnread(RTK_QUERY_TAGS.GET_TOTAL_UNREAD_PRIVATE_ANN)
+        invalidateTag(RTK_QUERY_TAGS.GET_PRIVATE_ANN_BY_ID)
+        invalidateTag(RTK_QUERY_TAGS.GET_TOTAL_UNREAD_PRIVATE_ANN)
         if (scrollRef.current) scrollRef.current.scrollTop = 0
       }
       setPrivateAnnouncements(prevData => (hasNewMsg || !prevData.length ? notifications : prevData))
@@ -214,21 +197,20 @@ export default function AnnouncementComponent() {
       setPrivateAnnouncements([])
       return []
     }
-  }, [account, fetchPrivateAnnouncement, resetUnread, numberOfUnread])
+  }, [fetchPrivateAnnouncement, invalidateTag, numberOfUnread, userInfo?.identityId])
 
-  const prevOpen = usePrevious(isOpenNotificationCenter)
+  const prevOpen = usePrevious(isOpenInbox)
   useEffect(() => {
-    const justClosedPopup = prevOpen !== isOpenNotificationCenter && !isOpenNotificationCenter
+    const justClosedPopup = prevOpen !== isOpenInbox && !isOpenInbox
     if (justClosedPopup) return
-
     // prefetch data
     prefetchPrivateAnnouncements().then((data: PrivateAnnouncement[]) => {
-      const newTab = account && data.length ? Tab.INBOX : Tab.ANNOUNCEMENT
+      const newTab = data.length ? Tab.INBOX : Tab.ANNOUNCEMENT
       setActiveTab(newTab)
-      if (prevOpen !== isOpenNotificationCenter && isOpenNotificationCenter) {
+      if (prevOpen !== isOpenInbox && isOpenInbox) {
         trackingClickTabRef.current(newTab, 'auto')
       }
-      if (isOpenNotificationCenter && newTab === Tab.ANNOUNCEMENT)
+      if (isOpenInbox && newTab === Tab.ANNOUNCEMENT)
         fetchGeneralAnnouncement({ page: 1 })
           .then(({ data }) => {
             setAnnouncements((data?.notifications ?? []) as Announcement[])
@@ -237,20 +219,22 @@ export default function AnnouncementComponent() {
             setAnnouncements([])
           })
     })
-  }, [account, prefetchPrivateAnnouncements, fetchGeneralAnnouncement, prevOpen, isOpenNotificationCenter])
+  }, [prefetchPrivateAnnouncements, fetchGeneralAnnouncement, prevOpen, isOpenInbox])
 
   useEffect(() => {
-    if (!account) {
+    if (userInfo?.identityId) {
       setPrivateAnnouncements([])
+      invalidateTag(ANNOUNCEMENT_TAGS)
     }
-  }, [account, chainId])
+  }, [userInfo?.identityId, invalidateTag])
 
   useInterval(prefetchPrivateAnnouncements, 10_000)
 
+  const [readAllAnnouncement] = useAckPrivateAnnouncementsByIdsMutation()
   const togglePopupWithAckAllMessage = () => {
     toggleNotificationCenter()
-    if (isOpenNotificationCenter && numberOfUnread && account) {
-      ackAnnouncement({ account, action: 'read-all' })
+    if (isOpenInbox && numberOfUnread) {
+      readAllAnnouncement({})
     }
   }
 
@@ -289,10 +273,10 @@ export default function AnnouncementComponent() {
   const badgeText = numberOfUnread > 0 ? formatNumberOfUnread(numberOfUnread) : null
   const bellIcon = (
     <StyledMenuButton
-      active={isOpenNotificationCenter || numberOfUnread > 0}
+      active={isOpenInbox || numberOfUnread > 0}
       onClick={() => {
         togglePopupWithAckAllMessage()
-        if (!isOpenNotificationCenter) mixpanelHandler(MIXPANEL_TYPE.ANNOUNCEMENT_CLICK_BELL_ICON_OPEN_POPUP)
+        if (!isOpenInbox) mixpanelHandler(MIXPANEL_TYPE.ANNOUNCEMENT_CLICK_BELL_ICON_OPEN_POPUP)
       }}
     >
       <NotificationIcon />
@@ -304,7 +288,7 @@ export default function AnnouncementComponent() {
       {isMobile ? (
         <>
           {bellIcon}
-          <Modal isOpen={isOpenNotificationCenter} onDismiss={togglePopupWithAckAllMessage} minHeight={80}>
+          <Modal isOpen={isOpenInbox} onDismiss={togglePopupWithAckAllMessage} minHeight={80}>
             <AnnouncementView {...props} />
           </Modal>
         </>
@@ -312,7 +296,7 @@ export default function AnnouncementComponent() {
         <MenuFlyout
           trigger={bellIcon}
           customStyle={browserCustomStyle}
-          isOpen={isOpenNotificationCenter}
+          isOpen={isOpenInbox}
           toggle={togglePopupWithAckAllMessage}
         >
           <AnnouncementView {...props} />

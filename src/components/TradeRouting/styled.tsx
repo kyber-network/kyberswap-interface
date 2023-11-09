@@ -210,7 +210,7 @@ export const StyledHop = styled.div`
   cursor: pointer;
 
   :hover {
-    filter: ${({ theme }) => (theme.darkMode ? 'brightness(130%)' : 'brightness(97%)')};
+    filter: brightness(130%);
   }
 `
 export const StyledExchange = styled.a`
@@ -227,7 +227,7 @@ export const StyledExchange = styled.a`
   text-decoration: none;
 
   &:hover {
-    color: ${({ theme }) => (theme.darkMode ? theme.white : theme.black)};
+    color: ${({ theme }) => theme.white};
   }
 
   & > .img--sm {
@@ -256,7 +256,6 @@ export const StyledExchangeStatic = styled.div`
   & > .img--sm {
     width: 14px;
     height: 14px;
-    border-radius: 100%;
     margin-right: 4px;
   }
 

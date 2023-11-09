@@ -1,9 +1,9 @@
-import { ChainId, Currency, CurrencyAmount } from '@kyberswap/ks-sdk-core'
+import { Currency, CurrencyAmount } from '@kyberswap/ks-sdk-core'
 import { Trans } from '@lingui/macro'
 import { rgba } from 'polished'
 import { stringify } from 'querystring'
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { useMedia } from 'react-use'
 import { Box, Flex, Text } from 'rebass'
 import { parseGetRouteResponse } from 'services/route/utils'
@@ -13,6 +13,7 @@ import AddressInputPanel from 'components/AddressInputPanel'
 import { Clock } from 'components/Icons'
 import { AutoRow } from 'components/Row'
 import SlippageWarningNote from 'components/SlippageWarningNote'
+import GasFeeAndPriceImpactNote from 'components/SwapForm/GasPriceNote'
 import InputCurrencyPanel from 'components/SwapForm/InputCurrencyPanel'
 import OutputCurrencyPanel from 'components/SwapForm/OutputCurrencyPanel'
 import SlippageSettingGroup from 'components/SwapForm/SlippageSettingGroup'
@@ -29,14 +30,14 @@ import { APP_PATHS } from 'constants/index'
 import { useActiveWeb3React } from 'hooks'
 import useTheme from 'hooks/useTheme'
 import useWrapCallback, { WrapType } from 'hooks/useWrapCallback'
-import { NOTIFICATION_ROUTES } from 'pages/NotificationCenter/const'
+import { PROFILE_MANAGE_ROUTES } from 'pages/NotificationCenter/const'
 import { Field } from 'state/swap/actions'
 import { useSwapActionHandlers, useSwapState } from 'state/swap/hooks'
 import { MEDIA_WIDTHS } from 'theme'
 import { DetailedRouteSummary } from 'types/route'
 import { currencyId } from 'utils/currencyId'
 
-import PriceImpactNote from './PriceImpactNote'
+import MultichainKNCNote from './MultichainKNCNote'
 import RefreshButton from './RefreshButton'
 import ReverseTokenSelectionButton from './ReverseTokenSelectionButton'
 import SwapActionButton from './SwapActionButton'
@@ -81,6 +82,8 @@ export type SwapFormProps = {
 }
 
 const SwapForm: React.FC<SwapFormProps> = props => {
+  const { pathname } = useLocation()
+  const isPartnerSwap = pathname.startsWith(APP_PATHS.PARTNER_SWAP)
   const {
     hidden,
     currencyIn,
@@ -216,11 +219,11 @@ const SwapForm: React.FC<SwapFormProps> = props => {
               </Flex>
 
               <Flex sx={{ gap: '12px' }}>
-                {chainId === ChainId.LINEA_TESTNET ? null : (
+                {!isPartnerSwap && (
                   <PriceAlertButton
                     onClick={() =>
                       navigate(
-                        `${APP_PATHS.NOTIFICATION_CENTER}${NOTIFICATION_ROUTES.CREATE_ALERT}?${stringify({
+                        `${APP_PATHS.PROFILE_MANAGE}${PROFILE_MANAGE_ROUTES.CREATE_ALERT}?${stringify({
                           amount: typedValue || undefined,
                           inputCurrency: currencyId(currencyIn, chainId),
                           outputCurrency: currencyId(currencyOut, chainId),
@@ -261,7 +264,12 @@ const SwapForm: React.FC<SwapFormProps> = props => {
 
           {!isWrapOrUnwrap && <SlippageWarningNote rawSlippage={slippage} isStablePairSwap={isStablePairSwap} />}
 
-          <PriceImpactNote priceImpact={routeSummary?.priceImpact} isDegenMode={isDegenMode} />
+          <GasFeeAndPriceImpactNote
+            gasUsd={routeSummary?.gasUsd}
+            priceImpact={routeSummary?.priceImpact}
+            isDegenMode={isDegenMode}
+          />
+          <MultichainKNCNote currencyIn={currencyIn} currencyOut={currencyOut} />
 
           <SwapActionButton
             isGettingRoute={isGettingRoute}

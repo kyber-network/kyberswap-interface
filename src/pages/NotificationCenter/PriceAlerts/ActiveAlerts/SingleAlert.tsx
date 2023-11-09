@@ -4,6 +4,8 @@ import { useDeleteSingleAlertMutation, useUpdatePriceAlertMutation } from 'servi
 import NotificationIcon from 'components/Icons/NotificationIcon'
 import Toggle from 'components/Toggle'
 import { MouseoverTooltip } from 'components/Tooltip'
+import { PRICE_ALERT_TOPIC_ID } from 'constants/env'
+import useNotification from 'hooks/useNotification'
 import useTheme from 'hooks/useTheme'
 import CommonSingleAlert from 'pages/NotificationCenter/PriceAlerts/CommonSingleAlert'
 import DeleteSingleAlertButton from 'pages/NotificationCenter/PriceAlerts/DeleteSingleAlertButton'
@@ -17,12 +19,13 @@ type Props = {
 const SingleAlert: React.FC<Props> = ({ alert, isMaxQuotaActiveAlert }) => {
   const theme = useTheme()
   const [updateAlert] = useUpdatePriceAlertMutation()
+  const { subscribeOne } = useNotification()
   const [deleteSingleAlert, result] = useDeleteSingleAlertMutation()
   const canUpdateEnable = !(isMaxQuotaActiveAlert && !alert.isEnabled)
   return (
     <CommonSingleAlert
       renderToggle={() => (
-        <MouseoverTooltip text={!canUpdateEnable ? t`Maximum number of Active Alerts reached` : ''}>
+        <MouseoverTooltip text={!canUpdateEnable ? t`Maximum number of Active Alerts reached.` : ''}>
           <Toggle
             style={{ transform: 'scale(.8)', cursor: canUpdateEnable ? 'pointer' : 'not-allowed' }}
             icon={<NotificationIcon size={16} color={theme.textReverse} />}
@@ -30,6 +33,7 @@ const SingleAlert: React.FC<Props> = ({ alert, isMaxQuotaActiveAlert }) => {
             toggle={() => {
               if (!canUpdateEnable) return
               updateAlert({ id: alert.id, isEnabled: !alert.isEnabled })
+              if (!alert.isEnabled) subscribeOne(+PRICE_ALERT_TOPIC_ID)
             }}
           />
         </MouseoverTooltip>

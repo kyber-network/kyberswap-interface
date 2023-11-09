@@ -15,6 +15,8 @@ import { ELASTIC_BASE_FEE_UNIT } from 'constants/index'
 import { useActiveWeb3React } from 'hooks'
 import useProAmmPoolInfo from 'hooks/useProAmmPoolInfo'
 import useTheme from 'hooks/useTheme'
+import CopyImage from 'pages/ProAmmPool/CopyImage'
+import DownloadImage from 'pages/ProAmmPool/DownloadImage'
 import { MEDIA_WIDTHS } from 'theme'
 import { shortenAddress } from 'utils'
 import { unwrappedToken } from 'utils/wrappedCurrency'
@@ -26,21 +28,31 @@ export default function ProAmmPoolInfo({
   isFarmV2Active,
   position,
   tokenId,
+
+  onCopyImage,
+  onDownloadImage,
+
   narrow = false,
   rotatedProp,
   setRotatedProp,
   showRangeInfo = true,
   showRemoved = true,
+
 }: {
   isFarmActive?: boolean
   isFarmV2Active?: boolean
   position: Position
   tokenId?: string
+
+  onCopyImage?: () => Promise<any>
+  onDownloadImage?: () => Promise<any>
+
   narrow?: boolean
   rotatedProp?: boolean
   setRotatedProp?: (rotated: boolean) => void
   showRangeInfo?: boolean
   showRemoved?: boolean
+
 }) {
   const { chainId } = useActiveWeb3React()
   const upToSmall = useMedia(`(max-width: ${MEDIA_WIDTHS.upToSmall}px)`)
@@ -102,6 +114,8 @@ export default function ProAmmPoolInfo({
             </Flex>
 
             <Flex sx={{ gap: '8px' }}>
+              {onCopyImage && <CopyImage onCopy={onCopyImage} />}
+              {onDownloadImage && <DownloadImage onDownload={onDownloadImage} />}
               {renderFarmIcon()}
               {showRangeInfo && <RangeBadge removed={showRemoved && removed} inRange={!outOfRange} hideText />}
             </Flex>

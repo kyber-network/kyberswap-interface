@@ -1,10 +1,8 @@
 import { Trans, t } from '@lingui/macro'
-import { debounce } from 'lodash'
+import debounce from 'lodash/debounce'
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useMedia } from 'react-use'
 import { Text } from 'rebass'
 import { useLazyCheckReferralCodeQuery, useRequestWhiteListMutation } from 'services/kyberAISubscription'
-import { useLazyGetConnectedWalletQuery } from 'services/notification'
 
 import { ButtonPrimary } from 'components/Button'
 import Column from 'components/Column'
@@ -14,51 +12,32 @@ import useParsedQueryString from 'hooks/useParsedQueryString'
 import useTheme from 'hooks/useTheme'
 import { getErrorMessage, isReferrerCodeInvalid } from 'pages/TrueSightV2/utils'
 import { useSessionInfo } from 'state/authen/hooks'
-import { MEDIA_WIDTHS } from 'theme'
 import { isEmailValid } from 'utils/string'
 
-import { FormWrapper, Input, Label } from './styled'
+import { FormWrapper, Input } from './styled'
 
 export default function EmailForm({
   showVerify,
 }: {
   showVerify: (email: string, code: string, showSuccess: boolean) => void
 }) {
+  const { userInfo } = useSessionInfo()
   const { mixpanelHandler } = useMixpanel()
-  const [inputEmail, setInputEmail] = useState('')
+  const [inputEmail, setInputEmail] = useState(userInfo?.email || '')
   const qs = useParsedQueryString<{ referrer: string }>()
   const [referredByCode, setCode] = useState(qs.referrer || '')
   const [errorInput, setErrorInput] = useState({ email: '', referredByCode: '' })
-  const isMobile = useMedia(`(max-width: ${MEDIA_WIDTHS.upToSmall}px)`)
 
-  const { userInfo } = useSessionInfo()
   const [requestWaitList] = useRequestWhiteListMutation()
 
-  const [getConnectedWallet, { isFetching }] = useLazyGetConnectedWalletQuery()
-  const [checkReferralCode] = useLazyCheckReferralCodeQuery()
+  const [checkReferalCode] = useLazyCheckReferralCodeQuery()
   const checkingInput = useRef(false)
-
-  const checkEmailExist = useCallback(
-    async (email: string) => {
-      try {
-        if (!isEmailValid(email) || (userInfo?.email && userInfo.email === email)) return
-        const { data: walletAddress } = await getConnectedWallet(email)
-        if (walletAddress) {
-          setErrorInput(prev => ({ ...prev, email: t`This email address is already registered` }))
-        }
-      } catch (error) {
-      } finally {
-        checkingInput.current = false
-      }
-    },
-    [getConnectedWallet, userInfo?.email],
-  )
 
   const checkReferCodeExist = useCallback(
     async (code: string) => {
       try {
         if (!code?.trim()) return
-        const { data } = await checkReferralCode(code.trim())
+        const { data } = await checkReferalCode(code.trim())
         if (!data?.isValid) {
           setErrorInput(prev => ({ ...prev, referredByCode: t`Referral code is invalid` }))
         }
@@ -67,7 +46,7 @@ export default function EmailForm({
         checkingInput.current = false
       }
     },
-    [checkReferralCode],
+    [checkReferalCode],
   )
 
   useEffect(() => {
@@ -81,18 +60,15 @@ export default function EmailForm({
     setErrorInput(prev => ({ ...prev, email: msg ? msg : '' }))
   }, [])
 
-  const debouncedCheckEmail = useMemo(() => debounce((email: string) => checkEmailExist(email), 500), [checkEmailExist])
   const debouncedCheckReferCode = useMemo(
     () => debounce((code: string) => checkReferCodeExist(code), 500),
     [checkReferCodeExist],
   )
 
   const onChangeInput = (e: React.FormEvent<HTMLInputElement>) => {
-    checkingInput.current = true
     const value = e.currentTarget.value
     setInputEmail(value)
     validateInput(value)
-    debouncedCheckEmail(value)
   }
 
   const onChangeCode = (e: FormEvent<HTMLInputElement>) => {
@@ -108,7 +84,7 @@ export default function EmailForm({
   const joinWaitList = async () => {
     mixpanelHandler(MIXPANEL_TYPE.KYBERAI_JOIN_KYBER_WAITLIST_CLICK)
     try {
-      if (hasErrorInput || !inputEmail || isFetching || checkingInput.current) return
+      if (hasErrorInput || !inputEmail || checkingInput.current) return
       if (userInfo?.email) {
         await requestWaitList({ referredByCode }).unwrap()
       }
@@ -122,35 +98,33 @@ export default function EmailForm({
   return (
     <>
       <FormWrapper>
-        <Column style={{ width: isMobile ? '100%' : '70%' }} gap="6px">
-          <Label>
-            <Trans>Your Email*</Trans>
-          </Label>
+        <Column width="100%" gap="6px">
           <Tooltip text={errorInput.email} show={!!errorInput.email} placement="top">
             <Input
               disabled={!!userInfo?.email}
               $borderColor={errorInput.email ? theme.red : theme.border}
               value={inputEmail}
-              placeholder="Enter your email address"
+              placeholder={t`Email Address`}
               onChange={onChangeInput}
             />
           </Tooltip>
           <Text fontSize={10} color={theme.subText}>
-            <Trans>We will never share your email with third parties</Trans>
+            <Trans>We will never share your email with third parties.</Trans>
           </Text>
         </Column>
-        <Column gap="6px" style={{ width: isMobile ? '100%' : undefined }}>
-          <Label>
-            <Trans>Referral Code (Optional)</Trans>
-          </Label>
+
+        <Column width="100%" gap="6px">
           <Tooltip text={errorInput.referredByCode} show={!!errorInput.referredByCode} placement="top">
             <Input
               $borderColor={errorInput.referredByCode ? theme.red : theme.border}
               value={referredByCode}
-              placeholder="Enter your Code"
+              placeholder={t`Referral Code (Optional)`}
               onChange={onChangeCode}
             />
           </Tooltip>
+          <Text fontSize={10} color={theme.subText}>
+            <Trans>Use a referral code to get access to KyberAI faster!</Trans>
+          </Text>
         </Column>
       </FormWrapper>
 
