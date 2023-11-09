@@ -20,6 +20,7 @@ const disabledHoverBase = css`
 `
 const Base = styled(RebassButton)<{
   color?: string
+  backgroundColor?: string
   padding?: string
   margin?: string
   width?: string
@@ -81,11 +82,16 @@ const disabledPrimary = css<{
   opacity: ${({ altDisabledStyle }) => (altDisabledStyle ? '0.7' : '1')};
 `
 export const ButtonPrimary = styled(Base)`
-  background-color: ${({ theme }) => theme.primary};
-  color: ${({ theme }) => theme.textReverse};
+  background-color: ${({ theme, backgroundColor }) => backgroundColor || theme.primary};
+  color: ${({ theme, color }) => color || theme.textReverse};
+  &:hover {
+    color: ${({ theme, color }) => color || theme.textReverse};
+    filter: brightness(0.8);
+  }
+
   &:active {
-    box-shadow: 0 0 0 1pt ${({ theme }) => darken(0.1, theme.primary)};
-    background-color: ${({ theme }) => darken(0.1, theme.primary)};
+    box-shadow: 0 0 0 1pt ${({ theme, backgroundColor }) => darken(0.1, backgroundColor || theme.primary)};
+    background-color: ${({ theme, backgroundColor }) => darken(0.1, backgroundColor || theme.primary)};
   }
   &:disabled {
     ${disabledPrimary}
@@ -258,6 +264,7 @@ const disabledError = css`
 export const ButtonErrorStyle = styled(Base)`
   background-color: ${({ theme }) => theme.red};
   border: 1px solid ${({ theme }) => theme.red};
+  color: ${({ theme }) => theme.text};
 
   &:focus {
     box-shadow: 0 0 0 1pt ${({ theme }) => darken(0.05, theme.red)};
@@ -385,5 +392,39 @@ export const ButtonApprove = ({
       confirmed={approval === ApprovalState.APPROVED && !forceApprove}
       text={approval === ApprovalState.PENDING ? t`Approving` : t`Approve ${tokenSymbol}`}
     />
+  )
+}
+
+const StyledButtonAction = styled(RebassButton)<{ $color?: string }>`
+  cursor: pointer;
+  appearance: none;
+  padding: 2px;
+  display: flex;
+  align-items: center;
+  outline: none;
+  border-radius: 50%;
+  border: none;
+  transition: all 0.1s;
+  background-color: ${({ $color }) => ($color ? $color + '32' : 'transparent')};
+  color: ${({ $color }) => ($color ? $color : 'unset')};
+  :hover {
+    background-color: ${({ theme, $color }) => ($color ? $color + '20' : theme.subText + '20')};
+  }
+  :active {
+    background-color: ${({ theme, $color }) => ($color ? $color + '10' : theme.subText + '10')};
+    transform: translateY(2px);
+  }
+`
+
+export const ButtonAction = ({
+  onClick,
+  children,
+  color,
+  ...rest
+}: { onClick?: () => void; children: ReactNode } & ButtonProps & { color?: string }) => {
+  return (
+    <StyledButtonAction onClick={onClick} $color={color} {...rest}>
+      {children}
+    </StyledButtonAction>
   )
 }

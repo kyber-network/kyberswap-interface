@@ -13,13 +13,14 @@ import { ButtonLight } from 'components/Button'
 import CopyHelper from 'components/Copy'
 import Divider from 'components/Divider'
 import DoubleCurrencyLogo from 'components/DoubleLogo'
+import QuickZap, { QuickZapButton } from 'components/ElasticZap/QuickZap'
 import { FarmTag } from 'components/FarmTag'
 import Loader from 'components/Loader'
 import { MouseoverTooltip, TextDashed } from 'components/Tooltip'
 import { APRTooltipContent } from 'components/YieldPools/FarmingPoolAPRCell'
 import { APP_PATHS, ELASTIC_BASE_FEE_UNIT, PROMM_ANALYTICS_URL } from 'constants/index'
-import { NETWORKS_INFO } from 'constants/networks'
 import { VERSION } from 'constants/v2'
+import { NETWORKS_INFO } from 'hooks/useChainsConfig'
 import useMixpanel, { MIXPANEL_TYPE } from 'hooks/useMixpanel'
 import useTheme from 'hooks/useTheme'
 import SharePoolEarningsButton from 'pages/MyEarnings/ElasticPools/SinglePool/SharePoolEarningsButton'
@@ -29,7 +30,7 @@ import { Badge, DownIcon, MobileStat, MobileStatWrapper, Row, Wrapper } from 'pa
 import { ButtonIcon } from 'pages/Pools/styleds'
 import { useAppSelector } from 'state/hooks'
 import { isAddress, shortenAddress } from 'utils'
-import { formatDollarAmount } from 'utils/numbers'
+import { formatDisplayNumber } from 'utils/numbers'
 import { getTokenSymbolWithHardcode } from 'utils/tokenInfo'
 import { unwrappedToken } from 'utils/wrappedCurrency'
 
@@ -57,6 +58,7 @@ export const StatItem = ({ label, value }: { label: ReactNode | string; value: R
 
 const SinglePool: React.FC<Props> = ({ poolEarning, chainId, positionEarnings, pendingFees, tokenPrices }) => {
   const theme = useTheme()
+  const [showQuickZap, setShowQuickZap] = useState(false)
   const { mixpanelHandler } = useMixpanel()
   const [isExpanded, setExpanded] = useState(false)
   const tabletView = useMedia(`(max-width: ${WIDTHS[3]}px)`)
@@ -238,6 +240,13 @@ const SinglePool: React.FC<Props> = ({ poolEarning, chainId, positionEarnings, p
           borderRadius: mobileView ? 0 : '1rem',
         }}
       >
+        <QuickZap
+          poolAddress={poolEarning.id}
+          isOpen={showQuickZap}
+          onDismiss={() => setShowQuickZap(false)}
+          expectedChainId={chainId}
+        />
+
         <MobileStatWrapper padding={mobileView ? '1rem 0' : '1rem'}>
           <Flex
             alignItems={mobileView ? 'flex-start' : 'center'}
@@ -271,11 +280,18 @@ const SinglePool: React.FC<Props> = ({ poolEarning, chainId, positionEarnings, p
           </Flex>
 
           <MobileStat mobileView={mobileView}>
-            <StatItem label="TVL" value={formatDollarAmount(+poolEarning.totalValueLockedUsd)} />
+            <StatItem
+              label="TVL"
+              value={formatDisplayNumber(poolEarning.totalValueLockedUsd, {
+                style: 'currency',
+                significantDigits: 7,
+                fractionDigits: 4,
+              })}
+            />
             <StatItem
               label={
                 <MouseoverTooltip
-                  text={t`Average estimated return based on yearly trading fees from the pool & additional bonus rewards if you participate in the farm`}
+                  text={t`Average estimated return based on yearly trading fees from the pool & additional bonus rewards if you participate in the farm.`}
                 >
                   <TextDashed>APR</TextDashed>
                 </MouseoverTooltip>
@@ -296,7 +312,7 @@ const SinglePool: React.FC<Props> = ({ poolEarning, chainId, positionEarnings, p
                   }
                 >
                   <Text as="span" marginRight="4px" color={theme.apr}>
-                    {(poolAPR + farmAPR).toFixed(2)}%
+                    {formatDisplayNumber((poolAPR + farmAPR) / 100, { style: 'percent', fractionDigits: 2 })}
                   </Text>
                   <Info size={14} color={theme.apr} />
                 </MouseoverTooltip>
@@ -304,14 +320,29 @@ const SinglePool: React.FC<Props> = ({ poolEarning, chainId, positionEarnings, p
             />
             <StatItem
               label={t`Volume (24h)`}
-              value={formatDollarAmount(Number(poolEarning.volumeUsd) - Number(poolEarning.volumeUsdOneDayAgo))}
+              value={formatDisplayNumber(Number(poolEarning.volumeUsd) - Number(poolEarning.volumeUsdOneDayAgo), {
+                style: 'currency',
+                significantDigits: 4,
+              })}
             />
             <StatItem
               label={t`Fees (24h)`}
-              value={formatDollarAmount(Number(poolEarning.feesUsd) - Number(poolEarning.feesUsdOneDayAgo))}
+              value={formatDisplayNumber(Number(poolEarning.feesUsd) - Number(poolEarning.feesUsdOneDayAgo), {
+                style: 'currency',
+                significantDigits: 4,
+              })}
             />
-            <StatItem label={t`My Liquidity`} value={formatDollarAmount(myLiquidityUsd)} />
-            <StatItem label={t`My Earnings`} value={formatDollarAmount(poolEarningToday)} />
+            <StatItem
+              label={t`My Liquidity`}
+              value={formatDisplayNumber(myLiquidityUsd, {
+                style: 'currency',
+                significantDigits: 4,
+              })}
+            />
+            <StatItem
+              label={t`My Earnings`}
+              value={formatDisplayNumber(poolEarningToday, { style: 'currency', significantDigits: 4 })}
+            />
           </MobileStat>
 
           <Flex justifyContent="space-between" alignItems="center">
@@ -320,21 +351,30 @@ const SinglePool: React.FC<Props> = ({ poolEarning, chainId, positionEarnings, p
                 + <Trans>Add Liquidity</Trans>
               </ButtonLight>
             ) : (
-              <ButtonLight
-                width="fit-content"
-                height="36px"
-                as={Link}
-                onClick={e => {
-                  e.stopPropagation()
-                }}
-                to={
-                  currency0Slug && currency1Slug
-                    ? `/${NETWORKS_INFO[chainId].route}${APP_PATHS.ELASTIC_CREATE_POOL}/${currency0Slug}/${currency1Slug}/${feeAmount}`
-                    : '#'
-                }
-              >
-                + <Trans>Add Liquidity</Trans>
-              </ButtonLight>
+              <Flex sx={{ gap: '8px' }}>
+                <ButtonLight
+                  width="fit-content"
+                  height="36px"
+                  as={Link}
+                  onClick={e => {
+                    e.stopPropagation()
+                  }}
+                  to={
+                    currency0Slug && currency1Slug
+                      ? `/${NETWORKS_INFO[chainId].route}${APP_PATHS.ELASTIC_CREATE_POOL}/${currency0Slug}/${currency1Slug}/${feeAmount}`
+                      : '#'
+                  }
+                >
+                  + <Trans>Add Liquidity</Trans>
+                </ButtonLight>
+
+                <QuickZapButton
+                  onClick={e => {
+                    e.stopPropagation()
+                    setShowQuickZap(true)
+                  }}
+                />
+              </Flex>
             )}
 
             <Flex sx={{ gap: '0.75rem' }}>
@@ -409,7 +449,13 @@ const SinglePool: React.FC<Props> = ({ poolEarning, chainId, positionEarnings, p
             {share}
           </Flex>
         </Flex>
-        <Text>{formatDollarAmount(+poolEarning.totalValueLockedUsd)}</Text>
+        <Text>
+          {formatDisplayNumber(poolEarning.totalValueLockedUsd, {
+            style: 'currency',
+            significantDigits: 7,
+            fractionDigits: 4,
+          })}
+        </Text>
 
         <MouseoverTooltip
           width="fit-content"
@@ -426,15 +472,25 @@ const SinglePool: React.FC<Props> = ({ poolEarning, chainId, positionEarnings, p
           }
         >
           <Text as="span" marginRight="4px" color={theme.apr}>
-            {(poolAPR + farmAPR).toFixed(2)}%
+            {formatDisplayNumber((poolAPR + farmAPR) / 100, { style: 'percent', fractionDigits: 2 })}
           </Text>
           <Info size={14} color={theme.apr} />
         </MouseoverTooltip>
 
-        <Text>{formatDollarAmount(Number(poolEarning.volumeUsd) - Number(poolEarning.volumeUsdOneDayAgo))}</Text>
-        <Text>{formatDollarAmount(Number(poolEarning.feesUsd) - Number(poolEarning.feesUsdOneDayAgo))}</Text>
-        <Text>{formatDollarAmount(myLiquidityUsd)}</Text>
-        <Text>{formatDollarAmount(poolEarningToday)}</Text>
+        <Text>
+          {formatDisplayNumber(Number(poolEarning.volumeUsd) - Number(poolEarning.volumeUsdOneDayAgo), {
+            style: 'currency',
+            significantDigits: 4,
+          })}
+        </Text>
+        <Text>
+          {formatDisplayNumber(Number(poolEarning.feesUsd) - Number(poolEarning.feesUsdOneDayAgo), {
+            style: 'currency',
+            significantDigits: 4,
+          })}
+        </Text>
+        <Text>{formatDisplayNumber(myLiquidityUsd, { style: 'currency', significantDigits: 4 })}</Text>
+        <Text>{formatDisplayNumber(poolEarningToday, { style: 'currency', significantDigits: 4 })}</Text>
 
         <Flex sx={{ gap: '8px' }} justifyContent="flex-end">
           <ButtonIcon
@@ -455,26 +511,43 @@ const SinglePool: React.FC<Props> = ({ poolEarning, chainId, positionEarnings, p
               <Plus color={theme.subText} size={18} />
             </ButtonIcon>
           ) : (
-            <ButtonIcon
-              color={theme.primary}
-              style={{
-                width: '24px',
-                height: '24px',
-              }}
-              as={Link}
-              to={
-                currency0Slug && currency1Slug
-                  ? `/${NETWORKS_INFO[chainId].route}${APP_PATHS.ELASTIC_CREATE_POOL}/${currency0Slug}/${currency1Slug}/${feeAmount}`
-                  : '#'
-              }
-              onClick={e => e.stopPropagation()}
-            >
-              <Plus color={theme.primary} size={18} />
-            </ButtonIcon>
+            <>
+              <QuickZapButton
+                onClick={e => {
+                  e.stopPropagation()
+                  setShowQuickZap(true)
+                }}
+                size="small"
+              />
+
+              <ButtonIcon
+                color={theme.primary}
+                style={{
+                  width: '24px',
+                  height: '24px',
+                }}
+                as={Link}
+                to={
+                  currency0Slug && currency1Slug
+                    ? `/${NETWORKS_INFO[chainId].route}${APP_PATHS.ELASTIC_CREATE_POOL}/${currency0Slug}/${currency1Slug}/${feeAmount}`
+                    : '#'
+                }
+                onClick={e => e.stopPropagation()}
+              >
+                <Plus color={theme.primary} size={18} />
+              </ButtonIcon>
+            </>
           )}
         </Flex>
       </Row>
       {isExpanded && isExpandable && positions}
+
+      <QuickZap
+        poolAddress={poolEarning.id}
+        isOpen={showQuickZap}
+        onDismiss={() => setShowQuickZap(false)}
+        expectedChainId={chainId}
+      />
     </Wrapper>
   )
 }

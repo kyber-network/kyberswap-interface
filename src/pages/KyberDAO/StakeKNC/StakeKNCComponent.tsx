@@ -39,7 +39,7 @@ import { isAddress, shortenAddress } from 'utils'
 import KNCLogo from '../kncLogo'
 import DelegateConfirmModal from './DelegateConfirmModal'
 import MigrateModal from './MigrateModal'
-import SwitchToEthereumModal, { useSwitchToEthereum } from './SwitchToEthereumModal'
+import { useSwitchToEthereum } from './SwitchToEthereumModal'
 import YourTransactionsModal from './YourTransactionsModal'
 
 enum STAKE_TAB {
@@ -219,7 +219,6 @@ export default function StakeKNCComponent() {
   const [showConfirm, setShowConfirm] = useState(false)
   const [attemptingTxn, setAttemptingTxn] = useState<boolean>(false)
   const [pendingText, setPendingText] = useState<string>('')
-  const [featureText, setFeatureText] = useState('')
   const [txHash, setTxHash] = useState<string | undefined>(undefined)
   const [inputValue, setInputValue] = useState('1')
   const [transactionError, setTransactionError] = useState<string | undefined>()
@@ -290,7 +289,7 @@ export default function StakeKNCComponent() {
   const refetchGasRefundInfo = useRefetchGasRefundInfo()
 
   const handleStake = () => {
-    switchToEthereum()
+    switchToEthereum(t`Staking KNC`)
       .then(() => {
         setPendingText(t`Staking ${inputValue} KNC to KyberDAO`)
         setShowConfirm(true)
@@ -308,11 +307,11 @@ export default function StakeKNCComponent() {
             setTransactionError(error?.message)
           })
       })
-      .catch(() => setFeatureText(t`Staking KNC`))
+      .catch()
   }
 
   const handleUnstake = () => {
-    switchToEthereum()
+    switchToEthereum(t`Unstaking KNC`)
       .then(() => {
         setPendingText(t`Unstaking ${inputValue} KNC from KyberDAO`)
         setShowConfirm(true)
@@ -329,29 +328,27 @@ export default function StakeKNCComponent() {
             setTransactionError(error?.message)
           })
       })
-      .catch(() => setFeatureText(t`Unstaking KNC`))
+      .catch()
   }
 
   const handleDelegate = () => {
-    switchToEthereum()
+    switchToEthereum(t`Delegate`)
       .then(() => {
         isUndelegate.current = false
         toggleDelegateConfirm()
       })
       .catch(_error => {
-        setFeatureText(t`Delegate`)
         setShowConfirm(false)
       })
   }
 
   const handleUndelegate = () => {
-    switchToEthereum()
+    switchToEthereum(t`Undelegate`)
       .then(() => {
         isUndelegate.current = true
         toggleDelegateConfirm()
       })
       .catch(() => {
-        setFeatureText(t`Undelegate`)
         setShowConfirm(false)
       })
   }
@@ -529,7 +526,7 @@ export default function StakeKNCComponent() {
                     style={{ marginRight: '5px' }}
                     placement="top"
                   />
-                  <Trans>Connect Wallet</Trans>
+                  <Trans>Connect</Trans>
                 </ButtonLight>
               )}
             </>
@@ -542,7 +539,7 @@ export default function StakeKNCComponent() {
                 </Text>
                 {isDelegated && (
                   <MouseoverTooltip
-                    text={t`You have already delegated your voting power to this address`}
+                    text={t`You have already delegated your voting power to this address.`}
                     placement="top"
                   >
                     <DelegatedAddressBadge>
@@ -603,7 +600,7 @@ export default function StakeKNCComponent() {
                     style={{ marginRight: '5px' }}
                     placement="top"
                   />
-                  <Trans>Connect Wallet</Trans>
+                  <Trans>Connect</Trans>
                 </ButtonLight>
               )}
             </>
@@ -649,7 +646,7 @@ export default function StakeKNCComponent() {
               <Text>
                 <Trans>Voting power</Trans>{' '}
                 <InfoHelper
-                  text={t`Your voting power is calculated by [Your Staked KNC] / [Total Staked KNC] * 100%`}
+                  text={t`Your voting power is calculated by [Your Staked KNC] / [Total Staked KNC] * 100%.`}
                 />
               </Text>
               <Text>
@@ -665,7 +662,6 @@ export default function StakeKNCComponent() {
           </AutoColumn>
         }
       />
-      <SwitchToEthereumModal featureText={featureText} />
       <DelegateConfirmModal
         address={delegateAddress}
         isUndelegate={isUndelegate.current}

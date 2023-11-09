@@ -2,6 +2,7 @@ import { ChainId } from '@kyberswap/ks-sdk-core'
 import { PublicKey } from '@solana/web3.js'
 
 import { EnvKeys } from 'constants/env'
+import { ChainState } from 'hooks/useChainsConfig'
 
 export interface NetworkInfo {
   readonly chainId: ChainId
@@ -13,9 +14,7 @@ export interface NetworkInfo {
   readonly aggregatorRoute: string
   readonly name: string
   readonly icon: string
-  readonly iconDark: string | null
   readonly iconSelected: string | null
-  readonly iconDarkSelected: string | null
   readonly etherscanUrl: string
   readonly etherscanName: string
   readonly bridgeURL: string
@@ -37,6 +36,7 @@ export interface NetworkInfo {
   //   USDT: Token
   // }
   readonly geckoTermialId: string | null
+  readonly state?: ChainState
 }
 
 export interface EVMNetworkInfo extends NetworkInfo {
@@ -77,6 +77,13 @@ export interface EVMNetworkInfo extends NetworkInfo {
     readonly farms: string[]
     readonly farmv2Quoter?: string
     readonly farmV2S?: string[]
+    readonly zap?: {
+      helper: string
+      router: string
+      executor: string
+      validator: string
+    }
+    readonly 'farmV2.1S'?: string[]
   }
   readonly limitOrder: null | '*' | EnvKeys[]
   readonly averageBlockTimeInSeconds: number

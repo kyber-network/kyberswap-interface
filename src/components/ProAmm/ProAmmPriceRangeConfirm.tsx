@@ -8,6 +8,7 @@ import { ReactComponent as DoubleArrow } from 'assets/svg/double_arrow.svg'
 import { OutlineCard } from 'components/Card'
 import { AutoColumn } from 'components/Column'
 import Divider from 'components/Divider'
+import { ZapDetail } from 'components/ElasticZap/ZapDetail'
 import InfoHelper from 'components/InfoHelper'
 import { RowBetween, RowFixed } from 'components/Row'
 import { MouseoverTooltip, TextDashed } from 'components/Tooltip'
@@ -15,8 +16,8 @@ import useTheme from 'hooks/useTheme'
 import { Bound } from 'state/mint/proamm/type'
 import { useUserSlippageTolerance } from 'state/user/hooks'
 import { ExternalLink, TYPE } from 'theme'
-import { toSignificantOrMaxIntegerPart } from 'utils/formatCurrencyAmount'
 import { formatTickPrice } from 'utils/formatTickPrice'
+import { formatDisplayNumber } from 'utils/numbers'
 import { checkWarningSlippage, formatSlippage } from 'utils/slippage'
 import { unwrappedToken } from 'utils/wrappedCurrency'
 
@@ -40,9 +41,11 @@ const Price = styled.div`
 export default function ProAmmPriceRangeConfirm({
   position,
   ticksAtLimit,
+  zapDetail,
 }: {
   position: Position
   ticksAtLimit: { [bound: string]: boolean | undefined }
+  zapDetail?: ZapDetail
 }) {
   const theme = useTheme()
 
@@ -80,7 +83,7 @@ export default function ProAmmPriceRangeConfirm({
           </Text>
           <RowFixed>
             <Text fontSize={'12px'} fontWeight="500" style={{ textAlign: 'right' }}>
-              1 {baseCurrency.symbol} = {toSignificantOrMaxIntegerPart(price, 6)} {quoteCurrency.symbol}
+              1 {baseCurrency.symbol} = {formatDisplayNumber(price, { significantDigits: 6 })} {quoteCurrency.symbol}
             </Text>
             <span onClick={handleRateChange} style={{ marginLeft: '2px', cursor: 'pointer' }}>
               <RotateSwapIcon rotated={baseCurrency !== currency0} size={16} />
@@ -99,6 +102,7 @@ export default function ProAmmPriceRangeConfirm({
                     <ExternalLink href="https://docs.kyberswap.com/getting-started/foundational-topics/decentralized-finance/slippage">
                       here ↗
                     </ExternalLink>
+                    .
                   </Trans>
                 </Text>
               }
@@ -112,6 +116,46 @@ export default function ProAmmPriceRangeConfirm({
           </TYPE.black>
         </Flex>
 
+        {zapDetail && (
+          <>
+            <Flex justifyContent="space-between" fontSize={12}>
+              <Text color={theme.subText}>Price Impact</Text>
+              <Text
+                fontWeight="500"
+                color={
+                  zapDetail.priceImpact.isVeryHigh
+                    ? theme.red
+                    : zapDetail.priceImpact.isHigh
+                    ? theme.warning
+                    : theme.text
+                }
+              >
+                {zapDetail.priceImpact.isInvalid
+                  ? '--'
+                  : zapDetail.priceImpact.value < 0.01
+                  ? '<0.01%'
+                  : zapDetail.priceImpact.value.toFixed(2) + '%'}
+              </Text>
+            </Flex>
+
+            <Flex justifyContent="space-between" fontSize={12}>
+              <Text color={theme.subText}>
+                <Trans>Est. Gas Fee</Trans>
+              </Text>
+
+              <Text fontSize={12} fontWeight="500">
+                {zapDetail.estimateGasUsd ? '$' + zapDetail.estimateGasUsd.toFixed(2) : '--'}
+              </Text>
+            </Flex>
+
+            <Flex justifyContent="space-between" fontSize={12}>
+              <Text color={theme.subText}>Zap Fee</Text>
+              <Text fontWeight="500" color={theme.primary}>
+                Free
+              </Text>
+            </Flex>
+          </>
+        )}
         <Divider />
 
         <Flex>
@@ -162,7 +206,7 @@ export default function ProAmmPriceRangeConfirm({
             >
               {formatTickPrice(priceUpper, ticksAtLimit, Bound.UPPER)}
               <InfoHelper
-                text={t`Your position will be 100% composed of ${quoteCurrency?.symbol} at this price`}
+                text={t`Your position will be 100% composed of ${quoteCurrency?.symbol} at this price.`}
                 placement={'right'}
                 size={12}
               />

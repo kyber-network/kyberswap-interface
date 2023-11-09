@@ -325,9 +325,6 @@ export default function WalletModal() {
             }}
           >
             <input
-              onChange={() => {
-                //
-              }}
               type="checkbox"
               checked={isAcceptedTerm}
               data-testid="accept-term"
@@ -442,8 +439,12 @@ export default function WalletModal() {
       minHeight={false}
       maxHeight={90}
       maxWidth={600}
-      bypassScrollLock={walletView === WALLET_VIEWS.PENDING && ['WALLET_CONNECT'].includes(pendingWalletKey)}
-      bypassFocusLock={walletView === WALLET_VIEWS.PENDING && ['WALLET_CONNECT', 'BLOCTO'].includes(pendingWalletKey)}
+      bypassScrollLock={
+        walletView === WALLET_VIEWS.PENDING && ['WALLET_CONNECT', 'KRYSTAL_WC'].includes(pendingWalletKey)
+      }
+      bypassFocusLock={
+        walletView === WALLET_VIEWS.PENDING && ['WALLET_CONNECT', 'KRYSTAL_WC', 'BLOCTO'].includes(pendingWalletKey)
+      }
     >
       <Wrapper>{getModalContent()}</Wrapper>
     </Modal>

@@ -20,6 +20,7 @@ import {
   matic,
   mumbai,
   optimism,
+  scroll,
   solana,
   solanaDevnet,
   zkEvm,
@@ -51,6 +52,7 @@ const NETWORKS_INFO_CONFIG: NETWORKS_INFO_CONFIG_TYPE = {
   [ChainId.LINEA]: linea,
   [ChainId.ZKEVM]: zkEvm,
   [ChainId.BASE]: base,
+  [ChainId.SCROLL]: scroll,
   [ChainId.SOLANA]: solana,
   [ChainId.SOLANA_DEVNET]: solanaDevnet,
 } as const
@@ -77,6 +79,7 @@ export const MAINNET_NETWORKS = [
   ChainId.ZKEVM,
   ChainId.ZKSYNC,
   ChainId.BASE,
+  ChainId.SCROLL,
   ChainId.BSCMAINNET,
   ChainId.AVAXMAINNET,
   // ChainId.SOLANA,
@@ -130,21 +133,6 @@ export function isSupportedChainId(chainId?: number): chainId is ChainId {
 }
 
 export const FAUCET_NETWORKS = [ChainId.BTTC]
-export const CHAINS_SUPPORT_NEW_POOL_FARM_API: readonly ChainId[] = [
-  ChainId.MAINNET,
-  // ChainId.MUMBAI,
-  // ChainId.MATIC,
-  // ChainId.BSCTESTNET,
-  ChainId.BSCMAINNET,
-  // ChainId.AVAXTESTNET,
-  ChainId.AVAXMAINNET,
-  ChainId.FANTOM,
-  ChainId.CRONOS,
-  ChainId.BTTC,
-  ChainId.ARBITRUM,
-  ChainId.AURORA,
-  ChainId.OPTIMISM,
-]
 
 // Fee options instead of dynamic fee
 export const STATIC_FEE_OPTIONS: { [chainId: number]: number[] | undefined } = {
@@ -163,6 +151,7 @@ export const STATIC_FEE_OPTIONS: { [chainId: number]: number[] | undefined } = {
   [ChainId.LINEA]: [8, 10, 50, 300, 500, 1000],
   [ChainId.ZKEVM]: [8, 10, 50, 300, 500, 1000],
   [ChainId.BASE]: [8, 10, 50, 300, 500, 1000],
+  [ChainId.SCROLL]: [8, 10, 50, 300, 500, 1000],
 }
 
 export const ONLY_STATIC_FEE_CHAINS = [
@@ -174,6 +163,7 @@ export const ONLY_STATIC_FEE_CHAINS = [
   ChainId.LINEA,
   ChainId.ZKEVM,
   ChainId.BASE,
+  ChainId.SCROLL,
 ]
 
 // hardcode for unavailable subgraph
@@ -197,6 +187,10 @@ export const SUPPORTED_NETWORKS_FOR_MY_EARNINGS = [
   ChainId.ARBITRUM,
   ChainId.OPTIMISM,
   ChainId.MATIC,
+  ChainId.LINEA,
+  ChainId.BASE,
+  ChainId.ZKSYNC,
+  ChainId.SCROLL,
   ChainId.BSCMAINNET,
   ChainId.AVAXMAINNET,
   ChainId.FANTOM,

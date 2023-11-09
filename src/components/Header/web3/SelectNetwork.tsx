@@ -14,8 +14,8 @@ import { useActiveWeb3React } from 'hooks'
 import { useWalletSupportedChains } from 'hooks/web3/useWalletSupportedChains'
 import { ApplicationModal } from 'state/application/actions'
 import { useModalOpen, useNetworkModalToggle } from 'state/application/hooks'
-import { useIsDarkMode } from 'state/user/hooks'
 import { useNativeBalance } from 'state/wallet/hooks'
+import { formatDisplayNumber } from 'utils/numbers'
 
 const NetworkSwitchContainer = styled.div`
   display: flex;
@@ -69,18 +69,12 @@ const NetworkLabel = styled.div`
 function SelectNetwork(): JSX.Element | null {
   const { chainId, networkInfo } = useActiveWeb3React()
   const networkModalOpen = useModalOpen(ApplicationModal.NETWORK)
-  const isDarkMode = useIsDarkMode()
   const toggleNetworkModal = useNetworkModalToggle()
   const userEthBalance = useNativeBalance()
   const labelContent = useMemo(() => {
     if (!userEthBalance) return networkInfo.name
-    const balanceFixedStr = userEthBalance.lessThan(1000 * 10 ** NativeCurrencies[chainId].decimals) // less than 1000
-      ? userEthBalance.lessThan(10 ** NativeCurrencies[chainId].decimals) // less than 1
-        ? parseFloat(userEthBalance.toSignificant(6)).toFixed(6)
-        : parseFloat(userEthBalance.toExact()).toFixed(4)
-      : parseFloat(userEthBalance.toExact()).toFixed(2)
-    const balanceFixed = Number(balanceFixedStr)
-    return `${balanceFixed} ${NativeCurrencies[chainId].symbol}`
+    const balanceFixedStr = formatDisplayNumber(userEthBalance, { significantDigits: 6 })
+    return `${balanceFixedStr} ${NativeCurrencies[chainId].symbol}`
   }, [userEthBalance, chainId, networkInfo])
   const walletSupportsChain = useWalletSupportedChains()
   const disableSelectNetwork = walletSupportsChain.length <= 1
@@ -94,25 +88,21 @@ function SelectNetwork(): JSX.Element | null {
     >
       <NetworkSwitchContainer>
         <Row gap="10px">
-          <img
-            src={(isDarkMode && networkInfo.iconDark) || networkInfo.icon}
-            alt={networkInfo.name + ' logo'}
-            style={{ width: 20, height: 20 }}
-          />
+          <img src={networkInfo.icon} alt={networkInfo.name + ' logo'} style={{ width: 20, height: 20 }} />
           <NetworkLabel>{labelContent}</NetworkLabel>
         </Row>
         <DropdownIcon open={networkModalOpen} />
       </NetworkSwitchContainer>
       <NetworkModal
         selectedId={chainId}
-        disabledMsg={t`Unsupported by your wallet`}
+        disabledMsg={t`Unsupported by your wallet.`}
         activeChainIds={walletSupportsChain}
       />
     </NetworkCard>
   )
   if (disableSelectNetwork)
     return (
-      <MouseoverTooltip text={t`Unable to switch network. Please try it on your wallet`}>{button}</MouseoverTooltip>
+      <MouseoverTooltip text={t`Unable to switch network. Please try it on your wallet.`}>{button}</MouseoverTooltip>
     )
   return button
 }

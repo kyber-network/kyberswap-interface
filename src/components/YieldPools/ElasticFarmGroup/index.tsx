@@ -15,15 +15,15 @@ import CurrencyLogo from 'components/CurrencyLogo'
 import HoverDropdown from 'components/HoverDropdown'
 import InfoHelper from 'components/InfoHelper'
 import { MouseoverTooltip, MouseoverTooltipDesktopOnly, TextDashed } from 'components/Tooltip'
-import { FARM_TAB, ZERO_ADDRESS } from 'constants/index'
+import { FARM_TAB, SORT_DIRECTION, ZERO_ADDRESS } from 'constants/index'
 import { NETWORKS_INFO, isEVM } from 'constants/networks'
 import { useActiveWeb3React } from 'hooks'
-import { useProAmmNFTPositionManagerContract } from 'hooks/useContract'
+import { useProAmmNFTPositionManagerReadingContract } from 'hooks/useContract'
 import useTheme from 'hooks/useTheme'
-import { Dots } from 'pages/Pool/styleds'
+import { Dots } from 'pages/MyPool/styleds'
 import { useWalletModalToggle } from 'state/application/hooks'
-import { useElasticFarms, useFarmAction } from 'state/farms/elastic/hooks'
-import { FarmingPool, UserInfo } from 'state/farms/elastic/types'
+import { useDepositedNftsByFarm, useElasticFarms, useFarmAction, useUserInfoByFarm } from 'state/farms/elastic/hooks'
+import { FarmingPool } from 'state/farms/elastic/types'
 import { useSingleCallResult } from 'state/multicall/hooks'
 import { useIsTransactionPending } from 'state/transactions/hooks'
 import { useViewMode } from 'state/user/hooks'
@@ -61,7 +61,6 @@ type Props = {
     pool?: FarmingPool,
   ) => void
   pools: FarmingPool[]
-  userInfo?: UserInfo
   onShowStepGuide: () => void
   tokenPrices: { [key: string]: number }
 }
@@ -75,15 +74,13 @@ enum SORT_FIELD {
   MY_REWARD = 'my_reward',
 }
 
-enum SORT_DIRECTION {
-  ASC = 'asc',
-  DESC = 'desc',
-}
-
-const ProMMFarmGroup: React.FC<Props> = ({ address, onOpenModal, pools, userInfo, onShowStepGuide, tokenPrices }) => {
+const ElasticFarmGroup: React.FC<Props> = ({ address, onOpenModal, pools, onShowStepGuide, tokenPrices }) => {
   const theme = useTheme()
   const { account, chainId } = useActiveWeb3React()
   const above1000 = useMedia('(min-width: 1000px)')
+
+  const depositedPositions = useDepositedNftsByFarm(address)
+  const userInfo = useUserInfoByFarm(address)
 
   const [searchParams, setSearchParams] = useSearchParams()
   const sortField = searchParams.get('orderBy') || SORT_FIELD.MY_DEPOSIT
@@ -92,7 +89,7 @@ const ProMMFarmGroup: React.FC<Props> = ({ address, onOpenModal, pools, userInfo
   const { poolFeeLast24h } = useElasticFarms()
 
   const depositedUsd =
-    userInfo?.depositedPositions.reduce(
+    depositedPositions.reduce(
       (acc, cur) =>
         acc +
         Number(cur.amount0.toExact()) * (tokenPrices[cur.amount0.currency.wrapped.address] || 0) +
@@ -101,7 +98,7 @@ const ProMMFarmGroup: React.FC<Props> = ({ address, onOpenModal, pools, userInfo
     ) || 0
 
   const userDepositedTokenAmounts =
-    userInfo?.depositedPositions.reduce<{
+    depositedPositions.reduce<{
       [address: string]: CurrencyAmount<Token>
     }>((result, pos) => {
       const address0 = pos.amount0.currency.address
@@ -156,8 +153,8 @@ const ProMMFarmGroup: React.FC<Props> = ({ address, onOpenModal, pools, userInfo
       }
 
       const joinedPositions = userInfo?.joinedPositions[pool.pid] || []
-      const depositedPositions =
-        userInfo?.depositedPositions.filter(pos => {
+      const poolDepositedPositions =
+        depositedPositions.filter(pos => {
           return (
             pool.poolAddress.toLowerCase() ===
             computePoolAddress({
@@ -171,7 +168,7 @@ const ProMMFarmGroup: React.FC<Props> = ({ address, onOpenModal, pools, userInfo
           )
         }) || []
 
-      const depositedUsd = depositedPositions.reduce(
+      const depositedUsd = poolDepositedPositions.reduce(
         (usd, pos) =>
           usd +
           Number(pos.amount1.toExact()) * (tokenPrices[pos.pool.token1.address.toLowerCase()] || 0) +
@@ -231,7 +228,7 @@ const ProMMFarmGroup: React.FC<Props> = ({ address, onOpenModal, pools, userInfo
     })
 
   const toggleWalletModal = useWalletModalToggle()
-  const posManager = useProAmmNFTPositionManagerContract()
+  const posManager = useProAmmNFTPositionManagerReadingContract()
 
   const res = useSingleCallResult(posManager, 'isApprovedForAll', [account || ZERO_ADDRESS, address])
   const isApprovedForAll = res?.result?.[0]
@@ -244,7 +241,7 @@ const ProMMFarmGroup: React.FC<Props> = ({ address, onOpenModal, pools, userInfo
   const handleApprove = async () => {
     if (!isApprovedForAll) {
       const tx = await approve()
-      setApprovalTx(tx)
+      tx && setApprovalTx(tx)
     }
   }
 
@@ -258,7 +255,7 @@ const ProMMFarmGroup: React.FC<Props> = ({ address, onOpenModal, pools, userInfo
   if (!pools) return null
 
   const canHarvest = Object.values(userInfo?.rewardPendings || {}).some(rw => rw.some(item => item.greaterThan('0')))
-  const canWithdraw = !!userInfo?.depositedPositions.length
+  const canWithdraw = !!depositedPositions.length
 
   const renderApproveButton = () => {
     if (isApprovedForAll || tab === 'ended') {
@@ -429,7 +426,7 @@ const ProMMFarmGroup: React.FC<Props> = ({ address, onOpenModal, pools, userInfo
               ) : null)}
           </ClickableText>
           <InfoHelper
-            text={t`Average estimated return based on yearly trading fees from the pool & additional bonus rewards if you participate in the farm`}
+            text={t`Average estimated return based on yearly trading fees from the pool & additional bonus rewards if you participate in the farm.`}
           />
         </Flex>
 
@@ -447,7 +444,7 @@ const ProMMFarmGroup: React.FC<Props> = ({ address, onOpenModal, pools, userInfo
                 <ArrowUp size={12} />
               ) : null)}
           </ClickableText>
-          <InfoHelper text={t`Once a farm has ended, you will continue to receive returns through LP Fees`} />
+          <InfoHelper text={t`Once a farm has ended, you will continue to receive returns through LP Fees.`} />
         </Flex>
 
         <Flex
@@ -540,7 +537,7 @@ const ProMMFarmGroup: React.FC<Props> = ({ address, onOpenModal, pools, userInfo
             alignItems={upToExtraSmall ? 'flex-start' : 'center'}
           >
             <MouseoverTooltip
-              text={t`Total value of liquidity positions (i.e. NFT tokens) you've deposited into the farming contract`}
+              text={t`Total value of liquidity positions (i.e. NFT tokens) you've deposited into the farming contract.`}
             >
               <TextDashed fontSize="12px" fontWeight="500" color={theme.subText}>
                 <Trans>Deposited Liquidity</Trans>
@@ -747,4 +744,4 @@ const ProMMFarmGroup: React.FC<Props> = ({ address, onOpenModal, pools, userInfo
   )
 }
 
-export default ProMMFarmGroup
+export default ElasticFarmGroup

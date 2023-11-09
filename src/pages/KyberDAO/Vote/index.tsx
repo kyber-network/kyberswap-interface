@@ -24,7 +24,7 @@ import { StyledInternalLink } from 'theme'
 import { formattedNumLong } from 'utils'
 import { formatUnitsToFixed } from 'utils/formatBalance'
 
-import SwitchToEthereumModal, { useSwitchToEthereum } from '../StakeKNC/SwitchToEthereumModal'
+import { useSwitchToEthereum } from '../StakeKNC/SwitchToEthereumModal'
 import TimerCountdown from '../TimerCountdown'
 import KNCLogo from '../kncLogo'
 import ClaimConfirmModal from './ClaimConfirmModal'
@@ -63,16 +63,12 @@ const Card = styled.div<{ hasGreenBackground?: boolean }>`
     background-color: ${transparentize(0.3, theme.buttonGray)};
     flex: 1;
   `}
-  ${({ theme, hasGreenBackground }) =>
+  ${({ hasGreenBackground }) =>
     hasGreenBackground &&
-    (theme.darkMode
-      ? css`
-          background-image: url('${luxuryGreenBackground}');
-          background-size: cover;
-        `
-      : css`
-          background: radial-gradient(#daebe6, #daf1ec);
-        `)}
+    css`
+      background-image: url('${luxuryGreenBackground}');
+      background-size: cover;
+    `}
 `
 
 const CardGroup = styled(RowBetween)`
@@ -121,7 +117,7 @@ export default function Vote() {
     claimedRewardAmount,
     stakerInfo,
     stakerInfoNextEpoch,
-    rewardStats: { knc, usd },
+    rewardStats: { knc, usd, apr },
   } = useVotingInfo()
 
   const kncPrice = useKNCPrice()
@@ -141,7 +137,7 @@ export default function Vote() {
   const [pendingText, setPendingText] = useState<string>('')
 
   const [txHash, setTxHash] = useState<string | undefined>(undefined)
-  const [transactionError, setTransactionError] = useState()
+  const [transactionError, setTransactionError] = useState<string | undefined>(undefined)
   const totalStakedAmount = stakerInfo ? stakerInfo?.stake_amount + stakerInfo?.pending_stake_amount : 0
   const votePowerAmount: number = useMemo(
     () =>
@@ -167,7 +163,7 @@ export default function Vote() {
   const isDelegated = stakerInfo && account ? stakerInfo.delegate?.toLowerCase() !== account.toLowerCase() : false
 
   const handleClaim = useCallback(() => {
-    switchToEthereum().then(() => {
+    switchToEthereum(t`Claim reward`).then(() => {
       mixpanelHandler(MIXPANEL_TYPE.KYBER_DAO_CLAIM_CLICK)
       toggleClaimConfirmModal()
     })
@@ -191,7 +187,7 @@ export default function Vote() {
   }, [claimVotingRewards, remainingCumulativeAmount, toggleClaimConfirmModal])
 
   const handleVote = useCallback(
-    async (proposal_id: number, option: number) => {
+    async (proposal_id: number, option: number): Promise<boolean> => {
       // only can vote when user has staked amount
       setPendingText(t`Vote submitting`)
       setShowConfirm(true)
@@ -200,12 +196,13 @@ export default function Vote() {
         const tx = await vote(proposal_id, option)
         setAttemptingTxn(false)
         setTxHash(tx)
-        return Promise.resolve(true)
+        return true
       } catch (error) {
         setShowConfirm(false)
+        setAttemptingTxn(false)
         setTransactionError(error?.message)
         setTxHash(undefined)
-        return Promise.reject(error)
+        throw error
       }
     },
     [vote],
@@ -241,12 +238,23 @@ export default function Vote() {
           </Card>
           <Card>
             <AutoColumn>
-              <Text color={theme.subText} fontSize="14px" marginBottom="20px">
-                <Trans>Total Voting Rewards</Trans>
-              </Text>
-              <Text fontSize={20} marginBottom="8px" fontWeight={500}>
-                {(+knc?.toFixed(0)).toLocaleString() ?? '--'} KNC
-              </Text>
+              <RowBetween marginBottom="20px">
+                <Text color={theme.subText} fontSize="14px">
+                  <Trans>Total Voting Rewards</Trans>
+                </Text>
+                <Text color={theme.subText} fontSize="14px">
+                  <Trans>APR</Trans>
+                </Text>
+              </RowBetween>
+              <RowBetween marginBottom="8px">
+                <Text fontSize={20} fontWeight={500}>
+                  {(+knc?.toFixed(0)).toLocaleString() ?? '--'} KNC
+                </Text>
+                <Text fontSize={20} fontWeight={500} color={theme.apr}>
+                  {apr.toFixed(2) ?? '--'}%
+                </Text>
+              </RowBetween>
+
               <Text fontSize={12} color={theme.subText}>
                 ~{(+usd?.toFixed(0)).toLocaleString() ?? '--'} USD
               </Text>
@@ -260,7 +268,7 @@ export default function Vote() {
                   fontSize={12}
                   placement="top"
                   text={t`Your voting power is calculated by
-[Your Staked KNC] / [Total Staked KNC] * 100%`}
+[Your Staked KNC] / [Total Staked KNC] * 100%.`}
                 />
               </Text>
 
@@ -342,13 +350,13 @@ export default function Vote() {
                     <InfoHelper
                       placement="top"
                       fontSize={12}
-                      text={t`You have to stake KNC to be able to vote and earn voting reward`}
+                      text={t`You have to stake KNC to be able to vote and earn voting reward.`}
                     />
                   ) : null}
                 </RowFit>
                 {isDelegated && (
                   <MouseoverTooltip
-                    text={t`You have already delegated your voting power to this address`}
+                    text={t`You have already delegated your voting power to this address.`}
                     placement="top"
                   >
                     <RowFit gap="4px" color={theme.subText}>
@@ -425,7 +433,7 @@ export default function Vote() {
                 )
               ) : (
                 <ButtonLight onClick={toggleWalletModal}>
-                  <Trans>Connect Your Wallet</Trans>
+                  <Trans>Connect</Trans>
                 </ButtonLight>
               )}
             </AutoColumn>
@@ -452,10 +460,9 @@ export default function Vote() {
           </Text>
         </AutoRow>
         <Text color={theme.subText} fontStyle="italic" fontSize={12} hidden={isMobile}>
-          <Trans>Note: Voting on KyberDAO is only available on Ethereum chain</Trans>
+          <Trans>Note: Voting on KyberDAO is only available on Ethereum chain.</Trans>
         </Text>
         <ProposalListComponent voteCallback={handleVote} />
-        <SwitchToEthereumModal featureText={t`This action`} />
         <ClaimConfirmModal amount={formatUnitsToFixed(remainingCumulativeAmount)} onConfirmClaim={handleConfirmClaim} />
         <TransactionConfirmationModal
           isOpen={showConfirm}
