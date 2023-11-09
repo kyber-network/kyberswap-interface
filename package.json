@@ -26,7 +26,8 @@
     "start-stg": "vite --mode stg --host",
     "start-prod": "vite --mode production --host",
     "test-e2e": "synpress run -cf cypress.config.ts",
-    "test-schedule": "synpress run -cf cypress.config.ts"
+    "test-schedule": "synpress run -cf cypress.config.ts",
+    "e2e:zap": "node --test cypress/e2e/specs/zap-in-simulator-test.mjs"
   },
   "browserslist": [
     "chrome >= 52",
