@@ -1,8 +1,8 @@
 import { ChainId } from '@kyberswap/ks-sdk-core'
 
 import { ETHER_ADDRESS } from 'constants/index'
-import { nativeOnChain } from 'constants/tokens'
-import { AllTokenType } from 'hooks/Tokens'
+import { NativeCurrencies } from 'constants/tokens'
+import { TokenMap } from 'hooks/Tokens'
 import { getTokenLogoURL } from 'utils'
 import { currencyId } from 'utils/currencyId'
 
@@ -13,18 +13,14 @@ export const isFavoritePair = (favoritePairs: SuggestionPairData[], item: Sugges
 }
 
 // address is lowercase
-const isTokenInWhiteList = (activeTokens: AllTokenType, address: string) =>
+const isTokenInWhiteList = (activeTokens: TokenMap, address: string) =>
   address.toLowerCase() === ETHER_ADDRESS.toLowerCase() ? true : !!activeTokens[address]
 
 // at least tokenIn or tokeOut not in whitelist
-export const isActivePair = (activeTokens: AllTokenType, pair: SuggestionPairData) =>
+export const isActivePair = (activeTokens: TokenMap, pair: SuggestionPairData) =>
   isTokenInWhiteList(activeTokens, pair.tokenIn) && isTokenInWhiteList(activeTokens, pair.tokenOut)
 
-export const findLogoAndSortPair = (
-  activeTokens: AllTokenType,
-  list: SuggestionPairData[],
-  chainId: ChainId | undefined,
-) => {
+export const findLogoAndSortPair = (activeTokens: TokenMap, list: SuggestionPairData[], chainId: ChainId) => {
   return list
     .map(token => {
       // find logo
@@ -44,7 +40,7 @@ export const findLogoAndSortPair = (
     })
 }
 
-export const getAddressParam = (address: string, chainId: ChainId | undefined) =>
+export const getAddressParam = (address: string, chainId: ChainId) =>
   address.toLowerCase() === ETHER_ADDRESS.toLowerCase() && chainId
-    ? currencyId(nativeOnChain(chainId), chainId)
+    ? currencyId(NativeCurrencies[chainId], chainId)
     : address

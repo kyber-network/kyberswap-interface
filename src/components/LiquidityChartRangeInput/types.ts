@@ -1,16 +1,16 @@
-import { Bound } from 'state/mint/proamm/actions'
+import { Bound } from 'state/mint/proamm/type'
 
 export interface ChartEntry {
   activeLiquidity: number
   price0: number
 }
 
-export interface Dimensions {
-  width: number
-  height: number
+interface Dimensions {
+  viewBoxWidth: number
+  height?: string
 }
 
-export interface Margins {
+interface Margins {
   top: number
   right: number
   bottom: number

@@ -1,12 +1,12 @@
 import { gql, useLazyQuery } from '@apollo/client'
-import { ChainId, CurrencyAmount, Token, TokenAmount, WETH } from '@kyberswap/ks-sdk-core'
+import { CurrencyAmount, Token, TokenAmount, WETH } from '@kyberswap/ks-sdk-core'
 import { FeeAmount, Pool, Position } from '@kyberswap/ks-sdk-elastic'
 import { useEffect } from 'react'
 
 import { ZERO_ADDRESS } from 'constants/index'
-import { NETWORKS_INFO } from 'constants/networks'
-import { nativeOnChain } from 'constants/tokens'
+import { NativeCurrencies } from 'constants/tokens'
 import { useActiveWeb3React } from 'hooks'
+import { useKyberSwapConfig } from 'state/application/hooks'
 import { useAppDispatch, useAppSelector } from 'state/hooks'
 import { isAddressString } from 'utils'
 
@@ -27,7 +27,6 @@ interface FarmingPool {
   startTime: string
   endTime: string
   feeTarget: string
-  vestingDuration: string
   rewardTokens: Array<{
     token: SubgraphToken
     amount: string
@@ -64,7 +63,6 @@ interface FarmingPool {
 
 interface SubgraphFarm {
   id: string
-  rewardLocker: string
   farmingPools: Array<FarmingPool>
 }
 
@@ -72,14 +70,16 @@ const ELASTIC_FARM_QUERY = gql`
   query getFarms {
     farms(first: 1000) {
       id
-      rewardLocker
-      farmingPools(orderBy: pid, orderDirection: desc) {
+      farmingPools(
+        orderBy: pid
+        orderDirection: desc
+        where: { pool_: { id_not: "0xf2057f0231bedcecf32436e3cd6b0b93c6675e0a" } }
+      ) {
         id
         pid
         startTime
         endTime
         feeTarget
-        vestingDuration
         rewardTokens(orderBy: priority, orderDirection: asc) {
           token {
             id
@@ -143,33 +143,32 @@ const FarmUpdaterV1: React.FC<CommonProps> = ({ interval }) => {
   const dispatch = useAppDispatch()
   const { chainId } = useActiveWeb3React()
   const elasticFarm = useAppSelector(state => state.elasticFarm)[chainId || 1] || defaultChainData
+  const { elasticClient } = useKyberSwapConfig()
 
   const [getElasticFarms, { data, error }] = useLazyQuery(ELASTIC_FARM_QUERY, {
-    client: NETWORKS_INFO[chainId || ChainId.MAINNET].elasticClient,
+    client: elasticClient,
     fetchPolicy: 'network-only',
   })
 
   useEffect(() => {
-    if (!elasticFarm.farms && !elasticFarm.loading) {
-      console.time('getFarmFromSubgraph')
-      dispatch(setLoading({ chainId, loading: true }))
-      getElasticFarms().finally(() => {
-        console.timeEnd('getFarmFromSubgraph')
-        dispatch(setLoading({ chainId, loading: false }))
-      })
+    const getFarm = (withLoading = false) => {
+      withLoading && dispatch(setLoading({ chainId, loading: true }))
+      try {
+        getElasticFarms()
+      } finally {
+        withLoading && dispatch(setLoading({ chainId, loading: false }))
+      }
     }
-  }, [elasticFarm, getElasticFarms, dispatch, chainId])
-
-  useEffect(() => {
+    getFarm(true)
     const i = interval
       ? setInterval(() => {
-          getElasticFarms()
-        }, 15_000)
+          getFarm()
+        }, 20_000)
       : undefined
     return () => {
       i && clearInterval(i)
     }
-  }, [interval, getElasticFarms])
+  }, [interval, chainId, getElasticFarms, dispatch])
 
   useEffect(() => {
     if (error && chainId) {
@@ -178,20 +177,20 @@ const FarmUpdaterV1: React.FC<CommonProps> = ({ interval }) => {
     }
   }, [error, dispatch, chainId])
 
+  const hasFarm = elasticFarm?.farms?.length
   useEffect(() => {
-    if (data?.farms && chainId) {
+    if (data?.farms && chainId && !hasFarm) {
       // transform farm data
       const formattedData: ElasticFarm[] = data.farms.map((farm: SubgraphFarm) => {
         return {
           id: farm.id,
-          rewardLocker: isAddressString(farm.rewardLocker),
           pools: farm.farmingPools.map(pool => {
-            const token0Address = isAddressString(pool.pool.token0.id)
-            const token1Address = isAddressString(pool.pool.token1.id)
+            const token0Address = isAddressString(chainId, pool.pool.token0?.id)
+            const token1Address = isAddressString(chainId, pool.pool.token1?.id)
 
             const token0 =
               token0Address === WETH[chainId].address
-                ? nativeOnChain(chainId)
+                ? NativeCurrencies[chainId]
                 : new Token(
                     chainId,
                     token0Address,
@@ -202,7 +201,7 @@ const FarmUpdaterV1: React.FC<CommonProps> = ({ interval }) => {
 
             const token1 =
               token1Address === WETH[chainId].address
-                ? nativeOnChain(chainId)
+                ? NativeCurrencies[chainId]
                 : new Token(
                     chainId,
                     token1Address,
@@ -242,7 +241,6 @@ const FarmUpdaterV1: React.FC<CommonProps> = ({ interval }) => {
               pid: pool.pid,
               id: pool.id,
               feeTarget: pool.feeTarget,
-              vestingDuration: Number(pool.vestingDuration),
               token0,
               token1,
               poolAddress: pool.pool.id,
@@ -251,13 +249,13 @@ const FarmUpdaterV1: React.FC<CommonProps> = ({ interval }) => {
               poolTvl: Number(pool.pool.totalValueLockedUSD),
               rewardTokens: pool.rewardTokens.map(({ token }) => {
                 return token.id === ZERO_ADDRESS
-                  ? nativeOnChain(chainId)
+                  ? NativeCurrencies[chainId]
                   : new Token(chainId, token.id, Number(token.decimals), token.symbol, token.name)
               }),
               totalRewards: pool.rewardTokens.map(({ token, amount }) => {
                 const t =
                   token.id === ZERO_ADDRESS
-                    ? nativeOnChain(chainId)
+                    ? NativeCurrencies[chainId]
                     : new Token(chainId, token.id, Number(token.decimals), token.symbol, token.name)
                 return CurrencyAmount.fromRawAmount(t, amount)
               }),
@@ -269,7 +267,7 @@ const FarmUpdaterV1: React.FC<CommonProps> = ({ interval }) => {
       })
       dispatch(setFarms({ chainId, farms: formattedData }))
     }
-  }, [data, dispatch, chainId])
+  }, [data, dispatch, chainId, hasFarm])
 
   return null
 }

@@ -1,24 +1,28 @@
 import { ZoomTransform, max, scaleLinear } from 'd3'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useId, useMemo, useRef, useState } from 'react'
+import styled from 'styled-components'
 
-import { Bound } from 'state/mint/proamm/actions'
+import { Bound } from 'state/mint/proamm/type'
 
 import { Area } from './Area'
 import { AxisBottom } from './AxisBottom'
 import { Brush } from './Brush'
 import { Line } from './Line'
-import Zoom, { ZoomOverlay } from './Zoom'
+import OriginalZoom, { ZoomOverlay } from './Zoom'
 import { ChartEntry, LiquidityChartRangeInputProps } from './types'
 
-export const xAccessor = (d: ChartEntry) => d.price0
-export const yAccessor = (d: ChartEntry) => d.activeLiquidity
+const xAccessor = (d: ChartEntry) => d.price0
+const yAccessor = (d: ChartEntry) => d.activeLiquidity
+
+const Zoom = styled(OriginalZoom)<{ $interactive: boolean }>`
+  ${({ $interactive }) => (!$interactive ? 'top: -46px;' : '')}
+`
 
 export function Chart({
-  id = 'liquidityChartRangeInput',
   data: { series, current },
   ticksAtLimit,
   styles,
-  dimensions: { width, height },
+  dimensions: { viewBoxWidth, height },
   margins,
   interactive = true,
   brushDomain,
@@ -26,13 +30,16 @@ export function Chart({
   onBrushDomainChange,
   zoomLevels,
 }: LiquidityChartRangeInputProps) {
+  const id = useId()
+
+  const viewBoxHeight = 200
   const zoomRef = useRef<SVGRectElement | null>(null)
 
   const [zoom, setZoom] = useState<ZoomTransform | null>(null)
 
   const [innerHeight, innerWidth] = useMemo(
-    () => [height - margins.top - margins.bottom, width - margins.left - margins.right],
-    [width, height, margins],
+    () => [viewBoxHeight - margins.top - margins.bottom - 10, viewBoxWidth - margins.left - margins.right],
+    [viewBoxWidth, viewBoxHeight, margins],
   )
 
   const { xScale, yScale } = useMemo(() => {
@@ -78,14 +85,14 @@ export function Chart({
   return (
     <>
       <Zoom
+        $interactive={!!interactive}
         svg={zoomRef.current}
         xScale={xScale}
-        style={{ top: !interactive ? '-56px' : undefined }}
         setZoom={setZoom}
         width={innerWidth}
         height={
           // allow zooming inside the x-axis
-          height
+          viewBoxHeight
         }
         resetBrush={() => {
           onBrushDomainChange(
@@ -96,10 +103,15 @@ export function Chart({
         showResetButton={Boolean(ticksAtLimit[Bound.LOWER] || ticksAtLimit[Bound.UPPER])}
         zoomLevels={zoomLevels}
       />
-      <svg width="100%" height="100%" viewBox={`0 0 ${width} ${height}`} style={{ overflow: 'hidden' }}>
+      <svg
+        width="100%"
+        height={height || '100%'} //"233.5px"
+        viewBox={`0 0 ${viewBoxWidth} ${viewBoxHeight}`}
+        style={{ overflow: 'hidden' }}
+      >
         <defs>
           <clipPath id={`${id}-chart-clip`}>
-            <rect x="0" y="0" width={innerWidth} height={height} />
+            <rect x="0" y="0" width={innerWidth} height={viewBoxHeight} />
           </clipPath>
 
           {brushDomain && (
@@ -139,7 +151,7 @@ export function Chart({
             <AxisBottom xScale={xScale} innerHeight={innerHeight} />
           </g>
 
-          <ZoomOverlay width={innerWidth} height={height} ref={zoomRef} />
+          <ZoomOverlay width={innerWidth} height={viewBoxHeight} ref={zoomRef} />
 
           <Brush
             id={id}

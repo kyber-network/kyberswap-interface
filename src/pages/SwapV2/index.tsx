@@ -1,272 +1,142 @@
-import { ChainId, Currency, CurrencyAmount, Token } from '@kyberswap/ks-sdk-core'
+import { Currency, CurrencyAmount } from '@kyberswap/ks-sdk-core'
 import { Trans, t } from '@lingui/macro'
 import JSBI from 'jsbi'
-import { stringify } from 'qs'
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { AlertTriangle } from 'react-feather'
+import { Info } from 'react-feather'
 import Skeleton from 'react-loading-skeleton'
-import { RouteComponentProps, useParams } from 'react-router-dom'
+import { useLocation } from 'react-router-dom'
 import { Box, Flex, Text } from 'rebass'
-import styled, { DefaultTheme, keyframes } from 'styled-components'
+import styled from 'styled-components'
 
-import { ReactComponent as TutorialSvg } from 'assets/svg/play_circle_outline.svg'
-import { ReactComponent as RoutingIcon } from 'assets/svg/routing-icon.svg'
+import christmasImg from 'assets/images/christmas-decor2.svg'
 import AddressInputPanel from 'components/AddressInputPanel'
+import ApproveMessage from 'components/ApproveMessage'
+import ArrowRotate from 'components/ArrowRotate'
 import Banner from 'components/Banner'
 import { ButtonConfirmed, ButtonError, ButtonLight, ButtonPrimary } from 'components/Button'
-import { GreyCard } from 'components/Card/index'
-import Column from 'components/Column/index'
+import { GreyCard } from 'components/Card'
 import CurrencyInputPanel from 'components/CurrencyInputPanel'
-import { Swap as SwapIcon } from 'components/Icons'
-import TransactionSettingsIcon from 'components/Icons/TransactionSettingsIcon'
 import InfoHelper from 'components/InfoHelper'
 import Loader from 'components/Loader'
 import ProgressSteps from 'components/ProgressSteps'
-import { AutoRow, RowBetween } from 'components/Row'
-import { SEOSwap } from 'components/SEO'
-import { ShareButtonWithModal } from 'components/ShareModal'
+import Row, { AutoRow, RowBetween } from 'components/Row'
+import SlippageWarningNote from 'components/SlippageWarningNote'
+import { Label } from 'components/SwapForm/OutputCurrencyPanel'
+import PriceImpactNote from 'components/SwapForm/PriceImpactNote'
+import SlippageSettingGroup from 'components/SwapForm/SlippageSettingGroup'
 import { SwitchLocaleLink } from 'components/SwitchLocaleLink'
 import TokenWarningModal from 'components/TokenWarningModal'
 import { MouseoverTooltip } from 'components/Tooltip'
-import TopTrendingSoonTokensInCurrentNetwork from 'components/TopTrendingSoonTokensInCurrentNetwork'
-import TrendingSoonTokenBanner from 'components/TrendingSoonTokenBanner'
-import Tutorial, { TutorialType } from 'components/Tutorial'
 import TutorialSwap from 'components/Tutorial/TutorialSwap'
 import { TutorialIds } from 'components/Tutorial/TutorialSwap/constant'
 import AdvancedSwapDetailsDropdown from 'components/swapv2/AdvancedSwapDetailsDropdown'
 import ConfirmSwapModal from 'components/swapv2/ConfirmSwapModal'
 import GasPriceTrackerPanel from 'components/swapv2/GasPriceTrackerPanel'
 import LiquiditySourcesPanel from 'components/swapv2/LiquiditySourcesPanel'
-import MobileTokenInfo from 'components/swapv2/MobileTokenInfo'
-import PairSuggestion, { PairSuggestionHandle } from 'components/swapv2/PairSuggestion'
 import RefreshButton from 'components/swapv2/RefreshButton'
 import SettingsPanel from 'components/swapv2/SwapSettingsPanel'
-import TokenInfo from 'components/swapv2/TokenInfo'
-import TokenInfoV2 from 'components/swapv2/TokenInfoV2'
+import TokenInfoTab from 'components/swapv2/TokenInfo'
 import TradePrice from 'components/swapv2/TradePrice'
 import TradeTypeSelection from 'components/swapv2/TradeTypeSelection'
 import {
-  ArrowWrapper,
   BottomGrouping,
   Container,
   Dots,
-  InfoComponentsWrapper,
-  KyberTag,
   LiveChartWrapper,
   PageWrapper,
-  PriceImpactHigh,
   RoutesWrapper,
-  StyledActionButtonSwapForm,
   SwapCallbackError,
-  SwapFormActions,
   SwapFormWrapper,
-  Tab,
-  TabContainer,
-  TabWrapper,
   Wrapper,
 } from 'components/swapv2/styleds'
-import { NETWORKS_INFO, SUPPORTED_NETWORKS } from 'constants/networks'
-import { Z_INDEXS } from 'constants/styles'
-import { STABLE_COINS_ADDRESS, nativeOnChain } from 'constants/tokens'
+import { AGGREGATOR_WAITING_TIME, APP_PATHS, TIME_TO_REFRESH_SWAP_RATE } from 'constants/index'
 import { useActiveWeb3React } from 'hooks'
-import { useAllTokens, useCurrency } from 'hooks/Tokens'
-import { useActiveNetwork } from 'hooks/useActiveNetwork'
+import { useAllTokens, useIsLoadedTokenDefault, useStableCoins } from 'hooks/Tokens'
 import { ApprovalState, useApproveCallbackFromTradeV2 } from 'hooks/useApproveCallback'
 import useMixpanel, { MIXPANEL_TYPE } from 'hooks/useMixpanel'
 import useParsedQueryString from 'hooks/useParsedQueryString'
-import usePrevious from 'hooks/usePrevious'
 import { useSwapV2Callback } from 'hooks/useSwapV2Callback'
+import useSyncTokenSymbolToUrl from 'hooks/useSyncTokenSymbolToUrl'
 import useTheme from 'hooks/useTheme'
 import useWrapCallback, { WrapType } from 'hooks/useWrapCallback'
-import { BodyWrapper } from 'pages/AppBody'
-import { ClickableText } from 'pages/Pool/styleds'
-import { useToggleTransactionSettingsMenu, useWalletModalToggle } from 'state/application/hooks'
-import { useAllDexes } from 'state/customizeDexes/hooks'
+import { AppBodyWrapped, InfoComponents, RoutingIconWrapper, SwitchLocaleLinkWrapper, TAB } from 'pages/SwapV3'
+import Header from 'pages/SwapV3/Header'
+import useResetCurrenciesOnRemoveImportedTokens from 'pages/SwapV3/useResetCurrenciesOnRemoveImportedTokens'
+import useTokenNotInDefault from 'pages/SwapV3/useTokenNotInDefault'
+import useUpdateSlippageInStableCoinSwap from 'pages/SwapV3/useUpdateSlippageInStableCoinSwap'
+import { useWalletModalToggle } from 'state/application/hooks'
 import { Field } from 'state/swap/actions'
-import { useDefaultsFromURLSearch, useSwapActionHandlers, useSwapState } from 'state/swap/hooks'
+import { useDefaultsFromURLSearch, useEncodeSolana, useSwapActionHandlers, useSwapState } from 'state/swap/hooks'
 import { useDerivedSwapInfoV2 } from 'state/swap/useAggregator'
 import { useTutorialSwapGuide } from 'state/tutorial/hooks'
 import {
-  useExpertModeManager,
+  useDegenModeManager,
+  useHolidayMode,
   useShowLiveChart,
-  useShowTokenInfo,
   useShowTradeRoutes,
-  useUserAddedTokens,
   useUserSlippageTolerance,
 } from 'state/user/hooks'
-import { TYPE } from 'theme'
-import { formattedNum, isAddressString } from 'utils'
+import { formattedNum } from 'utils'
+import { getTradeComposition } from 'utils/aggregationRouting'
 import { Aggregator } from 'utils/aggregator'
-import { currencyId } from 'utils/currencyId'
-import { filterTokensWithExactKeyword } from 'utils/filtering'
-import { maxAmountSpend } from 'utils/maxAmountSpend'
-import { convertToSlug, getNetworkSlug, getSymbolSlug } from 'utils/string'
-import { checkPairInWhiteList, convertSymbol } from 'utils/tokenInfo'
+import { halfAmountSpend, maxAmountSpend } from 'utils/maxAmountSpend'
+import { checkPriceImpact } from 'utils/prices'
+import { captureSwapError } from 'utils/sentry'
 
 const LiveChart = lazy(() => import('components/LiveChart'))
-const Routing = lazy(() => import('components/swapv2/Routing'))
-const TutorialIcon = styled(TutorialSvg)`
-  width: 22px;
-  height: 22px;
-  path {
-    fill: ${({ theme }) => theme.subText};
-    stroke: ${({ theme }) => theme.subText};
-  }
+const Routing = lazy(() => import('components/TradeRouting'))
+
+const ChristmasDecor = styled.div`
+  position: absolute;
+  top: -20px;
+  right: -8px;
+  left: -8px;
+
+  ${({ theme }) => theme.mediaWidth.upToSmall`
+    top: -16px;
+    right: -6px;
+    left: -4px;
+  `}
 `
 
-enum TAB {
-  SWAP = 'swap',
-  INFO = 'info',
-  SETTINGS = 'settings',
-  GAS_PRICE_TRACKER = 'gas_price_tracker',
-  LIQUIDITY_SOURCES = 'liquidity_sources',
-  // LIMIT = 'limit'
-}
-
-const highlight = (theme: DefaultTheme) => keyframes`
-  0% {
-    box-shadow: 0 0 0 0 ${theme.primary};
-  }
-
-  70% {
-    box-shadow: 0 0 0 2px ${theme.primary};
-  }
-
-  100% {
-    box-shadow: 0 0 0 0 ${theme.primary};
-  }
-`
-
-export const AppBodyWrapped = styled(BodyWrapper)`
-  box-shadow: 0px 4px 16px rgba(0, 0, 0, 0.04);
-  z-index: ${Z_INDEXS.SWAP_FORM};
-  padding: 16px 16px 24px;
-  margin-top: 0;
-
-  &[data-highlight='true'] {
-    animation: ${({ theme }) => highlight(theme)} 2s 2 alternate ease-in-out;
-  }
-`
-
-const SwitchLocaleLinkWrapper = styled.div`
-  margin-bottom: 30px;
-  ${({ theme }) => theme.mediaWidth.upToMedium`
-  margin-bottom: 0px;
-`}
-`
-
-const RoutingIconWrapper = styled(RoutingIcon)`
-  height: 27px;
-  width: 27px;
-  margin-right: 10px;
-  path {
-    fill: ${({ theme }) => theme.subText} !important;
-  }
-`
-
-export default function Swap({ history }: RouteComponentProps) {
+export default function Swap() {
+  const { account, chainId, isSolana, isEVM } = useActiveWeb3React()
   const [rotate, setRotate] = useState(false)
-  const [showInverted, setShowInverted] = useState<boolean>(false)
   const isShowLiveChart = useShowLiveChart()
+  const [holidayMode] = useHolidayMode()
   const isShowTradeRoutes = useShowTradeRoutes()
-  const isShowTokenInfoSetting = useShowTokenInfo()
-  const qs = useParsedQueryString()
-  const allDexes = useAllDexes()
+  const qs = useParsedQueryString<{ highlightBox: string }>()
   const [{ show: isShowTutorial = false }] = useTutorialSwapGuide()
-
-  const refSuggestPair = useRef<PairSuggestionHandle>(null)
-  const [showingPairSuggestionImport, setShowingPairSuggestionImport] = useState<boolean>(false) // show modal import when click pair suggestion
+  const { pathname } = useLocation()
+  const [encodeSolana] = useEncodeSolana()
 
   const shouldHighlightSwapBox = qs.highlightBox === 'true'
 
-  const [isSelectCurencyMannual, setIsSelectCurencyMannual] = useState(false) // true when: select token input, output mannualy or click rotate token.
+  const [isSelectCurrencyManually, setIsSelectCurrencyManually] = useState(false) // true when: select token input, output manualy or click rotate token.
   // else select via url
 
+  const isSwapPage = pathname.startsWith(APP_PATHS.SWAP)
   const [activeTab, setActiveTab] = useState<TAB>(TAB.SWAP)
 
-  const loadedUrlParams = useDefaultsFromURLSearch()
+  useEffect(() => {
+    setActiveTab(TAB.SWAP)
+  }, [isSwapPage])
 
-  // token warning stuff
-  const [loadedInputCurrency, loadedOutputCurrency] = [
-    useCurrency(loadedUrlParams?.inputCurrencyId),
-    useCurrency(loadedUrlParams?.outputCurrencyId),
-  ]
-
+  useDefaultsFromURLSearch()
   const [dismissTokenWarning, setDismissTokenWarning] = useState<boolean>(false)
-  const urlLoadedTokens: Token[] = useMemo(
-    () => [loadedInputCurrency, loadedOutputCurrency]?.filter((c): c is Token => c instanceof Token) ?? [],
-    [loadedInputCurrency, loadedOutputCurrency],
-  )
 
-  // dismiss warning if all imported tokens are in active lists
-  const defaultTokens = useAllTokens()
-  const importTokensNotInDefault =
-    urlLoadedTokens &&
-    urlLoadedTokens.filter((token: Token) => {
-      return !Boolean(token.address in defaultTokens)
-    })
-
-  const { account, chainId } = useActiveWeb3React()
   const theme = useTheme()
 
   // toggle wallet when disconnected
   const toggleWalletModal = useWalletModalToggle()
 
-  // for expert mode
-  const toggleSettings = useToggleTransactionSettingsMenu()
-  const [isExpertMode] = useExpertModeManager()
+  const [isDegenMode] = useDegenModeManager()
 
   // get custom setting values for user
   const [allowedSlippage] = useUserSlippageTolerance()
 
   // swap state
-  const {
-    independentField,
-    typedValue,
-    recipient,
-    feeConfig,
-    [Field.INPUT]: INPUT,
-    [Field.OUTPUT]: OUTPUT,
-  } = useSwapState()
-
-  const {
-    v2Trade,
-    currencyBalances,
-    parsedAmount,
-    currencies,
-    inputError: swapInputError,
-    tradeComparer,
-    onRefresh,
-    loading: loadingAPI,
-    isPairNotfound,
-  } = useDerivedSwapInfoV2()
-  const comparedDex = useMemo(
-    () => allDexes?.find(dex => dex.id === tradeComparer?.comparedDex),
-    [allDexes, tradeComparer],
-  )
-  const currencyIn = currencies[Field.INPUT]
-  const currencyOut = currencies[Field.OUTPUT]
-
-  const {
-    wrapType,
-    execute: onWrap,
-    inputError: wrapInputError,
-  } = useWrapCallback(currencies[Field.INPUT], currencies[Field.OUTPUT], typedValue)
-  const showWrap: boolean = wrapType !== WrapType.NOT_APPLICABLE
-  const trade = showWrap ? undefined : v2Trade
-  const isPriceImpactInvalid = !!trade?.priceImpact && trade?.priceImpact === -1
-  const isPriceImpactHigh = !!trade?.priceImpact && trade?.priceImpact > 5
-  const isPriceImpactVeryHigh = !!trade?.priceImpact && trade?.priceImpact > 15
-
-  const parsedAmounts = showWrap
-    ? {
-        [Field.INPUT]: parsedAmount,
-        [Field.OUTPUT]: parsedAmount,
-      }
-    : {
-        [Field.INPUT]: independentField === Field.INPUT ? parsedAmount : trade?.inputAmount,
-        [Field.OUTPUT]: independentField === Field.OUTPUT ? parsedAmount : trade?.outputAmount,
-      }
+  const { independentField, typedValue, recipient, [Field.INPUT]: INPUT, [Field.OUTPUT]: OUTPUT } = useSwapState()
 
   const {
     onSwitchTokensV2,
@@ -277,51 +147,15 @@ export default function Swap({ history }: RouteComponentProps) {
     onChangeTrade,
   } = useSwapActionHandlers()
 
-  // reset recipient
-  useEffect(() => {
-    onChangeRecipient(null)
-  }, [onChangeRecipient, isExpertMode])
-
-  useEffect(() => {
-    // Save current trade to store
-    onChangeTrade(trade)
-  }, [trade, onChangeTrade])
-
-  const handleRecipientChange = (value: string | null) => {
-    if (recipient === null && value !== null) {
-      mixpanelHandler(MIXPANEL_TYPE.ADD_RECIPIENT_CLICKED)
-    }
-    onChangeRecipient(value)
-  }
-
-  const isValidInput = !swapInputError
-  const dependentField: Field = independentField === Field.INPUT ? Field.OUTPUT : Field.INPUT
-
-  const handleTypeInput = useCallback(
-    (value: string) => {
-      onUserInput(Field.INPUT, value)
-    },
-    [onUserInput],
-  )
-  const handleTypeOutput = useCallback((): void => {
-    // ...
-  }, [])
-
-  // reset if they close warning without tokens in params
-  const handleDismissTokenWarning = useCallback(() => {
-    if (showingPairSuggestionImport) {
-      setShowingPairSuggestionImport(false)
-    } else {
-      setDismissTokenWarning(true)
-    }
-  }, [showingPairSuggestionImport])
-
-  const handleConfirmTokenWarning = useCallback(() => {
-    handleDismissTokenWarning()
-    if (showingPairSuggestionImport) {
-      refSuggestPair.current?.onConfirmImportToken() // callback from children
-    }
-  }, [handleDismissTokenWarning, showingPairSuggestionImport])
+  const {
+    v2Trade,
+    currencyBalances,
+    parsedAmount,
+    currencies,
+    inputError: swapInputError,
+    onRefresh,
+    loading: loadingAPI,
+  } = useDerivedSwapInfoV2()
 
   // modal and loading
   const [{ showConfirm, tradeToConfirm, swapErrorMessage, attemptingTxn, txHash }, setSwapState] = useState<{
@@ -338,6 +172,83 @@ export default function Swap({ history }: RouteComponentProps) {
     txHash: undefined,
   })
 
+  const currencyIn: Currency | undefined = currencies[Field.INPUT]
+  const currencyOut: Currency | undefined = currencies[Field.OUTPUT]
+
+  // dismiss warning if all imported tokens are in active lists
+  const defaultTokens = useAllTokens()
+  const importTokensNotInDefault = useTokenNotInDefault()
+
+  const balanceIn: CurrencyAmount<Currency> | undefined = currencyBalances[Field.INPUT]
+  const balanceOut: CurrencyAmount<Currency> | undefined = currencyBalances[Field.OUTPUT]
+
+  const { wrapType, execute: onWrap, inputError: wrapInputError } = useWrapCallback(currencyIn, currencyOut, typedValue)
+
+  const isSolanaUnwrap = isSolana && wrapType === WrapType.UNWRAP
+  useEffect(() => {
+    // reset value for unwrapping WSOL
+    // because on Solana, unwrap WSOL is closing WSOL account,
+    // which mean it will unwrap all WSOL at once and we can't unwrap partial amount of WSOL
+    if (isSolanaUnwrap) onUserInput(Field.INPUT, balanceIn?.toExact() ?? '')
+  }, [balanceIn, isSolanaUnwrap, onUserInput, parsedAmount])
+
+  const showWrap: boolean = wrapType !== WrapType.NOT_APPLICABLE
+  const trade = showWrap ? undefined : v2Trade
+
+  const priceImpact = trade?.priceImpact
+  const {
+    isInvalid: isPriceImpactInvalid,
+    isHigh: isPriceImpactHigh,
+    isVeryHigh: isPriceImpactVeryHigh,
+  } = checkPriceImpact(priceImpact)
+
+  const parsedAmounts = showWrap
+    ? {
+        [Field.INPUT]: parsedAmount,
+        [Field.OUTPUT]: parsedAmount,
+      }
+    : {
+        [Field.INPUT]: independentField === Field.INPUT ? parsedAmount : trade?.inputAmount,
+        [Field.OUTPUT]: independentField === Field.OUTPUT ? parsedAmount : trade?.outputAmount,
+      }
+
+  const { mixpanelHandler } = useMixpanel(currencies)
+
+  // reset recipient
+  useEffect(() => {
+    onChangeRecipient(null)
+  }, [onChangeRecipient, isDegenMode])
+
+  useEffect(() => {
+    // Save current trade to store
+    onChangeTrade(trade)
+  }, [trade, onChangeTrade])
+
+  const handleRecipientChange = (value: string | null) => {
+    if (recipient === null && value !== null) {
+      mixpanelHandler(MIXPANEL_TYPE.ADD_RECIPIENT_CLICKED)
+    }
+    onChangeRecipient(value)
+  }
+
+  const dependentField: Field = independentField === Field.INPUT ? Field.OUTPUT : Field.INPUT
+
+  const handleTypeInput = useCallback(
+    (value: string) => {
+      onUserInput(Field.INPUT, value)
+    },
+    [onUserInput],
+  )
+
+  // reset if they close warning without tokens in params
+  const handleDismissTokenWarning = useCallback(() => {
+    setDismissTokenWarning(true)
+  }, [])
+
+  const handleConfirmTokenWarning = useCallback(() => {
+    handleDismissTokenWarning()
+  }, [handleDismissTokenWarning])
+
   const formattedAmounts = {
     [independentField]: typedValue,
     [dependentField]: showWrap
@@ -351,7 +262,7 @@ export default function Swap({ history }: RouteComponentProps) {
   const noRoute = !trade?.swaps?.length
 
   // check whether the user has approved the router on the input token
-  const [approval, approveCallback] = useApproveCallbackFromTradeV2(trade, allowedSlippage)
+  const [approval, approveCallback] = useApproveCallbackFromTradeV2(trade, allowedSlippage) //
 
   // check if user has gone through approval process, used to show two step buttons, reset on token change
   const [approvalSubmitted, setApprovalSubmitted] = useState<boolean>(false)
@@ -360,7 +271,7 @@ export default function Swap({ history }: RouteComponentProps) {
     setApprovalSubmitted(false) // reset 2 step UI for approvals
     setRotate(prev => !prev)
     onSwitchTokensV2()
-    setIsSelectCurencyMannual(true)
+    setIsSelectCurrencyManually(true)
   }, [onSwitchTokensV2])
 
   // mark when a user has submitted an approval, reset onTokenSelection for input field
@@ -373,21 +284,28 @@ export default function Swap({ history }: RouteComponentProps) {
     }
   }, [approval, approvalSubmitted])
 
-  const maxAmountInput: CurrencyAmount<Currency> | undefined = maxAmountSpend(currencyBalances[Field.INPUT])
+  const maxAmountInput: string | undefined = useMemo(() => maxAmountSpend(balanceIn)?.toExact(), [balanceIn])
+  const halfAmountInput: string | undefined = useMemo(() => halfAmountSpend(balanceIn)?.toExact(), [balanceIn])
 
   // the callback to execute the swap
-  const { callback: swapCallback, error: swapCallbackError } = useSwapV2Callback(trade, recipient)
+  const { callback: swapCallback, error: swapCallbackError } = useSwapV2Callback(trade)
 
   const handleSwap = useCallback(() => {
     if (!swapCallback) {
       return
     }
+    mixpanelHandler(MIXPANEL_TYPE.SWAP_CONFIRMED, {
+      gasUsd: trade?.gasUsd,
+      inputAmount: trade?.inputAmount,
+      priceImpact: trade?.priceImpact,
+    })
     setSwapState({ attemptingTxn: true, tradeToConfirm, showConfirm, swapErrorMessage: undefined, txHash: undefined })
     swapCallback()
       .then(hash => {
         setSwapState({ attemptingTxn: false, tradeToConfirm, showConfirm, swapErrorMessage: undefined, txHash: hash })
       })
       .catch(error => {
+        captureSwapError(error)
         setSwapState({
           attemptingTxn: false,
           tradeToConfirm,
@@ -396,31 +314,48 @@ export default function Swap({ history }: RouteComponentProps) {
           txHash: undefined,
         })
       })
-  }, [tradeToConfirm, showConfirm, swapCallback])
+  }, [
+    swapCallback,
+    tradeToConfirm,
+    showConfirm,
+    mixpanelHandler,
+    trade?.gasUsd,
+    trade?.inputAmount,
+    trade?.priceImpact,
+  ])
 
   // show approve flow when: no error on inputs, not approved or pending, or approved in current session
-  // never show if price impact is above threshold in non expert mode
+  // never show if price impact is above threshold in non degen mode
   const showApproveFlow =
     !swapInputError &&
     (approval === ApprovalState.NOT_APPROVED ||
       approval === ApprovalState.PENDING ||
       (approvalSubmitted && approval === ApprovalState.APPROVED))
 
+  const tradeLoadedRef = useRef(0)
+  useEffect(() => {
+    tradeLoadedRef.current = Date.now()
+  }, [trade])
+
   const handleConfirmDismiss = useCallback(() => {
     setSwapState({ showConfirm: false, tradeToConfirm, attemptingTxn, swapErrorMessage, txHash })
+
+    // when open modal, trade is locked from to be updated
+    // if user open modal too long, trade is outdated
+    // need to refresh data on close modal
+    if (Date.now() - tradeLoadedRef.current > TIME_TO_REFRESH_SWAP_RATE * 1000) {
+      onRefresh(false, AGGREGATOR_WAITING_TIME)
+    }
+
     // if there was a tx hash, we want to clear the input
     if (txHash) {
       onUserInput(Field.INPUT, '')
     }
-  }, [attemptingTxn, onUserInput, swapErrorMessage, tradeToConfirm, txHash])
-
-  const handleAcceptChanges = useCallback(() => {
-    setSwapState({ tradeToConfirm: trade, swapErrorMessage, txHash, attemptingTxn, showConfirm })
-  }, [attemptingTxn, showConfirm, swapErrorMessage, trade, txHash])
+  }, [attemptingTxn, onUserInput, swapErrorMessage, tradeToConfirm, txHash, onRefresh])
 
   const handleInputSelect = useCallback(
     (inputCurrency: Currency) => {
-      setIsSelectCurencyMannual(true)
+      setIsSelectCurrencyManually(true)
       setApprovalSubmitted(false) // reset 2 step UI for approvals
       onCurrencySelection(Field.INPUT, inputCurrency)
     },
@@ -428,161 +363,33 @@ export default function Swap({ history }: RouteComponentProps) {
   )
 
   const handleMaxInput = useCallback(() => {
-    maxAmountInput && onUserInput(Field.INPUT, maxAmountInput.toExact())
+    onUserInput(Field.INPUT, maxAmountInput || '')
   }, [maxAmountInput, onUserInput])
 
   const handleHalfInput = useCallback(() => {
-    onUserInput(Field.INPUT, currencyBalances[Field.INPUT]?.divide(2).toExact() || '')
-  }, [currencyBalances, onUserInput])
+    !isSolanaUnwrap && onUserInput(Field.INPUT, halfAmountInput || '')
+  }, [isSolanaUnwrap, halfAmountInput, onUserInput])
 
   const handleOutputSelect = useCallback(
     (outputCurrency: Currency) => {
-      setIsSelectCurencyMannual(true)
+      setIsSelectCurrencyManually(true)
       onCurrencySelection(Field.OUTPUT, outputCurrency)
     },
     [onCurrencySelection],
   )
 
-  const isLoading =
-    loadingAPI ||
-    ((!currencyBalances[Field.INPUT] || !currencyBalances[Field.OUTPUT]) && userHasSpecifiedInputOutput && !v2Trade)
+  const isLoading = loadingAPI || ((!balanceIn || !balanceOut) && userHasSpecifiedInputOutput && !v2Trade)
 
-  const { mixpanelHandler } = useMixpanel(trade, currencies)
   const mixpanelSwapInit = () => {
-    mixpanelHandler(MIXPANEL_TYPE.SWAP_INITIATED)
+    mixpanelHandler(MIXPANEL_TYPE.SWAP_INITIATED, {
+      gasUsd: trade?.gasUsd,
+      inputAmount: trade?.inputAmount,
+      priceImpact: trade?.priceImpact,
+    })
   }
-
-  /** check url params format `/swap/network/x-to-y` and then auto select token input
-   * - Flow: check network first and find token pairs (x vs y)
-   */
-
-  const params = useParams<{
-    fromCurrency: string
-    toCurrency: string
-    network: string
-  }>()
-
-  const getUrlMatchParams = () => {
-    const fromCurrency = (params.fromCurrency || '').toLowerCase()
-    const toCurrency = (params.toCurrency || '').toLowerCase()
-    const network: string = convertToSlug(params.network || '')
-    return { fromCurrency, toCurrency, network }
-  }
-
-  const { changeNetwork } = useActiveNetwork()
-  const refIsCheckNetworkAutoSelect = useRef<boolean>(false) // has done check network
-  const refIsImportUserToken = useRef<boolean>(false)
-
-  const findToken = (keyword: string) => {
-    const nativeToken = nativeOnChain(chainId as ChainId)
-    if (keyword === getSymbolSlug(nativeToken)) {
-      return nativeToken
-    }
-    return filterTokensWithExactKeyword(Object.values(defaultTokens), keyword)[0]
-  }
-
-  const navigate = useCallback(
-    (url: string) => {
-      const newQs = { ...qs }
-      // /swap/net/symA-to-symB?inputCurrency= addressC/symC &outputCurrency= addressD/symD
-      delete newQs.outputCurrency
-      delete newQs.inputCurrency
-      delete newQs.networkId
-      history.push(`${url}?${stringify(newQs)}`) // keep query params
-    },
-    [history, qs],
-  )
-
-  function findTokenPairFromUrl() {
-    let { fromCurrency, toCurrency, network } = getUrlMatchParams()
-    if (!fromCurrency || !network) return
-
-    const compareNetwork = getNetworkSlug(chainId)
-
-    if (compareNetwork && network !== compareNetwork) {
-      // when select change network => force get new network
-      network = compareNetwork
-      navigate(`/swap/${network}/${fromCurrency}${toCurrency ? `-to-${toCurrency}` : ''}`)
-    }
-
-    const isSame = fromCurrency && fromCurrency === toCurrency
-    if (!toCurrency || isSame) {
-      // net/symbol
-      const fromToken = findToken(fromCurrency)
-      if (fromToken) {
-        onCurrencySelection(Field.INPUT, fromToken)
-        if (isSame) navigate(`/swap/${network}/${fromCurrency}`)
-      } else navigate('/swap')
-      return
-    }
-
-    const isAddress1 = isAddressString(fromCurrency)
-    const isAddress2 = isAddressString(toCurrency)
-
-    // net/add-to-add
-    if (isAddress1 && isAddress2) {
-      const fromToken = findToken(fromCurrency)
-      const toToken = findToken(toCurrency)
-      if (fromToken && toToken) {
-        navigate(`/swap/${network}/${getSymbolSlug(fromToken)}-to-${getSymbolSlug(toToken)}`)
-        onCurrencySelection(Field.INPUT, fromToken)
-        onCurrencySelection(Field.OUTPUT, toToken)
-      } else navigate('/swap')
-      return
-    }
-
-    // sym-to-sym
-    fromCurrency = convertSymbol(network, fromCurrency)
-    toCurrency = convertSymbol(network, toCurrency)
-
-    const fromToken = findToken(fromCurrency)
-    const toToken = findToken(toCurrency)
-
-    if (!toToken || !fromToken) {
-      navigate('/swap')
-      return
-    }
-    onCurrencySelection(Field.INPUT, fromToken)
-    onCurrencySelection(Field.OUTPUT, toToken)
-  }
-
-  const checkAutoSelectTokenFromUrl = () => {
-    // check case:  `/swap/net/sym-to-sym` or `/swap/net/sym` is valid
-    const { fromCurrency, network } = getUrlMatchParams()
-    if (!fromCurrency || !network) return
-
-    const findChainId = SUPPORTED_NETWORKS.find(chainId => NETWORKS_INFO[chainId].route === network)
-    if (!findChainId) {
-      return navigate('/swap')
-    }
-    if (findChainId !== chainId) {
-      changeNetwork(
-        findChainId,
-        () => {
-          refIsCheckNetworkAutoSelect.current = true
-        },
-        () => {
-          navigate('/swap')
-        },
-      )
-    } else {
-      refIsCheckNetworkAutoSelect.current = true
-    }
-  }
-
-  const syncUrl = useCallback(
-    (currencyIn: Currency | undefined, currencyOut: Currency | undefined) => {
-      const symbolIn = getSymbolSlug(currencyIn)
-      const symbolOut = getSymbolSlug(currencyOut)
-      if (symbolIn && symbolOut && chainId) {
-        navigate(`/swap/${getNetworkSlug(chainId)}/${symbolIn}-to-${symbolOut}`)
-      }
-    },
-    [navigate, chainId],
-  )
 
   const onSelectSuggestedPair = useCallback(
-    (fromToken: Currency | undefined, toToken: Currency | undefined, amount: string) => {
+    (fromToken: Currency | undefined, toToken: Currency | undefined, amount?: string) => {
       if (fromToken) onCurrencySelection(Field.INPUT, fromToken)
       if (toToken) onCurrencySelection(Field.OUTPUT, toToken)
       if (amount) handleTypeInput(amount)
@@ -590,230 +397,54 @@ export default function Swap({ history }: RouteComponentProps) {
     [handleTypeInput, onCurrencySelection],
   )
 
-  const tokenImports: Token[] = useUserAddedTokens()
-  const prevTokenImports = usePrevious(tokenImports) || []
+  useResetCurrenciesOnRemoveImportedTokens(currencyIn, currencyOut, onResetSelectCurrency)
 
-  useEffect(() => {
-    const { network } = getUrlMatchParams()
-    const compareNetwork = getNetworkSlug(chainId)
-    const isChangeNetwork = compareNetwork !== network
-    if (isChangeNetwork) return
+  useSyncTokenSymbolToUrl(currencyIn, currencyOut, onSelectSuggestedPair, isSelectCurrencyManually)
+  const isLoadedTokenDefault = useIsLoadedTokenDefault()
+  const { isStableCoin } = useStableCoins(chainId)
 
-    // when import/remove token
-    const isRemoved = prevTokenImports?.length > tokenImports.length
-    const addressIn = currencyIn?.wrapped?.address
-    const addressOut = currencyOut?.wrapped?.address
+  const [rawSlippage] = useUserSlippageTolerance()
 
-    if (isRemoved) {
-      // removed token => deselect input
-      const tokenRemoved = prevTokenImports.filter(
-        token => !tokenImports.find(token2 => token2.address === token.address),
-      )
-      tokenRemoved.forEach(({ address }: Token) => {
-        if (address === addressIn || !currencyIn) {
-          onResetSelectCurrency(Field.INPUT)
-        }
-        if (address === addressOut || !currencyOut) {
-          onResetSelectCurrency(Field.OUTPUT)
-        }
-      })
-    }
-    // import token
-    else if (tokenImports.find(({ address }: Token) => address === addressIn || address === addressOut)) {
-      refIsImportUserToken.current = true
-    }
+  const isStableCoinSwap = isStableCoin(INPUT?.currencyId) && isStableCoin(OUTPUT?.currencyId)
 
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tokenImports])
+  useUpdateSlippageInStableCoinSwap()
 
-  const initialTotalTokenDefault = useRef<number | null>(null)
+  const onBackToSwapTab = () => setActiveTab(TAB.SWAP)
 
-  useEffect(() => {
-    checkAutoSelectTokenFromUrl()
-    initialTotalTokenDefault.current = Object.keys(defaultTokens).length // it will be equal with tokenImports.length
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  const isShowModalImportToken = isLoadedTokenDefault && importTokensNotInDefault.length > 0 && !dismissTokenWarning
 
-  const isLoadedTokenDefault = account
-    ? Object.keys(defaultTokens).length > tokenImports.length
-    : initialTotalTokenDefault.current !== null && Object.keys(defaultTokens).length > initialTotalTokenDefault.current //
-
-  useEffect(() => {
-    /**
-     * defaultTokens change only when:
-     * - the first time get data
-     * - change network
-     * - import/remove token */
-    if (refIsCheckNetworkAutoSelect.current && !refIsImportUserToken.current && isLoadedTokenDefault) {
-      findTokenPairFromUrl()
-    }
-    refIsImportUserToken.current = false
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [defaultTokens, refIsCheckNetworkAutoSelect.current])
-
-  useEffect(() => {
-    if (isSelectCurencyMannual) syncUrl(currencyIn, currencyOut) // when we select token manual
-  }, [currencyIn, currencyOut, isSelectCurencyMannual, syncUrl])
-
-  // swap?inputCurrency=xxx&outputCurrency=yyy. xxx yyy not exist in chain => remove params => select default pair
-
-  const checkParamsWrong = () => {
-    if (isPairNotfound && !currencyIn && !currencyOut) {
-      const newQuery = { ...qs }
-      delete newQuery.inputCurrency
-      delete newQuery.outputCurrency
-      history.replace({
-        search: stringify(newQuery),
-      })
-    }
-  }
-
-  const refCheckParamWrong = useRef(checkParamsWrong)
-  refCheckParamWrong.current = checkParamsWrong
-  useEffect(() => {
-    refCheckParamWrong.current()
-  }, [chainId])
-
-  useEffect(() => {
-    if (isExpertMode) {
-      mixpanelHandler(MIXPANEL_TYPE.ADVANCED_MODE_ON)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isExpertMode])
-
-  const [rawSlippage, setRawSlippage] = useUserSlippageTolerance()
-
-  const isStableCoinSwap =
-    INPUT?.currencyId &&
-    OUTPUT?.currencyId &&
-    chainId &&
-    STABLE_COINS_ADDRESS[chainId].includes(INPUT?.currencyId) &&
-    STABLE_COINS_ADDRESS[chainId].includes(OUTPUT?.currencyId)
-
-  const rawSlippageRef = useRef(rawSlippage)
-  rawSlippageRef.current = rawSlippage
-
-  useEffect(() => {
-    if (isStableCoinSwap && rawSlippageRef.current > 10) {
-      setRawSlippage(10)
-    }
-    if (!isStableCoinSwap && rawSlippageRef.current === 10) {
-      setRawSlippage(50)
-    }
-  }, [isStableCoinSwap, setRawSlippage])
-
-  const shareUrl = useMemo(() => {
-    return `${window.location.origin}/swap?networkId=${chainId}${
-      currencyIn && currencyOut
-        ? `&${stringify({
-            inputCurrency: currencyId(currencyIn, chainId),
-            outputCurrency: currencyId(currencyOut, chainId),
-          })}`
-        : ''
-    }`
-  }, [currencyIn, currencyOut, chainId])
-
-  const { isInWhiteList: isPairInWhiteList, canonicalUrl } = checkPairInWhiteList(
-    chainId,
-    getSymbolSlug(currencyIn),
-    getSymbolSlug(currencyOut),
-  )
-
-  const shouldRenderTokenInfo = isShowTokenInfoSetting && currencyIn && currencyOut && isPairInWhiteList
-
-  const isShowModalImportToken =
-    isLoadedTokenDefault && importTokensNotInDefault.length > 0 && (!dismissTokenWarning || showingPairSuggestionImport)
+  const tradeRouteComposition = useMemo(() => {
+    return getTradeComposition(chainId, trade?.inputAmount, trade?.tokens, trade?.swaps, defaultTokens)
+  }, [chainId, defaultTokens, trade])
+  const swapActionsRef = useRef(null)
 
   return (
     <>
-      {/**
-       * /swap/bnb/knc-to-usdt vs /swap/bnb/usdt-to-knc has same content
-       * => add canonical link that specify which is main page, => /swap/bnb/knc-to-usdt
-       */}
-      <SEOSwap canonicalUrl={canonicalUrl} />
       <TutorialSwap />
       <TokenWarningModal
         isOpen={isShowModalImportToken}
         tokens={importTokensNotInDefault}
         onConfirm={handleConfirmTokenWarning}
-        onDismiss={handleDismissTokenWarning}
       />
       <PageWrapper>
         <Banner />
-        {chainId !== ChainId.ETHW && <TopTrendingSoonTokensInCurrentNetwork />}
         <Container>
           <SwapFormWrapper isShowTutorial={isShowTutorial}>
-            <RowBetween mb={'16px'}>
-              <TabContainer>
-                <TabWrapper>
-                  <Tab onClick={() => setActiveTab(TAB.SWAP)} isActive={activeTab === TAB.SWAP}>
-                    <Text fontSize={20} fontWeight={500}>{t`Swap`}</Text>
-                  </Tab>
-                </TabWrapper>
-              </TabContainer>
-
-              <SwapFormActions>
-                <Tutorial
-                  type={TutorialType.SWAP}
-                  customIcon={
-                    <StyledActionButtonSwapForm>
-                      <TutorialIcon />
-                    </StyledActionButtonSwapForm>
-                  }
-                />
-                {chainId !== ChainId.ETHW && (
-                  <MobileTokenInfo
-                    currencies={currencies}
-                    onClick={() => setActiveTab(prev => (prev === TAB.INFO ? TAB.SWAP : TAB.INFO))}
-                  />
-                )}
-                <ShareButtonWithModal
-                  url={shareUrl}
-                  onShared={() => {
-                    mixpanelHandler(MIXPANEL_TYPE.TOKEN_SWAP_LINK_SHARED)
-                  }}
-                />
-                <StyledActionButtonSwapForm
-                  active={activeTab === TAB.SETTINGS}
-                  onClick={() => setActiveTab(prev => (prev === TAB.SETTINGS ? TAB.SWAP : TAB.SETTINGS))}
-                  aria-label="Swap Settings"
-                >
-                  <MouseoverTooltip
-                    text={!isExpertMode ? t`Settings` : t`Advanced mode is on!`}
-                    placement="top"
-                    width="fit-content"
-                  >
-                    <span id={TutorialIds.BUTTON_SETTING_SWAP_FORM}>
-                      <TransactionSettingsIcon fill={isExpertMode ? theme.warning : theme.subText} />
-                    </span>
-                  </MouseoverTooltip>
-                </StyledActionButtonSwapForm>
-                {/* <TransactionSettings isShowDisplaySettings /> */}
-              </SwapFormActions>
-            </RowBetween>
-
-            {chainId !== ChainId.ETHW && (
-              <RowBetween mb={'16px'}>
-                <PairSuggestion
-                  ref={refSuggestPair}
-                  onSelectSuggestedPair={onSelectSuggestedPair}
-                  setShowModalImportToken={setShowingPairSuggestionImport}
-                />
-              </RowBetween>
-            )}
+            <Header activeTab={activeTab} setActiveTab={setActiveTab} swapActionsRef={swapActionsRef} />
 
             <AppBodyWrapped data-highlight={shouldHighlightSwapBox} id={TutorialIds.SWAP_FORM}>
               {activeTab === TAB.SWAP && (
                 <>
-                  <Wrapper id={TutorialIds.SWAP_FORM_CONTENT}>
+                  <Wrapper
+                    id={TutorialIds.SWAP_FORM_CONTENT}
+                    style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}
+                  >
                     <ConfirmSwapModal
                       isOpen={showConfirm}
                       trade={trade}
                       originalTrade={tradeToConfirm}
-                      onAcceptChanges={handleAcceptChanges}
                       attemptingTxn={attemptingTxn}
                       txHash={txHash}
-                      recipient={recipient}
                       allowedSlippage={allowedSlippage}
                       onConfirm={handleSwap}
                       swapErrorMessage={swapErrorMessage}
@@ -825,11 +456,10 @@ export default function Swap({ history }: RouteComponentProps) {
                       <CurrencyInputPanel
                         value={formattedAmounts[Field.INPUT]}
                         positionMax="top"
-                        showMaxButton
                         currency={currencyIn}
                         onUserInput={handleTypeInput}
                         onMax={handleMaxInput}
-                        onHalf={handleHalfInput}
+                        onHalf={isSolanaUnwrap ? null : handleHalfInput}
                         onCurrencySelect={handleInputSelect}
                         otherCurrency={currencyOut}
                         id="swap-currency-input"
@@ -843,59 +473,19 @@ export default function Swap({ history }: RouteComponentProps) {
                           {!showWrap && (
                             <>
                               <RefreshButton isConfirming={showConfirm} trade={trade} onRefresh={onRefresh} />
-                              <TradePrice
-                                price={trade?.executionPrice}
-                                showInverted={showInverted}
-                                setShowInverted={setShowInverted}
-                              />
+                              <TradePrice price={trade?.executionPrice} />
                             </>
                           )}
                         </Flex>
 
-                        <ArrowWrapper rotated={rotate} onClick={handleRotateClick}>
-                          <SwapIcon size={24} color={theme.subText} />
-                        </ArrowWrapper>
+                        <ArrowRotate rotate={rotate} onClick={handleRotateClick} />
                       </AutoRow>
                       <Box sx={{ position: 'relative' }}>
-                        {tradeComparer?.tradeSaved?.usd && comparedDex && (
-                          <KyberTag>
-                            <Trans>You save</Trans>{' '}
-                            {formattedNum(tradeComparer.tradeSaved.usd, true) +
-                              ` (${
-                                tradeComparer?.tradeSaved?.percent &&
-                                (tradeComparer.tradeSaved.percent < 0.01
-                                  ? '<0.01'
-                                  : tradeComparer.tradeSaved.percent.toFixed(2))
-                              }%)`}
-                            <InfoHelper
-                              text={
-                                <Text>
-                                  <Trans>
-                                    The amount you save compared to{' '}
-                                    <Text as="span" color={theme.warning}>
-                                      {comparedDex.name}
-                                    </Text>
-                                    .
-                                  </Trans>{' '}
-                                  <Trans>
-                                    <Text color={theme.primary} fontWeight={500} as="span">
-                                      KyberSwap
-                                    </Text>{' '}
-                                    gets you the best token rates
-                                  </Trans>
-                                </Text>
-                              }
-                              size={14}
-                              color={theme.apr}
-                            />
-                          </KyberTag>
-                        )}
-
                         <CurrencyInputPanel
                           disabledInput
                           value={formattedAmounts[Field.OUTPUT]}
-                          onUserInput={handleTypeOutput}
-                          showMaxButton={false}
+                          onMax={null}
+                          onHalf={null}
                           currency={currencyOut}
                           onCurrencySelect={handleOutputSelect}
                           otherCurrency={currencyIn}
@@ -904,133 +494,144 @@ export default function Swap({ history }: RouteComponentProps) {
                           estimatedUsd={
                             trade?.amountOutUsd ? `${formattedNum(trade.amountOutUsd.toString(), true)}` : undefined
                           }
+                          label={
+                            isEVM ? (
+                              <Label>
+                                <MouseoverTooltip
+                                  placement="right"
+                                  width="200px"
+                                  text={
+                                    <Text fontSize={12}>
+                                      <Trans>
+                                        This is the estimated output amount. Do review the actual output amount in the
+                                        confirmation screen.
+                                      </Trans>
+                                    </Text>
+                                  }
+                                >
+                                  <Trans>Est. Output</Trans>
+                                </MouseoverTooltip>
+                              </Label>
+                            ) : (
+                              ''
+                            )
+                          }
+                          positionLabel="in"
                         />
                       </Box>
 
-                      {isExpertMode && !showWrap && (
+                      {isDegenMode && isEVM && !showWrap && (
                         <AddressInputPanel id="recipient" value={recipient} onChange={handleRecipientChange} />
                       )}
 
-                      {!showWrap && (
-                        <Flex
-                          alignItems="center"
-                          fontSize={12}
-                          color={theme.subText}
-                          onClick={toggleSettings}
-                          width="fit-content"
-                        >
-                          <ClickableText color={theme.subText} fontWeight={500}>
-                            <Trans>Max Slippage:</Trans>&nbsp;
-                            {allowedSlippage / 100}%
-                          </ClickableText>
-                        </Flex>
-                      )}
+                      <SlippageSettingGroup isWrapOrUnwrap={showWrap} isStablePairSwap={isStableCoinSwap} />
                     </Flex>
 
                     <TradeTypeSelection />
 
-                    {chainId !== ChainId.ETHW && (
-                      <TrendingSoonTokenBanner currencies={currencies} style={{ marginTop: '24px' }} />
-                    )}
+                    {!showWrap && <SlippageWarningNote rawSlippage={rawSlippage} isStablePairSwap={isStableCoinSwap} />}
 
-                    {isPriceImpactInvalid ? (
-                      <PriceImpactHigh>
-                        <AlertTriangle color={theme.warning} size={16} style={{ marginRight: '10px' }} />
-                        <Trans>Unable to calculate Price Impact</Trans>
-                        <InfoHelper text={t`Turn on Advanced Mode to trade`} color={theme.text} />
-                      </PriceImpactHigh>
-                    ) : (
-                      isPriceImpactHigh && (
-                        <PriceImpactHigh veryHigh={isPriceImpactVeryHigh}>
-                          <AlertTriangle
-                            color={isPriceImpactVeryHigh ? theme.red : theme.warning}
-                            size={16}
-                            style={{ marginRight: '10px' }}
-                          />
-                          {isPriceImpactVeryHigh ? (
-                            <Trans>Price Impact is Very High</Trans>
-                          ) : (
-                            <Trans>Price Impact is High</Trans>
-                          )}
-                          <InfoHelper
-                            text={
-                              isExpertMode
-                                ? t`You have turned on Advanced Mode from settings. Trades with high price impact can be executed`
-                                : t`Turn on Advanced Mode from settings to execute trades with high price impact`
-                            }
-                            color={theme.text}
-                          />
-                        </PriceImpactHigh>
-                      )
-                    )}
+                    <PriceImpactNote priceImpact={trade?.priceImpact} isDegenMode={isDegenMode} />
+
+                    <ApproveMessage
+                      routerAddress={trade?.routerAddress}
+                      isCurrencyInNative={Boolean(currencyIn?.isNative)}
+                    />
 
                     <BottomGrouping>
                       {!account ? (
                         <ButtonLight onClick={toggleWalletModal}>
-                          <Trans>Connect Wallet</Trans>
+                          <Trans>Connect</Trans>
                         </ButtonLight>
                       ) : showWrap ? (
                         <ButtonPrimary disabled={Boolean(wrapInputError)} onClick={onWrap}>
                           {wrapInputError ??
-                            (wrapType === WrapType.WRAP ? t`Wrap` : wrapType === WrapType.UNWRAP ? t`Unwrap` : null)}
+                            (wrapType === WrapType.WRAP ? (
+                              <Trans>Wrap</Trans>
+                            ) : wrapType === WrapType.UNWRAP ? (
+                              <Trans>Unwrap</Trans>
+                            ) : null)}
                         </ButtonPrimary>
                       ) : noRoute && userHasSpecifiedInputOutput ? (
-                        <GreyCard style={{ textAlign: 'center', borderRadius: '999px', padding: '12px' }}>
-                          <TYPE.main>
-                            <Trans>Insufficient liquidity for this trade.</Trans>
-                          </TYPE.main>
-                        </GreyCard>
-                      ) : showApproveFlow ? (
-                        <RowBetween>
-                          <ButtonConfirmed
-                            onClick={approveCallback}
-                            disabled={approval !== ApprovalState.NOT_APPROVED || approvalSubmitted}
-                            width="48%"
-                            altDisabledStyle={approval === ApprovalState.PENDING} // show solid button while waiting
-                            confirmed={approval === ApprovalState.APPROVED}
-                          >
-                            {approval === ApprovalState.PENDING ? (
-                              <AutoRow gap="6px" justify="center">
-                                <Trans>Approving</Trans> <Loader stroke="white" />
-                              </AutoRow>
-                            ) : approvalSubmitted && approval === ApprovalState.APPROVED ? (
-                              t`Approved`
-                            ) : (
-                              t`Approve ${currencyIn?.symbol}`
-                            )}
-                          </ButtonConfirmed>
-                          <ButtonError
-                            onClick={() => {
-                              mixpanelSwapInit()
-                              if (isExpertMode) {
-                                handleSwap()
-                              } else {
-                                setSwapState({
-                                  tradeToConfirm: trade,
-                                  attemptingTxn: false,
-                                  swapErrorMessage: undefined,
-                                  showConfirm: true,
-                                  txHash: undefined,
-                                })
-                              }
-                            }}
-                            width="48%"
-                            id="swap-button"
-                            disabled={!isValidInput || approval !== ApprovalState.APPROVED}
-                            backgroundColor={
-                              isPriceImpactHigh || isPriceImpactInvalid
-                                ? isPriceImpactVeryHigh
-                                  ? theme.red
-                                  : theme.warning
-                                : undefined
+                        <ButtonPrimary disabled={true} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <MouseoverTooltip
+                            text={
+                              <Trans>
+                                There was an issue while trying to find a price for these tokens. Please try again.
+                                Otherwise, you may select some other tokens to swap.
+                              </Trans>
                             }
-                            color={isPriceImpactHigh || isPriceImpactInvalid ? theme.white : undefined}
                           >
-                            <Text fontSize={16} fontWeight={500}>
-                              {isPriceImpactHigh ? t`Swap Anyway` : t`Swap`}
-                            </Text>
-                          </ButtonError>
-                        </RowBetween>
+                            <Info size={14} />
+                          </MouseoverTooltip>
+                          <Text>
+                            <Trans>Swap Disabled</Trans>
+                          </Text>
+                        </ButtonPrimary>
+                      ) : showApproveFlow ? (
+                        <>
+                          <RowBetween gap="16px">
+                            <ButtonConfirmed
+                              onClick={approveCallback}
+                              disabled={approval !== ApprovalState.NOT_APPROVED || approvalSubmitted}
+                              altDisabledStyle={approval === ApprovalState.PENDING} // show solid button while waiting
+                              confirmed={approval === ApprovalState.APPROVED}
+                              style={{ flex: 1 }}
+                            >
+                              {approval === ApprovalState.PENDING ? (
+                                <Row gap="6px" justify="center">
+                                  <Trans>Approving</Trans> <Loader stroke="white" />
+                                </Row>
+                              ) : approvalSubmitted && approval === ApprovalState.APPROVED ? (
+                                <Trans>Approved</Trans>
+                              ) : (
+                                <Row justify="center" gap="6px">
+                                  <InfoHelper
+                                    color={theme.textReverse}
+                                    text={t`You need to first allow KyberSwap's smart contract to use your ${currencyIn?.symbol}`}
+                                    placement="top"
+                                    size={14}
+                                  />
+                                  <Trans>Approve {currencyIn?.symbol}</Trans>
+                                </Row>
+                              )}
+                            </ButtonConfirmed>
+                            <ButtonError
+                              onClick={() => {
+                                // TODO check this button, it will never run, is it?
+                                // console.error('This will never be run')
+                                mixpanelSwapInit()
+                                if (isDegenMode) {
+                                  handleSwap()
+                                } else {
+                                  setSwapState({
+                                    tradeToConfirm: trade,
+                                    attemptingTxn: false,
+                                    swapErrorMessage: undefined,
+                                    showConfirm: true,
+                                    txHash: undefined,
+                                  })
+                                }
+                              }}
+                              id="swap-button"
+                              disabled={!!swapInputError || approval !== ApprovalState.APPROVED}
+                              backgroundColor={
+                                isPriceImpactVeryHigh || isPriceImpactInvalid
+                                  ? theme.red
+                                  : isPriceImpactHigh
+                                  ? theme.warning
+                                  : undefined
+                              }
+                              color={isPriceImpactHigh || isPriceImpactInvalid ? theme.white : undefined}
+                              style={{ flex: 1 }}
+                            >
+                              <Text fontSize={16} fontWeight={500}>
+                                {isPriceImpactVeryHigh ? <Trans>Swap Anyway</Trans> : <Trans>Swap</Trans>}
+                              </Text>
+                            </ButtonError>
+                          </RowBetween>
+                          <ProgressSteps steps={[approval === ApprovalState.APPROVED]} />
+                        </>
                       ) : isLoading ? (
                         <GreyCard style={{ textAlign: 'center', borderRadius: '999px', padding: '12px' }}>
                           <Text color={theme.subText} fontSize="14px">
@@ -1043,63 +644,101 @@ export default function Swap({ history }: RouteComponentProps) {
                         <ButtonError
                           onClick={() => {
                             mixpanelSwapInit()
-                            if (isExpertMode) {
-                              handleSwap()
-                            } else {
-                              setSwapState({
-                                tradeToConfirm: trade,
-                                attemptingTxn: false,
-                                swapErrorMessage: undefined,
-                                showConfirm: true,
-                                txHash: undefined,
-                              })
-                            }
+                            setSwapState({
+                              tradeToConfirm: trade,
+                              attemptingTxn: false,
+                              swapErrorMessage: undefined,
+                              showConfirm: true,
+                              txHash: undefined,
+                            })
                           }}
                           id="swap-button"
                           disabled={
-                            !isValidInput ||
+                            !!swapInputError ||
                             !!swapCallbackError ||
                             approval !== ApprovalState.APPROVED ||
-                            (!isExpertMode && (isPriceImpactVeryHigh || isPriceImpactInvalid))
+                            (!isDegenMode && (isPriceImpactVeryHigh || isPriceImpactInvalid)) ||
+                            (isDegenMode && isSolana && !encodeSolana)
                           }
                           style={{
+                            position: 'relative',
                             border: 'none',
                             ...(!(
-                              !isValidInput ||
+                              !!swapInputError ||
                               !!swapCallbackError ||
                               approval !== ApprovalState.APPROVED ||
-                              (!isExpertMode && (isPriceImpactVeryHigh || isPriceImpactInvalid))
+                              (!isDegenMode && (isPriceImpactVeryHigh || isPriceImpactInvalid)) ||
+                              (isDegenMode && isSolana && !encodeSolana)
                             ) &&
-                            (isPriceImpactHigh || isPriceImpactInvalid)
-                              ? { background: isPriceImpactVeryHigh ? theme.red : theme.warning, color: theme.white }
+                            (isPriceImpactVeryHigh || isPriceImpactInvalid)
+                              ? {
+                                  background: isPriceImpactVeryHigh || isPriceImpactInvalid ? theme.red : theme.warning,
+                                  color: theme.textReverse,
+                                }
                               : {}),
                           }}
                         >
                           <Text fontWeight={500}>
-                            {swapInputError
-                              ? swapInputError
-                              : approval !== ApprovalState.APPROVED
-                              ? t`Checking allowance...`
-                              : isPriceImpactHigh || isPriceImpactInvalid
-                              ? t`Swap Anyway`
-                              : t`Swap`}
+                            {swapInputError ? (
+                              swapInputError
+                            ) : approval !== ApprovalState.APPROVED ? (
+                              <Dots>
+                                <Trans>Checking allowance</Trans>
+                              </Dots>
+                            ) : isDegenMode && isSolana && !encodeSolana ? (
+                              <Dots>
+                                <Trans>Checking accounts</Trans>
+                              </Dots>
+                            ) : !isDegenMode && (isPriceImpactVeryHigh || isPriceImpactInvalid) ? (
+                              <Flex alignItems="center" style={{ gap: '4px' }}>
+                                <MouseoverTooltip
+                                  text={
+                                    isPriceImpactVeryHigh ? (
+                                      <Trans>
+                                        To ensure you dont lose funds due to very high price impact (≥10%), swap has
+                                        been disabled for this trade. If you still wish to continue, you can turn on
+                                        Degen Mode from Settings
+                                      </Trans>
+                                    ) : (
+                                      <Trans>
+                                        There was an issue while trying to find a price for these tokens. Please try
+                                        again. Otherwise, you may select some other tokens to swap.
+                                      </Trans>
+                                    )
+                                  }
+                                >
+                                  <Info size={14} />
+                                </MouseoverTooltip>
+                                <Text>
+                                  <Trans>Swap Disabled</Trans>
+                                </Text>
+                              </Flex>
+                            ) : isDegenMode && (isPriceImpactVeryHigh || isPriceImpactInvalid) ? (
+                              <Trans>Swap Anyway</Trans>
+                            ) : (
+                              <Trans>Swap</Trans>
+                            )}
                           </Text>
+
+                          {holidayMode && !swapInputError && (
+                            <ChristmasDecor>
+                              <img src={christmasImg} width="100%" alt="" />
+                            </ChristmasDecor>
+                          )}
                         </ButtonError>
                       )}
-                      {showApproveFlow && (
-                        <Column style={{ marginTop: '1rem' }}>
-                          <ProgressSteps steps={[approval === ApprovalState.APPROVED]} />
-                        </Column>
-                      )}
-                      {isExpertMode && swapErrorMessage ? <SwapCallbackError error={swapErrorMessage} /> : null}
+
+                      {isDegenMode && swapErrorMessage ? <SwapCallbackError error={swapErrorMessage} /> : null}
                     </BottomGrouping>
                   </Wrapper>
                 </>
               )}
-              {activeTab === TAB.INFO && <TokenInfo currencies={currencies} onBack={() => setActiveTab(TAB.SWAP)} />}
+              {activeTab === TAB.INFO && <TokenInfoTab currencies={currencies} onBack={onBackToSwapTab} />}
               {activeTab === TAB.SETTINGS && (
                 <SettingsPanel
-                  onBack={() => setActiveTab(TAB.SWAP)}
+                  swapActionsRef={swapActionsRef}
+                  isSwapPage
+                  onBack={onBackToSwapTab}
                   onClickLiquiditySources={() => setActiveTab(TAB.LIQUIDITY_SOURCES)}
                   onClickGasPriceTracker={() => setActiveTab(TAB.GAS_PRICE_TRACKER)}
                 />
@@ -1110,55 +749,58 @@ export default function Swap({ history }: RouteComponentProps) {
               {activeTab === TAB.LIQUIDITY_SOURCES && (
                 <LiquiditySourcesPanel onBack={() => setActiveTab(TAB.SETTINGS)} />
               )}
+              {isSwapPage && <AdvancedSwapDetailsDropdown trade={trade} />}
             </AppBodyWrapped>
-            <AdvancedSwapDetailsDropdown trade={trade} feeConfig={feeConfig} />
           </SwapFormWrapper>
 
-          {(isShowLiveChart || isShowTradeRoutes || shouldRenderTokenInfo) && (
-            <InfoComponentsWrapper>
-              {isShowLiveChart && (
-                <LiveChartWrapper>
+          <InfoComponents>
+            {isShowLiveChart && (
+              <LiveChartWrapper>
+                <Suspense
+                  fallback={
+                    <Skeleton
+                      height="100%"
+                      baseColor={theme.background}
+                      highlightColor={theme.buttonGray}
+                      borderRadius="1rem"
+                    />
+                  }
+                >
+                  <LiveChart currencies={currencies} />
+                </Suspense>
+              </LiveChartWrapper>
+            )}
+            {isShowTradeRoutes && isSwapPage && (
+              <RoutesWrapper isOpenChart={isShowLiveChart}>
+                <Flex flexDirection="column" width="100%">
+                  <Flex alignItems={'center'}>
+                    <RoutingIconWrapper />
+                    <Text fontSize={20} fontWeight={500} color={theme.subText}>
+                      <Trans>Your trade route</Trans>
+                    </Text>
+                  </Flex>
                   <Suspense
                     fallback={
                       <Skeleton
-                        height="100%"
+                        height="100px"
                         baseColor={theme.background}
                         highlightColor={theme.buttonGray}
                         borderRadius="1rem"
                       />
                     }
                   >
-                    <LiveChart onRotateClick={handleRotateClick} currencies={currencies} />
+                    <Routing
+                      tradeComposition={tradeRouteComposition}
+                      currencyIn={currencyIn}
+                      currencyOut={currencyOut}
+                      inputAmount={trade?.inputAmount}
+                      outputAmount={trade?.outputAmount}
+                    />
                   </Suspense>
-                </LiveChartWrapper>
-              )}
-              {isShowTradeRoutes && (
-                <RoutesWrapper isOpenChart={isShowLiveChart}>
-                  <Flex flexDirection="column" width="100%">
-                    <Flex alignItems={'center'}>
-                      <RoutingIconWrapper />
-                      <Text fontSize={20} fontWeight={500} color={theme.subText}>
-                        <Trans>Your trade route</Trans>
-                      </Text>
-                    </Flex>
-                    <Suspense
-                      fallback={
-                        <Skeleton
-                          height="100px"
-                          baseColor={theme.background}
-                          highlightColor={theme.buttonGray}
-                          borderRadius="1rem"
-                        />
-                      }
-                    >
-                      <Routing trade={trade} currencies={currencies} formattedAmounts={formattedAmounts} />
-                    </Suspense>
-                  </Flex>
-                </RoutesWrapper>
-              )}
-              {shouldRenderTokenInfo ? <TokenInfoV2 currencyIn={currencyIn} currencyOut={currencyOut} /> : null}
-            </InfoComponentsWrapper>
-          )}
+                </Flex>
+              </RoutesWrapper>
+            )}
+          </InfoComponents>
         </Container>
         <Flex justifyContent="center">
           <SwitchLocaleLinkWrapper>

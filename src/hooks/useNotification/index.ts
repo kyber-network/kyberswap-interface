@@ -1,81 +1,48 @@
-import axios from 'axios'
-import { useCallback, useEffect, useRef } from 'react'
+import { useCallback, useEffect } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
-import useSWR, { mutate } from 'swr'
-
-import { NOTIFICATION_API } from 'constants/env'
-import { useActiveWeb3React } from 'hooks'
-import useMixpanel, { MIXPANEL_TYPE } from 'hooks/useMixpanel'
-import { AppState } from 'state'
 import {
-  setLoadingNotification,
-  setNeedShowModalSubscribeNotificationAfterLogin,
-  setSubscribedNotificationTopic,
-} from 'state/application/actions'
-import { useNotificationModalToggle } from 'state/application/hooks'
+  useCreateWatchWalletMutation,
+  useGetSubscriptionTopicsQuery,
+  useSubscribeTopicsMutation,
+} from 'services/identity'
 
-const getSubscribedTopicUrl = (account: string | null | undefined) =>
-  account ? `${NOTIFICATION_API}/v1/topics?walletAddress=${account}` : ''
+import { ELASTIC_POOL_TOPIC_ID, KYBER_AI_TOPIC_ID, PRICE_ALERT_TOPIC_ID } from 'constants/env'
+import { useActiveWeb3React } from 'hooks'
+import { AppState } from 'state'
+import { setLoadingNotification, setSubscribedNotificationTopic } from 'state/application/actions'
+import { useSessionInfo } from 'state/authen/hooks'
+import { pushUnique } from 'utils'
 
-type Topic = {
+export enum TopicType {
+  RESTRICT = 'restricted',
+  NORMAL = 'common',
+}
+
+export type Topic = {
   id: number
   code: string
   description: string
-  status: 'ACTIVE' | 'UNVERIFIED'
+  name: string
+  isSubscribed: boolean
+  topics: Topic[]
+  priority: number
+  type: TopicType
+  isKyberAI: boolean
+  isPriceAlert: boolean
+  isPriceElasticPool: boolean
 }
 
-export const NOTIFICATION_TOPICS = {
-  TRENDING_SOON: 2,
-  POSITION_POOL: 1,
+type SaveNotificationParam = {
+  subscribeIds: number[]
+  unsubscribeIds: number[]
 }
 
-const useNotification = (topicId: number) => {
-  const {
-    isLoading,
-    mapTopic = {},
-    needShowModalSubscribe,
-  } = useSelector((state: AppState) => state.application.notification)
-  const { isSubscribed, isVerified, verifiedEmail } = mapTopic[topicId] ?? {}
+const useNotification = () => {
+  const { isLoading, topicGroups } = useSelector((state: AppState) => state.application.notification)
+  const { userInfo } = useSessionInfo()
 
-  const { mixpanelHandler } = useMixpanel()
   const { account } = useActiveWeb3React()
   const dispatch = useDispatch()
-
-  const trackingSubScribe = useCallback(
-    (topicId: number) => {
-      switch (topicId) {
-        case NOTIFICATION_TOPICS.TRENDING_SOON:
-          mixpanelHandler(MIXPANEL_TYPE.DISCOVER_SUBSCRIBE_TRENDING_SOON_SUCCESS)
-          break
-      }
-    },
-    [mixpanelHandler],
-  )
-
-  const trackingUnSubScribe = useCallback(
-    (topicId: number) => {
-      switch (topicId) {
-        case NOTIFICATION_TOPICS.TRENDING_SOON:
-          mixpanelHandler(MIXPANEL_TYPE.DISCOVER_UNSUBSCRIBE_TRENDING_SOON_SUCCESS)
-          break
-      }
-    },
-    [mixpanelHandler],
-  )
-
-  const setTopicState = useCallback(
-    (isSubscribed: boolean, isVerified = false, verifiedEmail?: string) => {
-      dispatch(setSubscribedNotificationTopic({ topicId, isSubscribed, isVerified, verifiedEmail }))
-    },
-    [dispatch, topicId],
-  )
-
-  const setNeedShowModalSubscribeState = useCallback(
-    (value: boolean) => {
-      dispatch(setNeedShowModalSubscribeNotificationAfterLogin(value))
-    },
-    [dispatch],
-  )
 
   const setLoading = useCallback(
     (isLoading: boolean) => {
@@ -84,91 +51,88 @@ const useNotification = (topicId: number) => {
     [dispatch],
   )
 
-  const checkVerifyStatus = useCallback(() => {
-    return mutate(getSubscribedTopicUrl(account))
-  }, [account])
-
-  const { data: { topics } = {} } = useSWR(
-    getSubscribedTopicUrl(account),
-    (url: string) => {
-      try {
-        if (url) {
-          return axios.get(url).then(({ data }) => data.data)
-        }
-      } catch (error) {}
-      return
-    },
-    {
-      shouldRetryOnError: false,
-      revalidateOnFocus: false,
-      revalidateIfStale: false,
-    },
-  )
-
-  const toggleSubscribeModal = useNotificationModalToggle()
-  const refToggleSubscribeModal = useRef(toggleSubscribeModal)
-  refToggleSubscribeModal.current = toggleSubscribeModal
+  const { data: resp, refetch } = useGetSubscriptionTopicsQuery(undefined, { skip: !userInfo })
 
   useEffect(() => {
-    const topicInfo = topics?.find((el: Topic) => el.id === topicId)
-    // topics: null | array when called api, undefined when not call api yet
-    const hasSubscribed = !!topicInfo
-    setTopicState(hasSubscribed, topicInfo?.status === 'ACTIVE', topicInfo?.email)
-    if (!hasSubscribed && needShowModalSubscribe && account && topics !== undefined) {
-      refToggleSubscribeModal.current?.()
-      setNeedShowModalSubscribeState(false)
-    }
-  }, [topics, setTopicState, topicId, account, setNeedShowModalSubscribeState, needShowModalSubscribe])
+    if (!resp) return
+    const topicGroups: Topic[] = (resp?.topicGroups ?? []).map((e: Topic, i: number) => ({
+      ...e,
+      id: Date.now() + i,
+      isSubscribed: e?.topics?.every(e => e.isSubscribed),
+      // special topic ids
+      isKyberAI: e?.topics?.some(e => KYBER_AI_TOPIC_ID.includes(e.id + '')),
+      isPriceAlert: e?.topics?.some(e => e.id + '' === PRICE_ALERT_TOPIC_ID),
+      isPriceElasticPool: e?.topics?.some(e => e.id + '' === ELASTIC_POOL_TOPIC_ID),
+    }))
+    dispatch(setSubscribedNotificationTopic({ topicGroups }))
+  }, [resp, dispatch])
 
-  const handleSubscribe = useCallback(
-    async (email: string) => {
+  useEffect(() => {
+    try {
+      refetch()
+    } catch (error) {}
+  }, [userInfo?.identityId, refetch])
+
+  const [requestWatchWallet] = useCreateWatchWalletMutation()
+  const [callSubscribeTopic] = useSubscribeTopicsMutation()
+
+  const saveNotification = useCallback(
+    async ({ subscribeIds, unsubscribeIds }: SaveNotificationParam) => {
       try {
         setLoading(true)
-        await axios.post(`${NOTIFICATION_API}/v1/topics/subscribe?userType=EMAIL`, {
-          email,
-          walletAddress: account,
-          topicIDs: [topicId],
-        })
-        trackingSubScribe(topicId)
-        setTopicState(true)
-        mutate(getSubscribedTopicUrl(account))
+        let topicIds = topicGroups.reduce(
+          (topics: number[], item) => [...topics, ...item.topics.filter(e => e.isSubscribed).map(e => e.id)],
+          [],
+        )
+        if (unsubscribeIds.length) {
+          topicIds = topicIds.filter(id => !unsubscribeIds.includes(id))
+        }
+        if (subscribeIds.length) {
+          topicIds = topicIds.concat(subscribeIds)
+        }
+        const hasElasticBool = (() => {
+          const topicPools = ELASTIC_POOL_TOPIC_ID.split(',').map(Number)
+          return subscribeIds.some(id => topicPools.includes(id))
+        })()
+        if (hasElasticBool && account) {
+          await requestWatchWallet({ walletAddress: account }).unwrap()
+        }
+        await callSubscribeTopic({ topicIds: [...new Set(topicIds)] }).unwrap()
+        return
       } catch (e) {
         return Promise.reject(e)
       } finally {
         setLoading(false)
       }
-      return
     },
-    [setTopicState, setLoading, trackingSubScribe, topicId, account],
+    [setLoading, account, topicGroups, callSubscribeTopic, requestWatchWallet],
   )
 
-  const handleUnsubscribe = useCallback(async () => {
-    try {
-      setLoading(true)
-      await axios.post(`${NOTIFICATION_API}/v1/topics/unsubscribe?userType=EMAIL`, {
-        walletAddress: account,
-        topicIDs: [topicId],
+  const subscribeOne = useCallback(
+    (topic: number) => {
+      saveNotification({ subscribeIds: [topic], unsubscribeIds: [] })
+    },
+    [saveNotification],
+  )
+
+  const unsubscribeAll = useCallback(() => {
+    let unsubscribeIds: number[] = []
+    topicGroups.forEach(topic => {
+      if (!topic.isSubscribed) return
+      topic.topics.forEach(topic => {
+        unsubscribeIds = pushUnique(unsubscribeIds, topic.id)
       })
-      trackingUnSubScribe(topicId)
-      setTopicState(false)
-      mutate(getSubscribedTopicUrl(account))
-    } catch (e) {
-      return Promise.reject(e)
-    } finally {
-      setLoading(false)
-    }
-    return
-  }, [setTopicState, setLoading, trackingUnSubScribe, topicId, account])
+    })
+    if (!unsubscribeIds.length) return
+    saveNotification({ unsubscribeIds, subscribeIds: [] })
+  }, [topicGroups, saveNotification])
 
   return {
+    topicGroups,
     isLoading,
-    isSubscribed,
-    isVerified,
-    verifiedEmail,
-    handleSubscribe,
-    handleUnsubscribe,
-    setNeedShowModalSubscribeState,
-    checkVerifyStatus,
+    saveNotification,
+    unsubscribeAll,
+    subscribeOne,
   }
 }
 

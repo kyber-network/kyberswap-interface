@@ -7,51 +7,54 @@ import { parseUnits } from 'ethers/lib/utils'
 import JSBI from 'jsbi'
 import { useCallback, useMemo, useState } from 'react'
 import { AlertTriangle } from 'react-feather'
-import { useHistory } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { Flex, Text } from 'rebass'
 
+import { NotificationType } from 'components/Announcement/type'
+import { ButtonError, ButtonLight, ButtonPrimary } from 'components/Button'
+import { AutoColumn } from 'components/Column'
 import { ConfirmAddModalBottom } from 'components/ConfirmAddModalBottom'
+import CurrencyInputPanel from 'components/CurrencyInputPanel'
 import CurrentPrice from 'components/CurrentPrice'
 import Loader from 'components/Loader'
 import { PoolPriceBar, PoolPriceRangeBar, ToggleComponent } from 'components/PoolPriceBar'
 import QuestionHelper from 'components/QuestionHelper'
-import { NETWORKS_INFO } from 'constants/networks'
-import { nativeOnChain } from 'constants/tokens'
-import useTheme from 'hooks/useTheme'
-import useTokensMarketPrice from 'hooks/useTokensMarketPrice'
-import { feeRangeCalc, useCurrencyConvertedToNative } from 'utils/dmm'
-import isZero from 'utils/isZero'
-
-import { ButtonError, ButtonLight, ButtonPrimary } from '../../components/Button'
-import { AutoColumn } from '../../components/Column'
-import CurrencyInputPanel from '../../components/CurrencyInputPanel'
-import Row, { AutoRow, RowBetween, RowFlat } from '../../components/Row'
+import Row, { AutoRow, RowBetween, RowFlat } from 'components/Row'
 import TransactionConfirmationModal, {
   ConfirmationModalContent,
   TransactionErrorContent,
-} from '../../components/TransactionConfirmationModal'
-import { AMP_HINT } from '../../constants'
-import { PairState } from '../../data/Reserves'
-import { useActiveWeb3React } from '../../hooks'
-import { useCurrency } from '../../hooks/Tokens'
-import { ApprovalState, useApproveCallback } from '../../hooks/useApproveCallback'
-import useTransactionDeadline from '../../hooks/useTransactionDeadline'
-import { useTokensPrice, useWalletModalToggle } from '../../state/application/hooks'
-import { Field } from '../../state/mint/actions'
-import { useDerivedMintInfo, useMintActionHandlers, useMintState } from '../../state/mint/hooks'
-import { useTransactionAdder } from '../../state/transactions/hooks'
-import { useIsExpertMode, usePairAdderByTokens, useUserSlippageTolerance } from '../../state/user/hooks'
-import { StyledInternalLink, TYPE, UppercaseText } from '../../theme'
+} from 'components/TransactionConfirmationModal'
+import { didUserReject } from 'constants/connectors/utils'
+import { AMP_HINT, APP_PATHS } from 'constants/index'
+import { EVMNetworkInfo } from 'constants/networks/type'
+import { NativeCurrencies } from 'constants/tokens'
+import { PairState } from 'data/Reserves'
+import { useActiveWeb3React, useWeb3React } from 'hooks'
+import { useCurrency } from 'hooks/Tokens'
+import { ApprovalState, useApproveCallback } from 'hooks/useApproveCallback'
+import useTheme from 'hooks/useTheme'
+import useTransactionDeadline from 'hooks/useTransactionDeadline'
+import DisclaimerERC20 from 'pages/AddLiquidityV2/components/DisclaimerERC20'
+import { Dots, Wrapper } from 'pages/MyPool/styleds'
+import { useNotify, useWalletModalToggle } from 'state/application/hooks'
+import { Field } from 'state/mint/actions'
+import { useDerivedMintInfo, useMintActionHandlers, useMintState } from 'state/mint/hooks'
+import { useTokenPrices } from 'state/tokenPrices/hooks'
+import { useTransactionAdder } from 'state/transactions/hooks'
+import { TRANSACTION_TYPE } from 'state/transactions/type'
+import { useDegenModeManager, usePairAdderByTokens, useUserSlippageTolerance } from 'state/user/hooks'
+import { StyledInternalLink, TYPE, UppercaseText } from 'theme'
+import { calculateGasMargin, calculateSlippageAmount, formattedNum } from 'utils'
+import { feeRangeCalc, useCurrencyConvertedToNative } from 'utils/dmm'
+import { friendlyError } from 'utils/errorMessage'
 import {
-  calculateGasMargin,
-  calculateSlippageAmount,
-  formattedNum,
   getDynamicFeeRouterContract,
   getOldStaticFeeRouterContract,
   getStaticFeeRouterContract,
-} from '../../utils'
-import { maxAmountSpend } from '../../utils/maxAmountSpend'
-import { Dots, Wrapper } from '../Pool/styleds'
+} from 'utils/getContract'
+import isZero from 'utils/isZero'
+import { maxAmountSpend } from 'utils/maxAmountSpend'
+
 import {
   ActiveText,
   CurrentPriceWrapper,
@@ -74,7 +77,8 @@ const TokenPair = ({
   currencyIdB: string
   pairAddress: string
 }) => {
-  const { account, chainId, library } = useActiveWeb3React()
+  const { account, chainId, isEVM, networkInfo } = useActiveWeb3React()
+  const { library } = useWeb3React()
   const theme = useTheme()
   const currencyA = useCurrency(currencyIdA)
   const currencyB = useCurrency(currencyIdB)
@@ -86,7 +90,8 @@ const TokenPair = ({
 
   const toggleWalletModal = useWalletModalToggle() // toggle wallet when disconnected
 
-  const expertMode = useIsExpertMode()
+  const [isDegenMode] = useDegenModeManager()
+  const notify = useNotify()
 
   // mint state
   const { independentField, typedValue, otherTypedValue } = useMintState()
@@ -150,12 +155,12 @@ const TokenPair = ({
     {},
   )
 
-  const routerAddress = chainId
+  const routerAddress = isEVM
     ? isStaticFeePair
       ? isOldStaticFeeContract
-        ? NETWORKS_INFO[chainId].classic.oldStatic?.router
-        : NETWORKS_INFO[chainId].classic.static.router
-      : NETWORKS_INFO[chainId].classic.dynamic?.router
+        ? (networkInfo as EVMNetworkInfo).classic.oldStatic?.router
+        : (networkInfo as EVMNetworkInfo).classic.static.router
+      : (networkInfo as EVMNetworkInfo).classic.dynamic?.router
     : undefined
 
   // check whether the user has approved the router on the tokens
@@ -167,7 +172,7 @@ const TokenPair = ({
 
   async function onAdd() {
     // if (!pair) return
-    if (!chainId || !library || !account) return
+    if (!library || !account) return
     const router = isStaticFeePair
       ? isOldStaticFeeContract
         ? getOldStaticFeeRouterContract(chainId, library, account)
@@ -274,24 +279,28 @@ const TokenPair = ({
           const cA = currencies[Field.CURRENCY_A]
           const cB = currencies[Field.CURRENCY_B]
           if (!!cA && !!cB) {
+            const tokenAmountIn = parsedAmounts[Field.CURRENCY_A]?.toSignificant(6) ?? ''
+            const tokenAmountOut = parsedAmounts[Field.CURRENCY_B]?.toSignificant(6) ?? ''
             setAttemptingTxn(false)
-            addTransactionWithType(response, {
-              type: 'Add liquidity',
-              summary:
-                parsedAmounts[Field.CURRENCY_A]?.toSignificant(6) +
-                ' ' +
-                cA.symbol +
-                ' and ' +
-                parsedAmounts[Field.CURRENCY_B]?.toSignificant(6) +
-                ' ' +
-                cB.symbol,
-              arbitrary: {
-                poolAddress: pairAddress,
-                token_1: cA.symbol,
-                token_2: cB.symbol,
-                add_liquidity_method: 'token pair',
-                amp: new Fraction(amp).divide(JSBI.BigInt(10000)).toSignificant(5),
-                txHash: response.hash,
+            addTransactionWithType({
+              hash: response.hash,
+              type: TRANSACTION_TYPE.CLASSIC_ADD_LIQUIDITY,
+              extraInfo: {
+                tokenSymbolIn: cA.symbol ?? '',
+                tokenSymbolOut: cB.symbol ?? '',
+                tokenAmountIn,
+                tokenAmountOut,
+                tokenAddressIn: cA.wrapped.address,
+                tokenAddressOut: cB.wrapped.address,
+                contract: pairAddress,
+                arbitrary: {
+                  poolAddress: pairAddress,
+                  token_1: cA.symbol,
+                  token_2: cB.symbol,
+                  add_liquidity_method: 'token pair',
+                  amp: new Fraction(amp).divide(JSBI.BigInt(10000)).toSignificant(5),
+                  txHash: response.hash,
+                },
               },
             })
             setTxHash(response.hash)
@@ -304,20 +313,31 @@ const TokenPair = ({
           }
         }),
       )
-      .catch(err => {
+      .catch(error => {
         setAttemptingTxn(false)
-        const e = new Error('Classic: Add liquidity Error', { cause: err })
-        e.name = 'AddLiquidityError'
-        captureException(e, { extra: { args } })
-        // we only care if the error is something _other_ than the user rejected the tx
-        if (err?.code !== 4001) {
-          console.error(err)
+
+        const message = error.message.includes('INSUFFICIENT')
+          ? t`Insufficient liquidity available. Please reload page and try again!`
+          : friendlyError(error)
+
+        if (isDegenMode) {
+          notify(
+            {
+              title: t`Add Liquidity Error`,
+              summary: message,
+              type: NotificationType.ERROR,
+            },
+            8000,
+          )
+        } else {
+          setAddLiquidityError(message)
         }
 
-        if (err.message.includes('INSUFFICIENT')) {
-          setAddLiquidityError(t`Insufficient liquidity available. Please reload page and try again!`)
-        } else {
-          setAddLiquidityError(err?.message)
+        if (!didUserReject(error)) {
+          console.error('Add Liquidity error:', { message, error })
+          const e = new Error(message, { cause: error })
+          e.name = 'AddLiquidityError'
+          captureException(e, { extra: { args } })
         }
       })
   }
@@ -356,25 +376,29 @@ const TokenPair = ({
     () => [currencies[Field.CURRENCY_A], currencies[Field.CURRENCY_B]].map(currency => currency?.wrapped),
     [currencies],
   )
+  const tokenAddresses: string[] = useMemo(
+    () => tokens.map(token => token?.address as string).filter(item => !!item),
+    [tokens],
+  )
 
-  const usdPrices = useTokensPrice(tokens)
-  const marketPrices = useTokensMarketPrice(tokens)
+  const marketPriceMap = useTokenPrices(tokenAddresses)
+  const marketPrices = tokens.map(item => marketPriceMap[item?.address || ''] || 0)
 
   const estimatedUsdCurrencyA =
-    parsedAmounts[Field.CURRENCY_A] && usdPrices[0]
-      ? parseFloat((parsedAmounts[Field.CURRENCY_A] as CurrencyAmount<Currency>).toSignificant(6)) * usdPrices[0]
+    parsedAmounts[Field.CURRENCY_A] && marketPrices[0]
+      ? parseFloat((parsedAmounts[Field.CURRENCY_A] as CurrencyAmount<Currency>).toSignificant(6)) * marketPrices[0]
       : 0
 
   const estimatedUsdCurrencyB =
-    parsedAmounts[Field.CURRENCY_B] && usdPrices[1]
-      ? parseFloat((parsedAmounts[Field.CURRENCY_B] as CurrencyAmount<Currency>).toSignificant(6)) * usdPrices[1]
+    parsedAmounts[Field.CURRENCY_B] && marketPrices[1]
+      ? parseFloat((parsedAmounts[Field.CURRENCY_B] as CurrencyAmount<Currency>).toSignificant(6)) * marketPrices[1]
       : 0
 
   const poolPrice = Number(price?.toSignificant(6))
   const marketPrice = marketPrices[1] && marketPrices[0] / marketPrices[1]
 
   const showSanityPriceWarning = !!(poolPrice && marketPrice && Math.abs(poolPrice - marketPrice) / marketPrice > 0.05)
-  const history = useHistory()
+  const navigate = useNavigate()
 
   const modalHeader = () => {
     return (
@@ -385,7 +409,11 @@ const TokenPair = ({
           </Text>
         </RowFlat>
         <Row>
-          <Text fontSize="24px">{'DMM ' + nativeA?.symbol + '/' + nativeB?.symbol + ' LP Tokens'}</Text>
+          <Text fontSize="24px">
+            <Trans>
+              DMM {nativeA?.symbol}/{nativeB?.symbol} LP Tokens
+            </Trans>
+          </Text>
         </Row>
         <TYPE.italic fontSize={12} textAlign="left" padding={'8px 0 0 0 '}>
           {t`Output is estimated. If the price changes by more than ${
@@ -443,7 +471,7 @@ const TokenPair = ({
                     <StyledInternalLink
                       onClick={handleDismissConfirmation}
                       id="unamplified-pool-link"
-                      to={`/add/${currencyIdA}/${currencyIdB}/${unAmplifiedPairAddress}`}
+                      to={`/${networkInfo.route}${APP_PATHS.CLASSIC_ADD_LIQ}/${currencyIdA}/${currencyIdB}/${unAmplifiedPairAddress}`}
                     >
                       Go to unamplified pool
                     </StyledInternalLink>
@@ -469,7 +497,6 @@ const TokenPair = ({
                 onHalf={() => {
                   onFieldAInput(currencyBalances[Field.CURRENCY_A]?.divide(2).toExact() ?? '')
                 }}
-                showMaxButton={true}
                 currency={currencies[Field.CURRENCY_A]}
                 id="add-liquidity-input-tokena"
                 showCommonBases
@@ -479,16 +506,21 @@ const TokenPair = ({
                 isSwitchMode={currencyAIsWETH || currencyAIsETHER}
                 onSwitchCurrency={() => {
                   chainId &&
-                    history.replace(
-                      `/add/${
-                        currencyAIsETHER ? WETH[chainId].address : nativeOnChain(chainId).symbol
+                    navigate(
+                      `/${networkInfo.route}${APP_PATHS.CLASSIC_ADD_LIQ}/${
+                        currencyAIsETHER ? WETH[chainId].address : NativeCurrencies[chainId].symbol
                       }/${currencyIdB}/${pairAddress}`,
+                      { replace: true },
                     )
                 }}
               />
               <Flex justifyContent="space-between" alignItems="center" marginTop="0.5rem">
                 <USDPrice>
-                  {usdPrices[0] ? `1 ${nativeA?.symbol} = ${formattedNum(usdPrices[0].toString(), true)}` : <Loader />}
+                  {marketPrices[0] ? (
+                    `1 ${nativeA?.symbol} = ${formattedNum(marketPrices[0].toString(), true)}`
+                  ) : (
+                    <Loader />
+                  )}
                 </USDPrice>
               </Flex>
             </div>
@@ -502,7 +534,6 @@ const TokenPair = ({
                 onHalf={() => {
                   onFieldBInput(currencyBalances[Field.CURRENCY_B]?.divide(2)?.toExact() ?? '')
                 }}
-                showMaxButton={true}
                 currency={currencies[Field.CURRENCY_B]}
                 disableCurrencySelect={true}
                 id="add-liquidity-input-tokenb"
@@ -512,14 +543,18 @@ const TokenPair = ({
               />
               <Flex justifyContent="space-between" alignItems="center" marginTop="0.5rem">
                 <USDPrice>
-                  {usdPrices[1] ? `1 ${nativeB?.symbol} = ${formattedNum(usdPrices[1].toString(), true)}` : <Loader />}
+                  {marketPrices[1] ? (
+                    `1 ${nativeB?.symbol} = ${formattedNum(marketPrices[1].toString(), true)}`
+                  ) : (
+                    <Loader />
+                  )}
                 </USDPrice>
 
                 {pairAddress && chainId && (currencyBIsWETH || currencyBIsETHER) && (
                   <StyledInternalLink
                     replace
-                    to={`/add/${currencyIdA}/${
-                      currencyBIsETHER ? WETH[chainId].address : nativeOnChain(chainId).symbol
+                    to={`/${networkInfo.route}${APP_PATHS.CLASSIC_ADD_LIQ}/${currencyIdA}/${
+                      currencyBIsETHER ? WETH[chainId].address : NativeCurrencies[chainId].symbol
                     }/${pairAddress}`}
                   >
                     {currencyBIsETHER ? <Trans>Use Wrapped Token</Trans> : <Trans>Use Native Token</Trans>}
@@ -655,9 +690,17 @@ const TokenPair = ({
               </Warning>
             )}
 
+            <DisclaimerERC20
+              href="https://docs.kyberswap.com/liquidity-solutions/kyberswap-elastic/user-guides/add-liquidity-to-an-existing-elastic-pool#non-standard-tokens"
+              token0={currencyA?.wrapped.address || ''}
+              token1={currencyB?.wrapped.address || ''}
+            />
+
+            <div style={{ marginBottom: '1.5rem' }} />
+
             {!account ? (
               <ButtonLight onClick={toggleWalletModal}>
-                <Trans>Connect Wallet</Trans>
+                <Trans>Connect</Trans>
               </ButtonLight>
             ) : (
               <AutoColumn gap={'md'}>
@@ -676,7 +719,9 @@ const TokenPair = ({
                           {approvalA === ApprovalState.PENDING ? (
                             <Dots>Approving {nativeA?.symbol}</Dots>
                           ) : (
-                            'Approve ' + nativeA?.symbol
+                            <>
+                              <Trans>Approve</Trans> {nativeA?.symbol}
+                            </>
                           )}
                         </ButtonPrimary>
                       )}
@@ -687,9 +732,13 @@ const TokenPair = ({
                           width={approvalA !== ApprovalState.APPROVED ? '48%' : '100%'}
                         >
                           {approvalB === ApprovalState.PENDING ? (
-                            <Dots>Approving {nativeB?.symbol}</Dots>
+                            <Dots>
+                              <Trans>Approving</Trans> {nativeB?.symbol}
+                            </Dots>
                           ) : (
-                            'Approve ' + nativeB?.symbol
+                            <>
+                              <Trans>Approve</Trans> {nativeB?.symbol}
+                            </>
                           )}
                         </ButtonPrimary>
                       )}
@@ -698,7 +747,7 @@ const TokenPair = ({
 
                 <ButtonError
                   onClick={() => {
-                    expertMode ? onAdd() : setShowConfirm(true)
+                    isDegenMode ? onAdd() : setShowConfirm(true)
                   }}
                   disabled={!isValid || approvalA !== ApprovalState.APPROVED || approvalB !== ApprovalState.APPROVED}
                   error={
@@ -708,9 +757,7 @@ const TokenPair = ({
                     !!(pairAddress && +amp < 1)
                   }
                 >
-                  <Text fontSize={20} fontWeight={500}>
-                    {error ?? (!pairAddress && +amp < 1 ? t`Enter amp (>=1)` : t`Supply`)}
-                  </Text>
+                  <Text fontWeight={500}>{error ?? (!pairAddress && +amp < 1 ? t`Enter amp (>=1)` : t`Supply`)}</Text>
                 </ButtonError>
               </AutoColumn>
             )}

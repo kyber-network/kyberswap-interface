@@ -1,6 +1,8 @@
 import { BigNumber } from '@ethersproject/bignumber'
 import { ChainId } from '@kyberswap/ks-sdk-core'
 import { t } from '@lingui/macro'
+import { SignerWalletAdapter } from '@solana/wallet-adapter-base'
+import { Transaction } from '@solana/web3.js'
 import axios from 'axios'
 import { useMemo, useRef, useState } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
@@ -8,39 +10,43 @@ import { Flex, Text } from 'rebass'
 import styled, { css } from 'styled-components'
 
 import { ReactComponent as ChevronDown } from 'assets/svg/down.svg'
+import { OptionsContainer } from 'components'
+import { NotificationType } from 'components/Announcement/type'
 import { ButtonPrimary } from 'components/Button'
+import { REWARD_SERVICE_API } from 'constants/env'
 import { BIG_INT_ZERO, DEFAULT_SIGNIFICANT } from 'constants/index'
-import { NETWORKS_INFO } from 'constants/networks'
-import { useActiveWeb3React } from 'hooks'
-import { useActiveNetwork } from 'hooks/useActiveNetwork'
+import { useActiveWeb3React, useWeb3React, useWeb3Solana } from 'hooks'
+import { NETWORKS_INFO } from 'hooks/useChainsConfig'
 import useMixpanel, { MIXPANEL_TYPE } from 'hooks/useMixpanel'
 import { useOnClickOutside } from 'hooks/useOnClickOutside'
-import useSendTransactionCallback from 'hooks/useSendTransactionCallback'
 import useTheme from 'hooks/useTheme'
-import { Dots } from 'pages/Pool/styleds'
-import { OptionsContainer } from 'pages/TrueSight/styled'
+import { useChangeNetwork } from 'hooks/web3/useChangeNetwork'
+import { Dots } from 'pages/MyPool/styleds'
 import { AppState } from 'state'
+import { useNotify } from 'state/application/hooks'
 import {
   CampaignData,
-  CampaignLeaderboard,
   CampaignLeaderboardReward,
   setCampaignData,
   setSelectedCampaignLeaderboard,
 } from 'state/campaigns/actions'
 import { useSetClaimingCampaignRewardId, useSwapNowHandler } from 'state/campaigns/hooks'
 import { useTransactionAdder } from 'state/transactions/hooks'
+import { TRANSACTION_TYPE } from 'state/transactions/type'
+import { findTx } from 'utils'
+import { friendlyError } from 'utils/errorMessage'
+import { sendEVMTransaction } from 'utils/sendTransaction'
+import { ErrorName } from 'utils/sentry'
 
 type Size = 'small' | 'large'
 export default function CampaignButtonWithOptions({
   campaign,
-  leaderboard,
   disabled = false,
   type,
   addTemporaryClaimedRefs,
   size,
 }: {
   campaign: CampaignData | undefined
-  leaderboard?: CampaignLeaderboard
   disabled?: boolean
   type: 'swap_now' | 'claim_rewards'
   size: Size
@@ -48,25 +54,25 @@ export default function CampaignButtonWithOptions({
 }) {
   const theme = useTheme()
   const [isShowNetworks, setIsShowNetworks] = useState(false)
-  const { changeNetwork } = useActiveNetwork()
+  const { changeNetwork } = useChangeNetwork()
   const containerRef = useRef<HTMLButtonElement>(null)
   useOnClickOutside(containerRef, () => setIsShowNetworks(false))
   const { mixpanelHandler } = useMixpanel()
+  const notify = useNotify()
 
   const chainIds: ChainId[] = campaign
     ? campaign[type === 'swap_now' ? 'chainIds' : 'rewardChainIds'].split(',').map(Number)
     : []
 
-  const { account, library } = useActiveWeb3React()
+  const { account, walletSolana, walletKey } = useActiveWeb3React()
+  const { library } = useWeb3React()
 
-  const leaderboardInfo = leaderboard || campaign?.leaderboard
+  const rawRewards = campaign?.userInfo?.rewards || []
 
   const refs: string[] = []
-  if (leaderboardInfo && leaderboardInfo.rewards) {
-    leaderboardInfo.rewards.forEach(reward => {
-      if (!reward.claimed && reward.rewardAmount.greaterThan(BIG_INT_ZERO)) {
-        refs.push(reward.ref)
-      }
+  if (rawRewards.length) {
+    rawRewards.forEach(reward => {
+      if (!reward.claimed && reward.rewardAmount.greaterThan(BIG_INT_ZERO)) refs.push(reward.ref)
     })
   }
 
@@ -77,7 +83,7 @@ export default function CampaignButtonWithOptions({
     selectedCampaignLeaderboard,
   } = useSelector((state: AppState) => state.campaigns)
   const transactions = useMemo(
-    () => (campaign ? transactionsState[parseInt(campaign.rewardChainIds)] ?? {} : {}),
+    () => (campaign ? transactionsState[Number(campaign.rewardChainIds) as ChainId] ?? {} : {}),
     [transactionsState, campaign],
   )
   const [claimingCampaignRewardId, setClaimingCampaignRewardId] = useSetClaimingCampaignRewardId()
@@ -85,13 +91,13 @@ export default function CampaignButtonWithOptions({
   const claimRewardHashes = refs.map(ref => ref2Hash[ref]).filter(hash => !!hash)
   const isClaimingThisCampaignRewards =
     claimRewardHashes.some(hash => {
-      return transactions[hash] !== undefined && transactions[hash]?.receipt === undefined
+      return transactions[hash] !== undefined && findTx(transactions, hash)?.receipt === undefined
     }) || campaign?.id === claimingCampaignRewardId
 
   const dispatch = useDispatch()
 
   const updateCampaignStore = () => {
-    const rewards: CampaignLeaderboardReward[] = leaderboardInfo?.rewards?.map(rw => ({ ...rw, claimed: true })) ?? []
+    const rewards: CampaignLeaderboardReward[] = rawRewards?.map(rw => ({ ...rw, claimed: true })) ?? []
 
     // update selected leaderboard of campaign
     if (campaign?.id === selectedCampaign?.id && selectedCampaignLeaderboard) {
@@ -105,26 +111,45 @@ export default function CampaignButtonWithOptions({
 
     // update leaderboard of list campaign
     const campaigns = campaignData?.map((el: CampaignData) => {
-      if (el.id === campaign?.id && el.leaderboard) return { ...el, leaderboard: { ...el.leaderboard, rewards } }
+      if (el.id === campaign?.id && el.userInfo?.rewards) return { ...el, userInfo: { ...el.userInfo, rewards } }
       return el
     })
     dispatch(setCampaignData({ campaigns }))
   }
 
   const addTransactionWithType = useTransactionAdder()
-  const sendTransaction = useSendTransactionCallback()
+
+  const { connection } = useWeb3Solana()
+
+  const addClaimTransactionAndAddClaimRef = (
+    hash: string,
+    claimChainId: ChainId,
+    rewardString: string,
+    rewardContractAddress: string,
+  ) => {
+    addTransactionWithType({
+      hash,
+      type: TRANSACTION_TYPE.CLAIM_REWARD,
+      desiredChainId: claimChainId,
+      extraInfo: {
+        summary: `${rewardString} from campaign "${campaign?.name}"`,
+        contract: rewardContractAddress,
+      },
+    })
+    const newRef2Hash = refs.filter(ref => !!ref).reduce((acc, ref) => ({ ...acc, [ref]: hash }), {})
+    setRef2Hash(prev => ({ ...prev, ...newRef2Hash }))
+  }
 
   const claimRewards = async (claimChainId: ChainId) => {
-    if (!account || !library || !campaign || !leaderboardInfo) return
+    if (!account || !library || !campaign || !rawRewards.length) return
     setClaimingCampaignRewardId(campaign.id)
-    const url = process.env.REACT_APP_REWARD_SERVICE_API + '/rewards/claim'
+    const url = REWARD_SERVICE_API + '/rewards/claim'
 
     const data = {
-      wallet: account.toLowerCase(),
+      wallet: account,
       chainId: campaign.rewardChainIds,
       clientCode: 'campaign',
-      // ref: refs.join(','),
-      ref: '',
+      ref: refs.join(','),
     }
     let response: any
     try {
@@ -134,46 +159,72 @@ export default function CampaignButtonWithOptions({
       setClaimingCampaignRewardId(null)
     }
 
+    const accumulatedUnclaimedRewards = rawRewards
+      .filter(reward => !reward.claimed)
+      .reduce((acc: { [p: string]: CampaignLeaderboardReward }, value) => {
+        const key = value.token.chainId + '_' + value.token.address
+        if (acc[key] === undefined) {
+          acc[key] = value
+        } else {
+          acc[key] = {
+            ...value,
+            rewardAmount: value.rewardAmount.add(acc[key].rewardAmount),
+          }
+        }
+        return acc
+      }, {})
+    const rewardString = Object.values(accumulatedUnclaimedRewards ?? {})
+      .map(reward => reward.rewardAmount.toSignificant(DEFAULT_SIGNIFICANT) + ' ' + reward.token.symbol)
+      .join(' ' + t`and` + ' ')
+
     if (response?.data?.code === 200000) {
       const rewardContractAddress = response.data.data.ContractAddress
       const encodedData = response.data.data.EncodedData
       try {
-        await sendTransaction(rewardContractAddress, encodedData, BigNumber.from(0), async transactionResponse => {
-          const accumulatedUnclaimedRewards = leaderboardInfo?.rewards
-            .filter(reward => !reward.claimed)
-            .reduce((acc: { [p: string]: CampaignLeaderboardReward }, value) => {
-              const key = value.token.chainId + '_' + value.token.address
-              if (acc[key] === undefined) {
-                acc[key] = value
-              } else {
-                acc[key] = {
-                  ...value,
-                  rewardAmount: value.rewardAmount.add(acc[key].rewardAmount),
-                }
-              }
-              return acc
-            }, {})
-          const rewardString = Object.values(accumulatedUnclaimedRewards ?? {})
-            .map(reward => reward.rewardAmount.toSignificant(DEFAULT_SIGNIFICANT) + ' ' + reward.token.symbol)
-            .join(' ' + t`and` + ' ')
-          addTransactionWithType(transactionResponse, {
-            type: 'Claim',
-            desiredChainId: claimChainId,
-            summary: `${rewardString} from campaign "${campaign?.name}"`,
-          })
-          const newRef2Hash = refs
-            .filter(ref => !!ref)
-            .reduce((acc, ref) => ({ ...acc, [ref]: transactionResponse.hash }), {})
-          setRef2Hash(prev => ({ ...prev, ...newRef2Hash }))
-          const transactionReceipt = await transactionResponse.wait()
-          if (transactionReceipt.status === 1) {
+        if (claimChainId === ChainId.SOLANA) {
+          if (connection && walletSolana.wallet?.adapter) {
+            const transaction = Transaction.from(Buffer.from(encodedData.substring(2), 'hex'))
+            const signedTx = await (walletSolana.wallet.adapter as SignerWalletAdapter).signTransaction(transaction)
+            const signature = await connection.sendRawTransaction(Buffer.from(signedTx.serialize()))
+
+            addClaimTransactionAndAddClaimRef(signature, claimChainId, rewardString, rewardContractAddress)
             addTemporaryClaimedRefs && addTemporaryClaimedRefs(refs)
             updateCampaignStore()
+            setClaimingCampaignRewardId(null)
           }
+          return
+        }
+        const transactionResponse = await sendEVMTransaction({
+          account,
+          library,
+          contractAddress: rewardContractAddress,
+          encodedData,
+          value: BigNumber.from(0),
+          sentryInfo: {
+            name: ErrorName.ClaimCampaignError,
+            wallet: walletKey,
+          },
         })
-      } catch (err) {
-        console.error(err)
+        if (!transactionResponse) throw new Error()
+        addClaimTransactionAndAddClaimRef(transactionResponse.hash, claimChainId, rewardString, rewardContractAddress)
+        const transactionReceipt = await transactionResponse.wait()
+        if (transactionReceipt.status === 1) {
+          addTemporaryClaimedRefs && addTemporaryClaimedRefs(refs)
+          updateCampaignStore()
+        }
+      } catch (error) {
         setClaimingCampaignRewardId(null)
+        const message = friendlyError(error)
+        console.error('Claim error:', { message, error })
+        notify(
+          {
+            title: t`Claim Error`,
+            summary: message,
+            type: NotificationType.ERROR,
+          },
+          8000,
+        )
+        return
       }
     }
   }
@@ -182,6 +233,7 @@ export default function CampaignButtonWithOptions({
 
   return (
     <StyledPrimaryButton
+      id="swap-now-button"
       size={size}
       onClick={e => {
         e.stopPropagation()
@@ -233,8 +285,6 @@ export const StyledPrimaryButton = styled(ButtonPrimary)<{ size: Size }>`
   font-weight: 500;
   color: ${({ theme }) => theme.textReverse};
   border: none;
-  z-index: unset;
-
   ${({ theme }) => theme.mediaWidth.upToSmall`
     ${css`
       flex: 1;

@@ -1,30 +1,32 @@
+import { ChainId } from '@kyberswap/ks-sdk-core'
 import { Trans, t } from '@lingui/macro'
 import { ChangeEvent, KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Flex, Text } from 'rebass'
 
 import InfoHelper from 'components/InfoHelper'
 import { RowBetween } from 'components/Row'
+import { ContentWrapper, NoResult } from 'components/SearchModal/CurrencySearch'
+import CurrencyListBridge from 'components/SearchModal/bridge/CurrencyListBridge'
+import { useTokenComparator } from 'components/SearchModal/sorting'
+import { PaddedColumn, SearchIcon, SearchInput, SearchWrapper, Separator } from 'components/SearchModal/styleds'
 import { Z_INDEXS } from 'constants/styles'
 import useDebounce from 'hooks/useDebounce'
 import { useOnClickOutside } from 'hooks/useOnClickOutside'
 import useTheme from 'hooks/useTheme'
 import useToggle from 'hooks/useToggle'
-import { useBridgeState } from 'state/bridge/hooks'
 import { WrappedTokenInfo } from 'state/lists/wrappedTokenInfo'
+import { CloseIcon, ExternalLink } from 'theme'
 import { isAddress } from 'utils'
 import { filterTokens } from 'utils/filtering'
-
-import { CloseIcon, ExternalLink } from '../../../theme'
-import { ContentWrapper, NoResult } from '../CurrencySearch'
-import CurrencyListBridge from '../bridge/CurrencyListBridge'
-import { useTokenComparator } from '../sorting'
-import { PaddedColumn, SearchIcon, SearchInput, SearchWrapper, Separator } from '../styleds'
 
 interface CurrencySearchBridgeProps {
   isOpen: boolean
   onDismiss: () => void
   isOutput?: boolean
   onCurrencySelect: (currency: WrappedTokenInfo) => void
+  tokens: WrappedTokenInfo[]
+  currency: WrappedTokenInfo | undefined
+  chainId: ChainId | undefined
 }
 
 export default function CurrencySearchBridge({
@@ -32,26 +34,25 @@ export default function CurrencySearchBridge({
   onCurrencySelect,
   onDismiss,
   isOpen,
+  tokens: fetchedTokens,
+  currency,
+  chainId,
 }: CurrencySearchBridgeProps) {
   const theme = useTheme()
-
   const [searchQuery, setSearchQuery] = useState<string>('')
   const debouncedQuery = useDebounce(searchQuery, 200)
 
-  const [{ listTokenIn, listTokenOut }] = useBridgeState()
+  const tokenComparator = useTokenComparator(false, chainId)
 
-  const fetchedTokens = isOutput ? listTokenOut : listTokenIn
-  const tokenComparator = useTokenComparator(false, true)
-
-  const isAddressSearch = isAddress(debouncedQuery)
+  const isAddressSearch = chainId ? isAddress(chainId, debouncedQuery) : false
 
   const filteredTokens: WrappedTokenInfo[] = useMemo(() => {
     if (isAddressSearch) {
       const find = fetchedTokens.find(e => e?.address?.toLowerCase() === debouncedQuery.toLowerCase())
       return find ? [find] : []
     }
-    return filterTokens(fetchedTokens, debouncedQuery)
-  }, [isAddressSearch, fetchedTokens, debouncedQuery])
+    return chainId ? filterTokens(chainId, fetchedTokens, debouncedQuery) : []
+  }, [isAddressSearch, chainId, fetchedTokens, debouncedQuery])
 
   const visibleCurrencies: WrappedTokenInfo[] = useMemo(() => {
     const sorted = filteredTokens.sort(tokenComparator)
@@ -88,12 +89,15 @@ export default function CurrencySearchBridge({
   }, [isOpen])
 
   const listTokenRef = useRef<HTMLDivElement>(null)
-  const handleInput = useCallback((event: ChangeEvent<HTMLInputElement>) => {
-    const input = event.target.value
-    const checksumInput = isAddress(input)
-    setSearchQuery(checksumInput || input)
-    if (listTokenRef?.current) listTokenRef.current.scrollTop = 0
-  }, [])
+  const handleInput = useCallback(
+    (event: ChangeEvent<HTMLInputElement>) => {
+      const input = event.target.value
+      const checksumInput = chainId ? isAddress(chainId, input) : ''
+      setSearchQuery(checksumInput || input)
+      if (listTokenRef?.current) listTokenRef.current.scrollTop = 0
+    },
+    [chainId],
+  )
 
   const handleEnter = useCallback(
     (e: KeyboardEvent<HTMLInputElement>) => {
@@ -122,7 +126,7 @@ export default function CurrencySearchBridge({
             <Trans>Select a token</Trans>
             {!isOutput && (
               <InfoHelper
-                zIndexTooltip={Z_INDEXS.MODAL + 1}
+                zIndexTooltip={Z_INDEXS.MODAL}
                 size={16}
                 text={
                   <Trans>You can select and transfer any token supported by Multichain from one chain to another</Trans>
@@ -170,10 +174,12 @@ export default function CurrencySearchBridge({
 
       {visibleCurrencies?.length ? (
         <CurrencyListBridge
+          chainId={chainId}
           listTokenRef={listTokenRef}
           isOutput={isOutput}
           currencies={visibleCurrencies}
           onCurrencySelect={handleCurrencySelect}
+          currency={currency}
         />
       ) : (
         <NoResult

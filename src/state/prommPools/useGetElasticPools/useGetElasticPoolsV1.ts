@@ -1,16 +1,15 @@
 import { useQuery } from '@apollo/client'
-import { ChainId } from '@kyberswap/ks-sdk-core'
 import dayjs from 'dayjs'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 import { PROMM_POOLS_BULK, ProMMPoolFields } from 'apollo/queries/promm'
 import { ELASTIC_BASE_FEE_UNIT } from 'constants/index'
-import { NETWORKS_INFO } from 'constants/networks'
 import { useActiveWeb3React } from 'hooks'
+import { useKyberSwapConfig } from 'state/application/hooks'
 import { ElasticPoolDetail } from 'types/pool'
 import { getBlocksFromTimestamps } from 'utils'
 
-import { CommonReturn } from '.'
+import { CommonReturn } from './type'
 
 interface PoolDataResponse {
   pools: ProMMPoolFields[]
@@ -20,6 +19,7 @@ type PoolAccumulator = Record<string, ProMMPoolFields>
 
 const usePoolBlocks = () => {
   const { chainId } = useActiveWeb3React()
+  const { blockClient, isEnableBlockService } = useKyberSwapConfig()
 
   const utcCurrentTime = dayjs()
   const last24h = utcCurrentTime.subtract(1, 'day').startOf('minute').unix()
@@ -28,12 +28,12 @@ const usePoolBlocks = () => {
 
   useEffect(() => {
     const getBlocks = async () => {
-      const blocks = await getBlocksFromTimestamps([last24h], chainId)
+      const blocks = await getBlocksFromTimestamps(isEnableBlockService, blockClient, [last24h], chainId)
       setBlocks(blocks)
     }
 
     getBlocks()
-  }, [chainId, last24h])
+  }, [chainId, last24h, blockClient, isEnableBlockService])
 
   const [blockLast24h] = blocks ?? []
 
@@ -60,7 +60,8 @@ const parsedPoolData = (
     : {}
 
   // format data and calculate daily changes
-  const formatted = poolAddresses.reduce((acc: { [address: string]: ElasticPoolDetail }, address) => {
+  const formatted = poolAddresses.reduce((acc: { [address: string]: ElasticPoolDetail }, upperCaseAddress) => {
+    const address = upperCaseAddress.toLowerCase()
     const current: ProMMPoolFields | undefined = parsed[address]
     const oneDay: ProMMPoolFields | undefined = parsed24[address]
 
@@ -123,16 +124,15 @@ const parsedPoolData = (
   return formatted
 }
 
-const useGetElasticPoolsV1 = (poolAddresses: string[], skip?: boolean): CommonReturn => {
-  const { chainId } = useActiveWeb3React()
-  const dataClient = NETWORKS_INFO[chainId || ChainId.MAINNET].elasticClient
+const useGetElasticPoolsV1 = (poolAddresses: string[]): CommonReturn => {
+  const { elasticClient, isEnableKNProtocol } = useKyberSwapConfig()
 
   const { blockLast24h } = usePoolBlocks()
 
   const { loading, error, data } = useQuery<PoolDataResponse>(PROMM_POOLS_BULK(undefined, poolAddresses), {
-    client: dataClient,
+    client: elasticClient,
     fetchPolicy: 'no-cache',
-    skip,
+    skip: isEnableKNProtocol,
   })
 
   const {
@@ -140,16 +140,24 @@ const useGetElasticPoolsV1 = (poolAddresses: string[], skip?: boolean): CommonRe
     error: error24,
     data: data24,
   } = useQuery<PoolDataResponse>(PROMM_POOLS_BULK(blockLast24h, poolAddresses), {
-    client: dataClient,
+    client: elasticClient,
     fetchPolicy: 'no-cache',
-    skip,
+    skip: isEnableKNProtocol,
   })
 
-  const anyError = Boolean(error || error24)
+  const data24Ref = useRef(data24)
+
+  if (data24) data24Ref.current = data24
+
+  const anyError = error24?.message.includes('Failed to decode `block.number`')
+    ? Boolean(error)
+    : Boolean(error || error24)
   const anyLoading = Boolean(loading || loading24)
 
+  const formatted = parsedPoolData(poolAddresses, data, data24Ref.current)
+
   // return early if not all data yet
-  if (anyError || anyLoading) {
+  if ((anyError || anyLoading) && !formatted) {
     return {
       isLoading: anyLoading,
       isError: anyError,
@@ -157,7 +165,6 @@ const useGetElasticPoolsV1 = (poolAddresses: string[], skip?: boolean): CommonRe
     }
   }
 
-  const formatted = parsedPoolData(poolAddresses, data, data24)
   return {
     isLoading: anyLoading,
     isError: anyError,

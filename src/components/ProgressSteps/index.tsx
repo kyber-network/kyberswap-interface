@@ -1,9 +1,8 @@
 import { transparentize } from 'polished'
-import React from 'react'
 import styled from 'styled-components'
 
-import { AutoColumn } from '../Column'
-import { RowBetween } from '../Row'
+import { AutoColumn } from 'components/Column'
+import { RowBetween } from 'components/Row'
 
 const Wrapper = styled(AutoColumn)``
 
@@ -17,7 +16,7 @@ const Circle = styled.div<{ confirmed?: boolean; disabled?: boolean }>`
   background-color: ${({ theme, confirmed, disabled }) =>
     disabled ? theme.buttonGray : confirmed ? theme.green1 : theme.primary};
   border-radius: 50%;
-  color: ${({ theme }) => theme.textReverse};
+  color: ${({ theme, disabled }) => (disabled ? theme.border : theme.textReverse)};
   display: flex;
   align-items: center;
   justify-content: center;
@@ -34,7 +33,6 @@ const CircleRow = styled.div`
 const Connector = styled.div<{ prevConfirmed?: boolean; disabled?: boolean }>`
   width: 100%;
   height: 2px;
-  background-color: ;
   background: linear-gradient(
     90deg,
     ${({ theme, prevConfirmed, disabled }) =>
@@ -74,6 +72,7 @@ export default function ProgressCircles({ steps, disabled = false, ...rest }: Pr
             </CircleRow>
           )
         })}
+
         <Circle disabled={disabled || !steps[steps.length - 1]}>{steps.length + 1}</Circle>
       </Grouping>
     </Wrapper>

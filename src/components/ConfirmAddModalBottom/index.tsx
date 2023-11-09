@@ -2,7 +2,6 @@ import { Pair } from '@kyberswap/ks-sdk-classic'
 import { Currency, CurrencyAmount, Fraction, Percent, Price } from '@kyberswap/ks-sdk-core'
 import { Trans } from '@lingui/macro'
 import JSBI from 'jsbi'
-import React from 'react'
 import { Flex, Text } from 'rebass'
 import styled from 'styled-components'
 
@@ -11,7 +10,7 @@ import CurrencyLogo from 'components/CurrencyLogo'
 import CurrentPrice from 'components/CurrentPrice'
 import { PoolPriceRangeBar } from 'components/PoolPriceBar'
 import { RowBetween, RowFixed } from 'components/Row'
-import FormattedPriceImpact from 'components/swap/FormattedPriceImpact'
+import FormattedPriceImpact from 'components/swapv2/FormattedPriceImpact'
 import { ONE_BIPS } from 'constants/index'
 import useTheme from 'hooks/useTheme'
 import { Field } from 'state/mint/actions'
@@ -81,7 +80,7 @@ export function ConfirmAddModalBottom({
             <CurrencyLogo currency={currencies[Field.CURRENCY_A]} style={{ marginRight: '8px' }} />
             <Flex alignItems="center">
               <TYPE.black fontSize={14} fontWeight={400}>
-                {parsedAmounts[Field.CURRENCY_A]?.toSignificant(6)}
+                {parsedAmounts[Field.CURRENCY_A]?.toSignificant(10)}
               </TYPE.black>
               {estimatedUsd && !!estimatedUsd[0] && (
                 <Text color={theme.subText} marginLeft="4px" fontSize={14}>
@@ -100,7 +99,7 @@ export function ConfirmAddModalBottom({
             <CurrencyLogo currency={currencies[Field.CURRENCY_B]} style={{ marginRight: '8px' }} />
             <Flex alignItems="center">
               <TYPE.black fontSize={14} fontWeight={400}>
-                {parsedAmounts[Field.CURRENCY_B]?.toSignificant(6)}
+                {parsedAmounts[Field.CURRENCY_B]?.toSignificant(10)}
               </TYPE.black>
 
               {estimatedUsd && !!estimatedUsd[1] && (
@@ -156,10 +155,8 @@ export function ConfirmAddModalBottom({
         </Section>
       )}
 
-      <ButtonPrimary style={{ margin: '4px 0 0 0', padding: '16px' }} onClick={onAdd}>
-        <Text fontWeight={500} fontSize={18}>
-          {noLiquidity ? 'Create Pool' : 'Confirm'}
-        </Text>
+      <ButtonPrimary style={{ margin: '4px 0 0 0', padding: '12px' }} onClick={onAdd}>
+        <Text fontWeight={500}>{noLiquidity ? <Trans>Create Pool</Trans> : <Trans>Confirm</Trans>}</Text>
       </ButtonPrimary>
     </>
   )

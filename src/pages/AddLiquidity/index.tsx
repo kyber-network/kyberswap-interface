@@ -1,8 +1,8 @@
 import { Fraction, WETH } from '@kyberswap/ks-sdk-core'
 import { Trans, t } from '@lingui/macro'
 import JSBI from 'jsbi'
-import React, { useEffect, useState } from 'react'
-import { RouteComponentProps } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { Navigate, useParams } from 'react-router-dom'
 
 import LiquidityProviderMode from 'components/LiquidityProviderMode'
 import { AddRemoveTabs, LiquidityAction } from 'components/NavigationTabs'
@@ -19,28 +19,21 @@ import TokenPair from './TokenPair'
 import ZapIn from './ZapIn'
 import { Container, LiquidityProviderModeWrapper, PageWrapper, PoolName, TopBar } from './styled'
 
-export default function AddLiquidity({
-  match: {
-    params: { currencyIdA, currencyIdB, pairAddress },
-  },
-}: RouteComponentProps<{ currencyIdA: string; currencyIdB: string; pairAddress: string }>) {
-  const { chainId } = useActiveWeb3React()
-  const currencyA = useCurrency(currencyIdA)
-  const currencyB = useCurrency(currencyIdB)
+export default function AddLiquidity() {
+  const { currencyIdA = '', currencyIdB = '', pairAddress = '' } = useParams()
+  const { chainId, isEVM } = useActiveWeb3React()
+  const currencyA = useCurrency(currencyIdA) ?? undefined
+  const currencyB = useCurrency(currencyIdB) ?? undefined
 
-  const nativeA = useCurrencyConvertedToNative(currencyA || undefined)
-  const nativeB = useCurrencyConvertedToNative(currencyB || undefined)
+  const nativeA = useCurrencyConvertedToNative(currencyA)
+  const nativeB = useCurrencyConvertedToNative(currencyB)
 
-  const currencyAIsWETH = !!(chainId && currencyA && currencyA.equals(WETH[chainId]))
-  const currencyBIsWETH = !!(chainId && currencyB && currencyB.equals(WETH[chainId]))
+  const currencyAIsWETH = !!(chainId && currencyA?.equals(WETH[chainId]))
+  const currencyBIsWETH = !!(chainId && currencyB?.equals(WETH[chainId]))
 
   const oneCurrencyIsWETH = currencyBIsWETH || currencyAIsWETH
 
-  const { pair, pairState, noLiquidity } = useDerivedMintInfo(
-    currencyA ?? undefined,
-    currencyB ?? undefined,
-    pairAddress,
-  )
+  const { pair, pairState, noLiquidity } = useDerivedMintInfo(currencyA, currencyB, pairAddress)
   const amp = pair?.amp || JSBI.BigInt(0)
   const [activeTab, setActiveTab] = useState(0)
 
@@ -53,6 +46,9 @@ export default function AddLiquidity({
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  if (!isEVM) return <Navigate to="/" />
+
   return (
     <>
       <PageWrapper>

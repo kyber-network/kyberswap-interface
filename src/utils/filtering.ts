@@ -1,7 +1,8 @@
-import { Token } from '@kyberswap/ks-sdk-core'
-import { TokenInfo } from '@uniswap/token-lists'
+import { ChainId, Token } from '@kyberswap/ks-sdk-core'
 
+import { TokenInfo } from 'state/lists/wrappedTokenInfo'
 import { isAddress } from 'utils'
+import { convertToSlug } from 'utils/string'
 
 const alwaysTrue = () => true
 
@@ -9,8 +10,11 @@ const alwaysTrue = () => true
  * Create a filter function to apply to a token for whether it matches a particular search query
  * @param search the search query to apply to the token
  */
-export function createTokenFilterFunction<T extends Token | TokenInfo>(search: string): (tokens: T) => boolean {
-  const searchingAddress = isAddress(search)
+function createTokenFilterFunction<T extends Token | TokenInfo>(
+  chainId: ChainId,
+  search: string,
+): (tokens: T) => boolean {
+  const searchingAddress = isAddress(chainId, search)
 
   if (searchingAddress) {
     const lower = searchingAddress.toLowerCase()
@@ -36,13 +40,21 @@ export function createTokenFilterFunction<T extends Token | TokenInfo>(search: s
   return ({ name, symbol }: T): boolean => Boolean((symbol && matchesSearch(symbol)) || (name && matchesSearch(name)))
 }
 
-export function filterTokens<T extends Token | TokenInfo>(tokens: T[], search: string): T[] {
-  return tokens.filter(createTokenFilterFunction(search))
+export function filterTokens<T extends Token | TokenInfo>(chainId: ChainId, tokens: T[], search: string): T[] {
+  return tokens.filter(createTokenFilterFunction(chainId, search))
 }
 
-export function filterTokensWithExactKeyword<T extends Token | TokenInfo>(tokens: T[], search: string): T[] {
-  const result = filterTokens(tokens, search)
-  if (isAddress(search)) return result
+export function filterTokensWithExactKeyword<T extends Token | TokenInfo>(
+  chainId: ChainId,
+  tokens: T[],
+  search: string,
+): T[] {
+  const result = filterTokens(chainId, tokens, search)
   const filterExact = result.filter(e => (e.symbol ? e.symbol.toLowerCase() === search.toLowerCase() : true)) // Exact Keyword
-  return filterExact.length ? filterExact : result
+  const data = filterExact.length ? filterExact : result
+  if (data.length) {
+    return data
+  }
+  // case token has special letter
+  return tokens.filter(e => (e.symbol ? convertToSlug(e.symbol) === convertToSlug(search) : false))
 }

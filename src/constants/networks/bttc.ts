@@ -1,41 +1,38 @@
 import { ChainId } from '@kyberswap/ks-sdk-core'
 
-import BTT from 'assets/networks/bttc.png'
-import { KS_SETTING_API } from 'constants/env'
-import { createClient } from 'utils/client'
-
-import { NetworkInfo } from '../type'
+import { EVMNetworkInfo } from 'constants/networks/type'
 
 const EMPTY = ''
 const EMPTY_ARRAY: any[] = []
 const NOT_SUPPORT = null
 
-const bttcInfo: NetworkInfo = {
+const bttcInfo: EVMNetworkInfo = {
   chainId: ChainId.BTTC,
   route: 'bittorrent',
+  ksSettingRoute: 'bttc',
+  priceRoute: 'bttc',
+  poolFarmRoute: 'bttc',
+  aggregatorRoute: 'bttc',
   name: 'BitTorrent',
-  icon: BTT,
-  classicClient: createClient(
-    'https://bttc-graph.kyberengineering.io/subgraphs/name/kybernetwork/kyberswap-exchange-bttc',
-  ),
-  elasticClient: createClient(
-    'https://bttc-graph.kyberengineering.io/subgraphs/name/kybernetwork/kyberswap-elastic-bttc',
-  ),
-  blockClient: createClient('https://bttc-graph.kyberengineering.io/subgraphs/name/kybernetwork/bttc-blocks'),
+  icon: 'https://storage.googleapis.com/ks-setting-1d682dca/acc93879-119a-48ce-8a91-a4a6c0321c131699420171767.png',
+
+  iconSelected: NOT_SUPPORT,
+
+  defaultBlockSubgraph: 'https://bttc-graph.kyberengineering.io/subgraphs/name/kybernetwork/bttc-blocks',
   etherscanUrl: 'https://bttcscan.com',
   etherscanName: 'Bttcscan',
-  tokenListUrl: `${KS_SETTING_API}/v1/tokens?chainIds=${ChainId.BTTC}&isWhitelisted=${true}`,
-  bridgeURL: 'https://wallet.bt.io/bridge',
+  bridgeURL: 'https://bttc.bittorrent.com/bridge/',
   nativeToken: {
     symbol: 'BTT',
-    name: 'BTT (Wrapped)',
-    address: '0x8D193c6efa90BCFf940A98785d1Ce9D093d3DC8A',
-    logo: BTT,
+    name: 'BTT',
+    logo: 'https://storage.googleapis.com/ks-setting-1d682dca/1d9bbed0-0f29-48b9-b610-1bc35efcc41f.png',
     decimal: 18,
+    minForGas: 10 ** 16,
   },
-  rpcUrl: 'https://bttc.kyberengineering.io',
-  routerUri: `${process.env.REACT_APP_AGGREGATOR_API}/bttc/route/encode`,
+  defaultRpcUrl: 'https://bttc.kyberengineering.io',
+  multicall: '0xBF69a56D35B8d6f5A8e0e96B245a72F735751e54',
   classic: {
+    defaultSubgraph: 'https://bttc-graph.kyberengineering.io/subgraphs/name/kybernetwork/kyberswap-exchange-bttc',
     static: {
       zap: '0x2abE8750e4a65584d7452316356128C936273e0D',
       router: '0x5649B4DD00780e99Bab7Abb4A3d581Ea1aEB23D0',
@@ -56,18 +53,23 @@ const bttcInfo: NetworkInfo = {
     ],
   },
   elastic: {
-    coreFactory: '0x5F1dddbf348aC2fbe22a163e30F99F9ECE3DD50a',
-    nonfungiblePositionManager: '0x2B1c7b41f6A8F2b2bc45C3233a5d5FB3cD6dC9A8',
-    tickReader: '0x165c68077ac06c83800d19200e6E2B08D02dE75D',
-    initCodeHash: '0xc597aba1bb02db42ba24a8878837965718c032f8b46be94a6e46452a9f89ca01',
-    quoter: '0x0D125c15D54cA1F8a813C74A81aEe34ebB508C1f',
-    routers: '0xC1e7dFE73E1598E3910EF4C7845B68A9Ab6F4c83',
+    defaultSubgraph: 'https://bttc-graph.kyberengineering.io/subgraphs/name/kybernetwork/kyberswap-elastic-bttc',
+    startBlock: 21964498,
+    coreFactory: '0xC7a590291e07B9fe9E64b86c58fD8fC764308C4A',
+    nonfungiblePositionManager: '0xe222fBE074A436145b255442D919E4E3A6c6a480',
+    tickReader: '0x8Fd8Cb948965d9305999D767A02bf79833EADbB3',
+    initCodeHash: '0x00e263aaa3a2c06a89b53217a9e7aad7e15613490a72e0f95f303c4de2dc7045',
+    quoter: '0x4d47fd5a29904Dae0Ef51b1c450C9750F15D7856',
+    routers: '0xF9c2b5746c946EF883ab2660BbbB1f10A5bdeAb4',
+    farms: [],
   },
+  limitOrder: NOT_SUPPORT,
   averageBlockTimeInSeconds: 2, // TODO: check these info
   coingeckoNetworkId: 'tron',
   coingeckoNativeTokenId: 'bittorrent',
   deBankSlug: EMPTY,
-  internalRoute: 'bttc',
+  dexToCompare: NOT_SUPPORT,
+  geckoTermialId: 'bttc',
 }
 
 export default bttcInfo

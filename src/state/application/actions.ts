@@ -1,78 +1,28 @@
-import { ChainId } from '@kyberswap/ks-sdk-core'
 import { createAction } from '@reduxjs/toolkit'
-import { TokenList } from '@uniswap/token-lists'
 
-import { NotificationType } from './hooks'
+import { AnnouncementTemplatePopup, PopupContent, PopupType } from 'components/Announcement/type'
+import { Topic } from 'hooks/useNotification'
+import { ConfirmModalState } from 'state/application/reducer'
 
-export type PopupContentTxn = {
-  hash: string
-  notiType: NotificationType
-  type?: string
-  summary?: string
-}
-export type PopupContentListUpdate = {
-  listUrl: string
-  oldList: TokenList
-  newList: TokenList
-  auto: boolean
-}
-export type PopupContentSimple = {
-  title: string
-  summary?: string
-  type: NotificationType
-}
+import { ApplicationModal, ModalParams } from './types'
 
-export enum PopupType {
-  TRANSACTION,
-  LIST_UPDATE,
-  SIMPLE,
-}
-
-export type PopupContent = PopupContentTxn | PopupContentListUpdate | PopupContentSimple
-
-export enum ApplicationModal {
-  NETWORK,
-  WALLET,
-  SETTINGS,
-  TRANSACTION_SETTINGS,
-  SELF_CLAIM,
-  ADDRESS_CLAIM,
-  CLAIM_POPUP,
-  MENU,
-  DELEGATE,
-  VOTE,
-  PRICE_RANGE,
-  POOL_DETAIL,
-
-  MOBILE_LIVE_CHART,
-  MOBILE_TRADE_ROUTES,
-  MOBILE_TOKEN_INFO,
-
-  REFERRAL_NETWORK,
-  SHARE,
-  TRENDING_SOON_SORTING,
-  TRUESIGHT_NETWORK,
-  TRENDING_SOON_TOKEN_DETAIL,
-  COMMUNITY,
-  CONTRACT_ADDRESS,
-  FAUCET_POPUP,
-  SELECT_CAMPAIGN,
-  REGISTER_CAMPAIGN_CAPTCHA,
-  REGISTER_CAMPAIGN_SUCCESS,
-  NOTIFICATION_SUBSCRIPTION,
-  YOUR_CAMPAIGN_TRANSACTIONS,
-  ETH_POW_ACK,
-}
+export { ApplicationModal }
 
 export const updateBlockNumber = createAction<{ chainId: number; blockNumber: number }>('application/updateBlockNumber')
-export const setOpenModal = createAction<ApplicationModal | null>('application/setOpenModal')
+export const setOpenModal = createAction<{
+  modal: ApplicationModal | null
+  params: ModalParams[ApplicationModal] | undefined
+}>('application/setOpenModal')
+export const closeModal = createAction<ApplicationModal | null>('application/closeModal')
 export const addPopup = createAction<{
   key?: string
   removeAfterMs?: number | null
   content: PopupContent
   popupType: PopupType
+  account?: string
 }>('application/addPopup')
 export const removePopup = createAction<{ key: string }>('application/removePopup')
+
 export const updatePrommETHPrice = createAction<{
   currentPrice: string
   oneDayBackPrice: string
@@ -85,20 +35,18 @@ export const updateETHPrice = createAction<{
   pricePercentChange: number
 }>('application/updateETHPrice')
 
-export const updateKNCPrice = createAction<string | undefined>('application/updateKNCPrice')
-
-export const updateChainIdWhenNotConnected = createAction<ChainId>('application/updateChainIdWhenNotConnected')
-
 export const updateServiceWorker = createAction<ServiceWorkerRegistration>('application/updateServiceWorker')
 
 export const setSubscribedNotificationTopic = createAction<{
-  isSubscribed: boolean
-  isVerified: boolean
-  topicId: number
-  verifiedEmail?: string
+  topicGroups: Topic[]
 }>('application/setSubscribedNotificationTopic')
 
 export const setLoadingNotification = createAction<boolean>('application/setLoadingNotification')
-export const setNeedShowModalSubscribeNotificationAfterLogin = createAction<boolean>(
-  'application/setNeedShowModalSubscribeNotificationAfterLogin',
-)
+
+export const setAnnouncementDetail = createAction<{
+  selectedIndex: number | null
+  announcements: AnnouncementTemplatePopup[]
+  hasMore: boolean
+}>('application/setAnnouncementDetail')
+
+export const setConfirmData = createAction<ConfirmModalState>('application/setConfirmData')

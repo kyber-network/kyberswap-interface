@@ -1,15 +1,16 @@
 import { Currency } from '@kyberswap/ks-sdk-core'
 import { t } from '@lingui/macro'
-import React, { useCallback, useMemo } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 
-import { useSwapState } from 'state/swap/hooks'
-import { useCurrencyConvertedToNative } from 'utils/dmm'
-
-import { Aggregator } from '../../utils/aggregator'
 import TransactionConfirmationModal, {
   ConfirmationModalContent,
   TransactionErrorContent,
-} from '../TransactionConfirmationModal'
+} from 'components/TransactionConfirmationModal'
+import { useActiveWeb3React } from 'hooks'
+import { useEncodeSolana } from 'state/swap/hooks'
+import { Aggregator } from 'utils/aggregator'
+import { useCurrencyConvertedToNative } from 'utils/dmm'
+
 import SwapModalFooter from './SwapModalFooter'
 import SwapModalHeader from './SwapModalHeader'
 
@@ -31,11 +32,9 @@ function tradeMeaningfullyDiffers(tradeA: Aggregator, tradeB: Aggregator): boole
 export default function ConfirmSwapModal({
   trade,
   originalTrade,
-  onAcceptChanges,
   allowedSlippage,
   onConfirm,
   onDismiss,
-  recipient,
   swapErrorMessage,
   isOpen,
   attemptingTxn,
@@ -48,16 +47,21 @@ export default function ConfirmSwapModal({
   originalTrade: Aggregator | undefined
   attemptingTxn: boolean
   txHash: string | undefined
-  recipient: string | null
   allowedSlippage: number
   tokenAddToMetaMask: Currency | undefined
-  onAcceptChanges: () => void
   onConfirm: () => void
   swapErrorMessage: string | undefined
   onDismiss: () => void
   showTxBanner?: boolean
 }) {
-  const { feeConfig, typedValue } = useSwapState()
+  const { isSolana } = useActiveWeb3React()
+  const [startedTime, setStartedTime] = useState<number | undefined>(undefined)
+  const [encodeSolana] = useEncodeSolana()
+
+  useEffect(() => {
+    if (isSolana && encodeSolana) setStartedTime(Date.now())
+    else setStartedTime(undefined)
+  }, [encodeSolana, isOpen, isSolana])
 
   const showAcceptChanges = useMemo(
     () => Boolean(trade && originalTrade && tradeMeaningfullyDiffers(trade, originalTrade)),
@@ -65,36 +69,28 @@ export default function ConfirmSwapModal({
   )
 
   const modalHeader = useCallback(() => {
-    return trade ? (
-      <SwapModalHeader
-        trade={trade}
-        allowedSlippage={allowedSlippage}
-        recipient={recipient}
-        showAcceptChanges={showAcceptChanges}
-        onAcceptChanges={onAcceptChanges}
-      />
-    ) : null
-  }, [allowedSlippage, onAcceptChanges, recipient, showAcceptChanges, trade])
+    return trade ? <SwapModalHeader trade={trade} /> : null
+  }, [trade])
 
   const modalBottom = useCallback(() => {
     return trade ? (
       <SwapModalFooter
         onConfirm={onConfirm}
         trade={trade}
-        disabledConfirm={showAcceptChanges}
+        disabledConfirm={showAcceptChanges || (isSolana && !encodeSolana)}
         swapErrorMessage={swapErrorMessage}
         allowedSlippage={allowedSlippage}
-        feeConfig={feeConfig}
+        startedTime={startedTime}
       />
     ) : null
-  }, [allowedSlippage, onConfirm, showAcceptChanges, swapErrorMessage, trade, feeConfig])
+  }, [allowedSlippage, onConfirm, showAcceptChanges, swapErrorMessage, trade, isSolana, startedTime, encodeSolana])
 
-  const nativeInput = useCurrencyConvertedToNative(trade?.inputAmount?.currency)
-  const nativeOutput = useCurrencyConvertedToNative(trade?.outputAmount?.currency)
+  const nativeInput = useCurrencyConvertedToNative(originalTrade?.inputAmount?.currency)
+  const nativeOutput = useCurrencyConvertedToNative(originalTrade?.outputAmount?.currency)
   // text to show while loading
-  const pendingText = `Swapping ${!!feeConfig ? typedValue : trade?.inputAmount?.toSignificant(6)} ${
+  const pendingText = `Swapping ${originalTrade?.inputAmount?.toSignificant(6)} ${
     nativeInput?.symbol
-  } for ${trade?.outputAmount?.toSignificant(6)} ${nativeOutput?.symbol}`
+  } for ${originalTrade?.outputAmount?.toSignificant(6)} ${nativeOutput?.symbol}`
 
   const confirmationContent = useCallback(
     () =>
@@ -102,13 +98,13 @@ export default function ConfirmSwapModal({
         <TransactionErrorContent onDismiss={onDismiss} message={swapErrorMessage} />
       ) : (
         <ConfirmationModalContent
-          title={t`Confirm Swap`}
+          title={t`Confirm Swap Details`}
           onDismiss={onDismiss}
           topContent={modalHeader}
           bottomContent={modalBottom}
         />
       ),
-    [onDismiss, modalBottom, modalHeader, swapErrorMessage],
+    [swapErrorMessage, onDismiss, modalHeader, modalBottom],
   )
 
   return (
@@ -121,6 +117,7 @@ export default function ConfirmSwapModal({
       pendingText={pendingText}
       tokenAddToMetaMask={tokenAddToMetaMask}
       showTxBanner={showTxBanner}
+      startedTime={startedTime}
     />
   )
 }

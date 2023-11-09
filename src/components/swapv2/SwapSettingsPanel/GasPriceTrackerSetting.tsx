@@ -4,6 +4,7 @@ import { isMobile } from 'react-device-detect'
 import { ChevronRight } from 'react-feather'
 import styled from 'styled-components'
 
+import { TextDashed } from 'components/Tooltip'
 import useGasPriceFromDeBank, { GasLevel } from 'hooks/useGasPriceFromDeBank'
 import useTheme from 'hooks/useTheme'
 
@@ -17,13 +18,6 @@ const Container = styled.div`
   align-items: center;
 
   cursor: pointer;
-`
-
-const SettingLabel = styled.span`
-  font-size: ${isMobile ? '14px' : '12px'};
-  color: ${({ theme }) => theme.text};
-  font-weight: 400;
-  line-height: 16px;
 `
 
 const Group = styled.div`
@@ -68,9 +62,9 @@ const GasPriceTrackerSetting: React.FC<Props> = ({ onClick }) => {
 
   return (
     <Container onClick={onClick}>
-      <SettingLabel>
+      <TextDashed fontSize={12} fontWeight={400} color={theme.subText} underlineColor={theme.border}>
         <Trans>Gas Price Tracker</Trans>
-      </SettingLabel>
+      </TextDashed>
 
       <Group>
         <PriceInWei>{getPriceInGweiText(data[GasLevel.NORMAL].gasPriceInGwei)}</PriceInWei>

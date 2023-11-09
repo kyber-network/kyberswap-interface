@@ -1,11 +1,11 @@
-import { Currency, Token } from '@kyberswap/ks-sdk-core'
-import React, { useCallback, useEffect, useState } from 'react'
+import { ChainId, Currency, Token } from '@kyberswap/ks-sdk-core'
+import { ReactNode, useCallback, useEffect, useState } from 'react'
 import { isMobile } from 'react-device-detect'
+import { usePrevious } from 'react-use'
 
+import Modal from 'components/Modal'
 import useLast from 'hooks/useLast'
-import usePrevious from 'hooks/usePrevious'
 
-import Modal from '../Modal'
 import { CurrencySearch } from './CurrencySearch'
 import { ImportToken } from './ImportToken'
 
@@ -16,13 +16,16 @@ interface CurrencySearchModalProps {
   onCurrencySelect: (currency: Currency) => void
   otherSelectedCurrency?: Currency | null
   showCommonBases?: boolean
+  filterWrap?: boolean
+  title?: string
+  tooltip?: ReactNode
+  onCurrencyImport?: (token: Token) => void
+  customChainId?: ChainId
 }
 
-export enum CurrencyModalView {
+enum CurrencyModalView {
   search,
-  manage,
   importToken,
-  importList,
 }
 
 export default function CurrencySearchModal({
@@ -32,8 +35,13 @@ export default function CurrencySearchModal({
   selectedCurrency,
   otherSelectedCurrency,
   showCommonBases = false,
+  filterWrap,
+  title,
+  tooltip,
+  onCurrencyImport,
+  customChainId,
 }: CurrencySearchModalProps) {
-  const [modalView, setModalView] = useState<CurrencyModalView>(CurrencyModalView.manage)
+  const [modalView, setModalView] = useState<CurrencyModalView>(CurrencyModalView.search)
   const lastOpen = useLast(isOpen)
 
   useEffect(() => {
@@ -43,8 +51,8 @@ export default function CurrencySearchModal({
   }, [isOpen, lastOpen])
 
   const handleCurrencySelect = useCallback(
-    (currency: Currency) => {
-      onCurrencySelect(currency)
+    (currency: Currency[] | Currency) => {
+      onCurrencySelect(Array.isArray(currency) ? currency[0] : currency)
       onDismiss()
     },
     [onDismiss, onCurrencySelect],
@@ -57,11 +65,19 @@ export default function CurrencySearchModal({
   const [importToken, setImportToken] = useState<Token | undefined>()
 
   // change min height if not searching
-  const minHeight = modalView === CurrencyModalView.importToken || modalView === CurrencyModalView.importList ? 40 : 80
+  const minHeight = modalView === CurrencyModalView.importToken ? 40 : 80
 
-  const showImportView = useCallback(() => setModalView(CurrencyModalView.importToken), [])
-  const showManageView = useCallback(() => setModalView(CurrencyModalView.manage), [])
   const isMobileHorizontal = Math.abs(window.orientation) === 90 && isMobile
+
+  const onImportToken = useCallback(
+    (token: Token) => {
+      setImportToken(token)
+      setModalView(CurrencyModalView.importToken)
+      onCurrencyImport?.(token)
+    },
+    [onCurrencyImport],
+  )
+
   return (
     <Modal
       isOpen={isOpen}
@@ -79,9 +95,11 @@ export default function CurrencySearchModal({
           selectedCurrency={selectedCurrency}
           otherSelectedCurrency={otherSelectedCurrency}
           showCommonBases={showCommonBases}
-          showImportView={showImportView}
-          setImportToken={setImportToken}
-          showManageView={showManageView}
+          setImportToken={onImportToken}
+          filterWrap={filterWrap}
+          title={title}
+          tooltip={tooltip}
+          customChainId={customChainId}
         />
       ) : modalView === CurrencyModalView.importToken && importToken ? (
         <ImportToken

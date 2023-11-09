@@ -1,10 +1,9 @@
 import { BigNumber } from '@ethersproject/bignumber'
 import { TransactionResponse } from '@ethersproject/providers'
 import { Currency, CurrencyAmount } from '@kyberswap/ks-sdk-core'
-import { NonfungiblePositionManager, Position } from '@kyberswap/ks-sdk-elastic'
+import { FeeAmount, NonfungiblePositionManager, Position } from '@kyberswap/ks-sdk-elastic'
 import { Trans, t } from '@lingui/macro'
-import { useCallback } from 'react'
-import { Info } from 'react-feather'
+import { useState } from 'react'
 import { Flex, Text } from 'rebass'
 
 import { ButtonLight } from 'components/Button'
@@ -15,26 +14,37 @@ import Divider from 'components/Divider'
 import FormattedCurrencyAmount from 'components/FormattedCurrencyAmount'
 import QuestionHelper from 'components/QuestionHelper'
 import { RowBetween, RowFixed } from 'components/Row'
-import { MouseoverTooltip } from 'components/Tooltip'
-import { useActiveWeb3React } from 'hooks'
-import { useProAmmNFTPositionManagerContract } from 'hooks/useContract'
+import TransactionConfirmationModal, { TransactionErrorContent } from 'components/TransactionConfirmationModal'
+import FarmV21ABI from 'constants/abis/v2/farmv2.1.json'
+import FarmV2ABI from 'constants/abis/v2/farmv2.json'
+import { EVMNetworkInfo } from 'constants/networks/type'
+import { useActiveWeb3React, useWeb3React } from 'hooks'
+import {
+  useProAmmNFTPositionManagerReadingContract,
+  useProMMFarmSigningContract,
+  useSigningContract,
+} from 'hooks/useContract'
 import useMixpanel, { MIXPANEL_TYPE } from 'hooks/useMixpanel'
+import useProAmmPoolInfo from 'hooks/useProAmmPoolInfo'
 import useTheme from 'hooks/useTheme'
 import useTransactionDeadline from 'hooks/useTransactionDeadline'
+import { useElasticFarmsV2 } from 'state/farms/elasticv2/hooks'
 import { useTransactionAdder } from 'state/transactions/hooks'
+import { TRANSACTION_TYPE } from 'state/transactions/type'
 import { useUserSlippageTolerance } from 'state/user/hooks'
-import { basisPointsToPercent, calculateGasMargin, formattedNumLong } from 'utils'
-import { unwrappedToken } from 'utils/wrappedCurrency'
+import { basisPointsToPercent, buildFlagsForFarmV21, calculateGasMargin, formattedNumLong } from 'utils'
 
 export default function ProAmmFee({
   tokenId,
   position,
+  // legacy props... layout means not collect fee
   layout = 0,
   text = '',
   hasUserDepositedInFarm,
   feeValue0,
   feeValue1,
   totalFeeRewardUSD,
+  farmAddress,
 }: {
   totalFeeRewardUSD: number
   tokenId: BigNumber
@@ -42,38 +52,155 @@ export default function ProAmmFee({
   layout?: number
   text?: string
   hasUserDepositedInFarm?: boolean
+  farmAddress?: string
   feeValue0: CurrencyAmount<Currency> | undefined
   feeValue1: CurrencyAmount<Currency> | undefined
 }) {
-  const { chainId, account, library } = useActiveWeb3React()
+  const { account, networkInfo } = useActiveWeb3React()
+  const { library } = useWeb3React()
   const theme = useTheme()
-  const token0Shown = unwrappedToken(position.pool.token0)
-  const token1Shown = unwrappedToken(position.pool.token1)
+  const token0Shown = feeValue0?.currency || position.pool.token0
+  const token1Shown = feeValue1?.currency || position.pool.token1
   const addTransactionWithType = useTransactionAdder()
-  const positionManager = useProAmmNFTPositionManagerContract()
+  const positionManager = useProAmmNFTPositionManagerReadingContract()
   const deadline = useTransactionDeadline() // custom from users settings
   const { mixpanelHandler } = useMixpanel()
 
   const [allowedSlippage] = useUserSlippageTolerance()
 
-  const collect = useCallback(() => {
-    if (
-      !chainId ||
-      !feeValue0 ||
-      !feeValue1 ||
-      !positionManager ||
-      !account ||
-      !tokenId ||
-      !library ||
-      !deadline ||
-      !layout
-    )
+  const liquidity = position.liquidity.toString()
+
+  const [collectFeeError, setCollectFeeError] = useState<string>('')
+  const [attemptingTxn, setAttemptingTxn] = useState(false)
+  const [txnHash, setTxnHash] = useState<string | undefined>()
+  const [showPendingModal, setShowPendingModal] = useState(false)
+
+  const handleDismiss = () => {
+    setShowPendingModal(false)
+    setTxnHash('')
+    setAttemptingTxn(false)
+    setCollectFeeError('')
+  }
+
+  const handleBroadcastClaimSuccess = (response: TransactionResponse) => {
+    const tokenAmountIn = feeValue0?.toSignificant(6)
+    const tokenAmountOut = feeValue1?.toSignificant(6)
+    const tokenSymbolIn = feeValue0?.currency.symbol ?? ''
+    const tokenSymbolOut = feeValue1?.currency.symbol ?? ''
+    addTransactionWithType({
+      hash: response.hash,
+      type: TRANSACTION_TYPE.ELASTIC_COLLECT_FEE,
+      extraInfo: {
+        tokenAmountIn,
+        tokenAmountOut,
+        tokenAddressIn: feeValue0?.currency.wrapped.address,
+        tokenAddressOut: feeValue1?.currency.wrapped.address,
+        tokenSymbolIn,
+        tokenSymbolOut,
+        arbitrary: {
+          token_1: token0Shown?.symbol,
+          token_2: token1Shown?.symbol,
+          token_1_amount: tokenAmountIn,
+          token_2_amount: tokenAmountOut,
+        },
+      },
+    })
+    setAttemptingTxn(false)
+    setTxnHash(response.hash)
+  }
+
+  const farmContract = useProMMFarmSigningContract(farmAddress || '')
+  const poolAddress = useProAmmPoolInfo(position.pool.token0, position.pool.token1, position.pool.fee as FeeAmount)
+  const { userInfo } = useElasticFarmsV2()
+  const info = userInfo?.find(item => item.nftId.toString() === tokenId.toString())
+  const address = info?.farmAddress
+
+  const isFarmV21 = (networkInfo as EVMNetworkInfo).elastic['farmV2.1S']
+    ?.map(item => item.toLowerCase())
+    .includes(address?.toLowerCase())
+
+  const farmV2Contract = useSigningContract(address, FarmV2ABI)
+  const farmV21Contract = useSigningContract(address, FarmV21ABI)
+
+  const collectFeeFromFarmContract = async () => {
+    const isInFarmV2 = !!info
+
+    const contract = isInFarmV2 ? (isFarmV21 ? farmV21Contract : farmV2Contract) : farmContract
+
+    if (!contract || !feeValue0 || !feeValue1) {
+      setAttemptingTxn(false)
+      setCollectFeeError('Something went wrong!')
       return
+    }
+
+    const amount0Min = feeValue0.subtract(feeValue0.multiply(basisPointsToPercent(allowedSlippage)))
+    const amount1Min = feeValue1.subtract(feeValue1.multiply(basisPointsToPercent(allowedSlippage)))
+    try {
+      const params = isInFarmV2
+        ? isFarmV21
+          ? [
+              info.fId,
+              [tokenId.toString()],
+              amount0Min.quotient.toString(),
+              amount1Min.quotient.toString(),
+              deadline?.toString(),
+              buildFlagsForFarmV21({
+                isClaimFee: !!feeValue0?.greaterThan('0') && !!feeValue1?.greaterThan('0'),
+                isSyncFee: !!feeValue0?.greaterThan('0') && !!feeValue1?.greaterThan('0'),
+                isClaimReward: false,
+                isReceiveNative: true,
+              }),
+            ]
+          : [
+              info.fId,
+              [tokenId.toString()],
+              amount0Min.quotient.toString(),
+              amount1Min.quotient.toString(),
+              deadline?.toString(),
+              true,
+            ]
+        : [
+            [tokenId.toString()],
+            amount0Min.quotient.toString(),
+            amount1Min.quotient.toString(),
+            poolAddress,
+            true,
+            deadline?.toString(),
+          ]
+
+      const gasEstimation = await contract.estimateGas.claimFee(...params)
+
+      const tx = await contract.claimFee(...params, {
+        gasLimit: calculateGasMargin(gasEstimation),
+      })
+
+      handleBroadcastClaimSuccess(tx)
+    } catch (e) {
+      setShowPendingModal(true)
+      setAttemptingTxn(false)
+      setCollectFeeError(e?.message || JSON.stringify(e))
+    }
+  }
+
+  const collect = async () => {
+    setShowPendingModal(true)
+    setAttemptingTxn(true)
+
+    if (!feeValue0 || !feeValue1 || !positionManager || !account || !tokenId || !library || !deadline || !layout) {
+      setAttemptingTxn(false)
+      setCollectFeeError('Something went wrong!')
+      return
+    }
     // setCollecting(true)
     mixpanelHandler(MIXPANEL_TYPE.ELASTIC_COLLECT_FEES_INITIATED, {
       token_1: token0Shown?.symbol,
       token_2: token1Shown?.symbol,
     })
+
+    if (hasUserDepositedInFarm) {
+      collectFeeFromFarmContract()
+      return
+    }
 
     const { calldata, value } = NonfungiblePositionManager.collectCallParameters({
       tokenId: tokenId.toString(),
@@ -82,6 +209,7 @@ export default function ProAmmFee({
       recipient: account,
       deadline: deadline.toString(),
       havingFee: true,
+      isPositionClosed: liquidity === '0',
     })
 
     const txn = {
@@ -90,63 +218,36 @@ export default function ProAmmFee({
       value,
     }
 
-    library
-      .getSigner()
-      .estimateGas(txn)
-      .then(estimate => {
-        const newTxn = {
-          ...txn,
-          gasLimit: calculateGasMargin(estimate),
-        }
-        return library
-          .getSigner()
-          .sendTransaction(newTxn)
-          .then((response: TransactionResponse) => {
-            addTransactionWithType(response, {
-              type: 'Collect fee',
-              summary:
-                feeValue0.toSignificant(6) +
-                ' ' +
-                feeValue0.currency.symbol +
-                ' and ' +
-                feeValue1.toSignificant(6) +
-                ' ' +
-                feeValue1.currency.symbol,
-              arbitrary: {
-                token_1: token0Shown?.symbol,
-                token_2: token1Shown?.symbol,
-                token_1_amount: feeValue0.toSignificant(6),
-                token_2_amount: feeValue1.toSignificant(6),
-              },
+    try {
+      await library
+        .getSigner()
+        .estimateGas(txn)
+        .then((estimate: BigNumber) => {
+          const newTxn = {
+            ...txn,
+            gasLimit: calculateGasMargin(estimate),
+          }
+          return library
+            .getSigner()
+            .sendTransaction(newTxn)
+            .then((response: TransactionResponse) => {
+              handleBroadcastClaimSuccess(response)
             })
-          })
-      })
-      .catch(error => {
-        console.error(error)
-      })
-  }, [
-    chainId,
-    feeValue0,
-    feeValue1,
-    positionManager,
-    account,
-    tokenId,
-    addTransactionWithType,
-    library,
-    deadline,
-    layout,
-    token0Shown,
-    token1Shown,
-    mixpanelHandler,
-    allowedSlippage,
-  ])
+        })
+    } catch (error: any) {
+      setShowPendingModal(true)
+      setAttemptingTxn(false)
+      setCollectFeeError(error?.message || JSON.stringify(error))
+      console.error(error)
+    }
+  }
   const hasNoFeeToCollect = !(feeValue0?.greaterThan(0) || feeValue1?.greaterThan(0))
 
   if (layout === 0) {
     return (
       <OutlineCard marginTop="1rem" padding="1rem">
         <AutoColumn gap="md">
-          <Text fontSize="16px" fontWeight="500">
+          <Text fontSize="12px" fontWeight="500">
             Your Fee Earnings
           </Text>
           {text && (
@@ -161,7 +262,7 @@ export default function ProAmmFee({
               <Trans>Total Fees Earned</Trans>
             </Text>
             <RowFixed>
-              <Text fontSize={14} fontWeight={500} marginLeft={'6px'}>
+              <Text fontSize={12} fontWeight={500} marginLeft={'6px'}>
                 {formattedNumLong(totalFeeRewardUSD, true)}
               </Text>
             </RowFixed>
@@ -173,7 +274,7 @@ export default function ProAmmFee({
             </Text>
             <RowFixed>
               <CurrencyLogo size="16px" style={{ marginLeft: '8px' }} currency={token0Shown} />
-              <Text fontSize={14} fontWeight={500} marginLeft={'6px'}>
+              <Text fontSize={12} fontWeight={500} marginLeft={'6px'}>
                 {feeValue0 && <FormattedCurrencyAmount currencyAmount={feeValue0} />} {token0Shown.symbol}
               </Text>
             </RowFixed>
@@ -185,7 +286,7 @@ export default function ProAmmFee({
             </Text>
             <RowFixed>
               <CurrencyLogo size="16px" style={{ marginLeft: '8px' }} currency={token1Shown} />
-              <Text fontSize={14} fontWeight={500} marginLeft={'6px'}>
+              <Text fontSize={12} fontWeight={500} marginLeft={'6px'}>
                 {feeValue1 && <FormattedCurrencyAmount currencyAmount={feeValue1} />} {token1Shown.symbol}
               </Text>
             </RowFixed>
@@ -239,54 +340,35 @@ export default function ProAmmFee({
             </Text>
           </RowFixed>
         </RowBetween>
-        {hasUserDepositedInFarm ? (
-          <MouseoverTooltip
-            placement="top"
-            text={t`You need to withdraw your deposited liquidity position from the Farm first`}
-          >
-            <Flex
-              // this flex looks like redundant
-              // but without this, the cursor will be default
-              // as we put pointerEvents=none on the button
-              sx={{
-                cursor: 'not-allowed',
-                width: '100%',
-              }}
-            >
-              <ButtonLight
-                style={{
-                  padding: '10px',
-                  fontSize: '14px',
-                  width: '100%',
-                  pointerEvents: 'none',
-                }}
-                disabled
-              >
-                <Flex alignItems="center" sx={{ gap: '8px' }}>
-                  <Info size={16} />
-                  <Trans>Collect Fees</Trans>
-                </Flex>
-              </ButtonLight>
-            </Flex>
-          </MouseoverTooltip>
-        ) : (
-          <ButtonLight disabled={hasNoFeeToCollect} onClick={collect} style={{ padding: '10px', fontSize: '14px' }}>
-            <Flex alignItems="center" sx={{ gap: '8px' }}>
-              <QuestionHelper
-                placement="top"
-                size={16}
-                text={
-                  hasNoFeeToCollect
-                    ? t`You don't have any fees to collect`
-                    : t`By collecting, you will receive 100% of your fee earnings`
-                }
-                useCurrentColor
-              />
-              <Trans>Collect Fees</Trans>
-            </Flex>
-          </ButtonLight>
-        )}
+        <ButtonLight disabled={hasNoFeeToCollect} onClick={collect} style={{ padding: '10px', fontSize: '14px' }}>
+          <Flex alignItems="center" sx={{ gap: '8px' }}>
+            <QuestionHelper
+              placement="top"
+              size={16}
+              text={
+                hasNoFeeToCollect
+                  ? t`You don't have any fees to collect`
+                  : t`By collecting, you will receive 100% of your fee earnings`
+              }
+              useCurrentColor
+            />
+            <Trans>Collect Fees</Trans>
+          </Flex>
+        </ButtonLight>
       </AutoColumn>
+
+      <TransactionConfirmationModal
+        isOpen={showPendingModal}
+        onDismiss={handleDismiss}
+        hash={txnHash}
+        attemptingTxn={attemptingTxn}
+        pendingText={`Collecting fee reward`}
+        content={() => (
+          <Flex flexDirection={'column'} width="100%">
+            {collectFeeError ? <TransactionErrorContent onDismiss={handleDismiss} message={collectFeeError} /> : null}
+          </Flex>
+        )}
+      />
     </OutlineCard>
   )
 }

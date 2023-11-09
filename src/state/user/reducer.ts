@@ -1,44 +1,70 @@
 import { ChainId } from '@kyberswap/ks-sdk-core'
 import { createReducer } from '@reduxjs/toolkit'
-import { isMobile } from 'react-device-detect'
 
-import { DEFAULT_DEADLINE_FROM_NOW, INITIAL_ALLOWED_SLIPPAGE, SUGGESTED_BASES } from 'constants/index'
+import { SUGGESTED_BASES } from 'constants/bases'
+import {
+  DEFAULT_DEADLINE_FROM_NOW,
+  DEFAULT_SLIPPAGE,
+  DEFAULT_SLIPPAGE_STABLE_PAIR_SWAP,
+  INITIAL_ALLOWED_SLIPPAGE,
+  MAX_NORMAL_SLIPPAGE_IN_BIPS,
+} from 'constants/index'
 import { SupportedLocale } from 'constants/locales'
+import { updateVersion } from 'state/global/actions'
 
-import { updateVersion } from '../global/actions'
 import {
   SerializedPair,
   SerializedToken,
   addSerializedPair,
   addSerializedToken,
+  changeViewMode,
+  permitError,
+  permitUpdate,
+  pinSlippageControl,
   removeSerializedPair,
   removeSerializedToken,
+  revokePermit,
+  setCrossChainSetting,
   toggleFavoriteToken,
+  toggleHolidayMode,
+  toggleKyberAIBanner,
+  toggleKyberAIWidget,
   toggleLiveChart,
-  toggleProLiveChart,
-  toggleTokenInfo,
-  toggleTopTrendingTokens,
+  toggleMyEarningChart,
   toggleTradeRoutes,
-  updateMatchesDarkMode,
-  updateUserDarkMode,
+  toggleUseAggregatorForZap,
+  updateAcceptedTermVersion,
+  updateChainId,
+  updateTokenAnalysisSettings,
   updateUserDeadline,
-  updateUserExpertMode,
+  updateUserDegenMode,
   updateUserLocale,
   updateUserSlippageTolerance,
 } from './actions'
 
 const currentTimestamp = () => new Date().getTime()
+const AUTO_DISABLE_DEGEN_MODE_MINUTES = 30
+
+export enum VIEW_MODE {
+  GRID = 'grid',
+  LIST = 'list',
+}
+
+export type CrossChainSetting = {
+  isSlippageControlPinned: boolean
+  slippageTolerance: number
+  enableExpressExecution: boolean
+}
 
 export interface UserState {
   // the timestamp of the last updateVersion action
   lastUpdateVersionTimestamp?: number
 
-  userDarkMode: boolean | null // the user's choice for dark mode or light mode
-  matchesDarkMode: boolean // whether the dark mode media query matches
-
   userLocale: SupportedLocale | null
 
-  userExpertMode: boolean
+  userDegenMode: boolean
+  userDegenModeAutoDisableTimestamp: number
+  useAggregatorForZap: boolean
 
   // user defined slippage tolerance in bips, used in all txns
   userSlippageTolerance: number
@@ -60,15 +86,13 @@ export interface UserState {
   }
 
   timestamp: number
-  showLiveCharts: {
-    [chainId: number]: boolean
-  }
-  showProLiveChart: boolean
+  showLiveChart: boolean
   showTradeRoutes: boolean
-  showTokenInfo: boolean
-  showTopTrendingSoonTokens: boolean
-
-  favoriteTokensByChainId: Partial<
+  showKyberAIBanner: boolean
+  kyberAIDisplaySettings: {
+    [k: string]: boolean
+  }
+  favoriteTokensByChainId?: Partial<
     Record<
       ChainId,
       {
@@ -77,6 +101,36 @@ export interface UserState {
       }
     >
   >
+  favoriteTokensByChainIdv2: Partial<
+    Record<
+      ChainId,
+      {
+        [address: string]: boolean
+      }
+    >
+  >
+  readonly chainId: ChainId
+  acceptedTermVersion: number | null
+  viewMode: VIEW_MODE
+  holidayMode: boolean
+  permitData: {
+    [account: string]: {
+      [chainId: number]: {
+        [address: string]: {
+          rawSignature?: string
+          deadline?: number
+          value?: string
+          errorCount?: number
+        } | null
+      }
+    }
+  }
+
+  isSlippageControlPinned: boolean
+  kyberAIWidget: boolean
+
+  crossChain: CrossChainSetting
+  myEarningChart: boolean
 }
 
 function pairKey(token0Address: string, token1Address: string) {
@@ -88,48 +142,53 @@ export const getFavoriteTokenDefault = (chainId: ChainId) => ({
   includeNativeToken: true,
 })
 
-export const defaultShowLiveCharts: { [chainId in ChainId]: boolean } = {
-  [ChainId.MAINNET]: true,
-  [ChainId.MATIC]: true,
-  [ChainId.BSCMAINNET]: true,
-  [ChainId.CRONOS]: true,
-  [ChainId.AVAXMAINNET]: true,
-  [ChainId.FANTOM]: true,
-  [ChainId.ARBITRUM]: true,
-  [ChainId.AURORA]: true,
-  [ChainId.BTTC]: false,
-  [ChainId.VELAS]: true,
-  [ChainId.OASIS]: true,
-  [ChainId.OPTIMISM]: true,
-
-  [ChainId.ROPSTEN]: false,
-  [ChainId.RINKEBY]: false,
-  [ChainId.GÖRLI]: false,
-  [ChainId.KOVAN]: false,
-  [ChainId.MUMBAI]: false,
-  [ChainId.BSCTESTNET]: false,
-  [ChainId.CRONOSTESTNET]: false,
-  [ChainId.AVAXTESTNET]: false,
-  [ChainId.ARBITRUM_TESTNET]: false,
-  [ChainId.ETHW]: true,
+export const CROSS_CHAIN_SETTING_DEFAULT = {
+  isSlippageControlPinned: true,
+  slippageTolerance: INITIAL_ALLOWED_SLIPPAGE,
+  enableExpressExecution: false,
 }
 
-export const initialState: UserState = {
-  userDarkMode: null, // default to system preference
-  matchesDarkMode: true,
-  userExpertMode: false,
+const initialState: UserState = {
+  userDegenMode: false,
+  useAggregatorForZap: true,
+  userDegenModeAutoDisableTimestamp: 0,
   userLocale: null,
   userSlippageTolerance: INITIAL_ALLOWED_SLIPPAGE,
   userDeadline: DEFAULT_DEADLINE_FROM_NOW,
   tokens: {},
   pairs: {},
   timestamp: currentTimestamp(),
-  showLiveCharts: { ...defaultShowLiveCharts },
-  showProLiveChart: !isMobile,
+  showLiveChart: true,
   showTradeRoutes: true,
-  showTokenInfo: true,
-  showTopTrendingSoonTokens: true,
+  showKyberAIBanner: true,
+  kyberAIDisplaySettings: {
+    numberOfTrades: true,
+    numberOfHolders: true,
+    tradingVolume: true,
+    netflowToWhaleWallets: true,
+    netflowToCEX: true,
+    volumeOfTransfers: true,
+    top10Holders: true,
+    top25Holders: true,
+    liveCharts: true,
+    supportResistanceLevels: true,
+    liveDEXTrades: true,
+    fundingRateOnCEX: true,
+    liquidationsOnCEX: true,
+    liquidityProfile: true,
+    markets: true,
+  },
   favoriteTokensByChainId: {},
+  favoriteTokensByChainIdv2: {},
+  chainId: ChainId.MAINNET,
+  acceptedTermVersion: null,
+  viewMode: VIEW_MODE.GRID,
+  holidayMode: true,
+  permitData: {},
+  isSlippageControlPinned: true,
+  kyberAIWidget: true,
+  crossChain: CROSS_CHAIN_SETTING_DEFAULT,
+  myEarningChart: true,
 }
 
 export default createReducer(initialState, builder =>
@@ -141,6 +200,10 @@ export default createReducer(initialState, builder =>
         state.userSlippageTolerance = INITIAL_ALLOWED_SLIPPAGE
       }
 
+      if (typeof state.isSlippageControlPinned !== 'boolean') {
+        state.isSlippageControlPinned = initialState.isSlippageControlPinned
+      }
+
       // deadline isnt being tracked in local storage, reset to default
       // noinspection SuspiciousTypeOfGuard
       if (typeof state.userDeadline !== 'number') {
@@ -149,16 +212,22 @@ export default createReducer(initialState, builder =>
 
       state.lastUpdateVersionTimestamp = currentTimestamp()
     })
-    .addCase(updateUserDarkMode, (state, action) => {
-      state.userDarkMode = action.payload.userDarkMode
-      state.timestamp = currentTimestamp()
-    })
-    .addCase(updateMatchesDarkMode, (state, action) => {
-      state.matchesDarkMode = action.payload.matchesDarkMode
-      state.timestamp = currentTimestamp()
-    })
-    .addCase(updateUserExpertMode, (state, action) => {
-      state.userExpertMode = action.payload.userExpertMode
+    .addCase(updateUserDegenMode, (state, action) => {
+      state.userDegenMode = action.payload.userDegenMode
+      if (action.payload.userDegenMode) {
+        state.userDegenModeAutoDisableTimestamp = Date.now() + AUTO_DISABLE_DEGEN_MODE_MINUTES * 60 * 1000
+      } else {
+        // If max slippage <= 19.99%, no need update slippage.
+        if (state.userSlippageTolerance <= MAX_NORMAL_SLIPPAGE_IN_BIPS) {
+          return
+        }
+        // Else, update to default slippage.
+        if (action.payload.isStablePairSwap) {
+          state.userSlippageTolerance = Math.min(state.userSlippageTolerance, DEFAULT_SLIPPAGE_STABLE_PAIR_SWAP)
+        } else {
+          state.userSlippageTolerance = Math.min(state.userSlippageTolerance, DEFAULT_SLIPPAGE)
+        }
+      }
       state.timestamp = currentTimestamp()
     })
     .addCase(updateUserLocale, (state, action) => {
@@ -202,49 +271,100 @@ export default createReducer(initialState, builder =>
       }
       state.timestamp = currentTimestamp()
     })
-    .addCase(toggleLiveChart, (state, { payload: { chainId } }) => {
-      if (typeof state.showLiveCharts?.[chainId] !== 'boolean') {
-        state.showLiveCharts = { ...defaultShowLiveCharts }
-      }
-      state.showLiveCharts[chainId] = !state.showLiveCharts[chainId]
-    })
-    .addCase(toggleProLiveChart, state => {
-      state.showProLiveChart = !state.showProLiveChart
+    .addCase(toggleLiveChart, state => {
+      state.showLiveChart = !state.showLiveChart
     })
     .addCase(toggleTradeRoutes, state => {
       state.showTradeRoutes = !state.showTradeRoutes
     })
-    .addCase(toggleTokenInfo, state => {
-      state.showTokenInfo = !state.showTokenInfo
+
+    .addCase(toggleKyberAIBanner, state => {
+      state.showKyberAIBanner = !state.showKyberAIBanner
     })
-    .addCase(toggleTopTrendingTokens, state => {
-      state.showTopTrendingSoonTokens = !state.showTopTrendingSoonTokens
-    })
-    .addCase(toggleFavoriteToken, (state, { payload: { chainId, isNative, address } }) => {
-      if (!state.favoriteTokensByChainId) {
-        state.favoriteTokensByChainId = {}
+    .addCase(toggleFavoriteToken, (state, { payload: { chainId, address, newValue } }) => {
+      if (!state.favoriteTokensByChainIdv2) {
+        state.favoriteTokensByChainIdv2 = {}
       }
 
-      let favoriteTokens = state.favoriteTokensByChainId[chainId]
-      if (!favoriteTokens) {
-        favoriteTokens = getFavoriteTokenDefault(chainId)
-        state.favoriteTokensByChainId[chainId] = favoriteTokens
+      if (!state.favoriteTokensByChainIdv2[chainId]) {
+        state.favoriteTokensByChainIdv2[chainId] = {}
       }
 
-      if (isNative) {
-        const previousValue = favoriteTokens.includeNativeToken
-        favoriteTokens.includeNativeToken = !previousValue
+      const favoriteTokens = state.favoriteTokensByChainIdv2[chainId]
+      const lowercaseAddress = address.toLowerCase()
+      if (favoriteTokens) {
+        favoriteTokens[lowercaseAddress] = newValue !== undefined ? newValue : !favoriteTokens[lowercaseAddress]
+      }
+    })
+    .addCase(updateChainId, (state, { payload: chainId }) => {
+      state.chainId = chainId
+    })
+    .addCase(updateAcceptedTermVersion, (state, { payload: acceptedTermVersion }) => {
+      state.acceptedTermVersion = acceptedTermVersion
+    })
+    .addCase(updateTokenAnalysisSettings, (state, { payload }) => {
+      if (!state.kyberAIDisplaySettings) {
+        state.kyberAIDisplaySettings = {}
+      }
+      state.kyberAIDisplaySettings[payload] = !state.kyberAIDisplaySettings[payload] ?? false
+    })
+    .addCase(changeViewMode, (state, { payload: viewType }) => {
+      state.viewMode = viewType
+    })
+    .addCase(toggleHolidayMode, state => {
+      const oldMode = state.holidayMode
+      state.holidayMode = !oldMode
+    })
+    .addCase(permitUpdate, (state, { payload: { chainId, address, rawSignature, deadline, value, account } }) => {
+      if (!state.permitData) state.permitData = {}
+      if (!state.permitData[account]) state.permitData[account] = {}
+      if (!state.permitData[account][chainId]) state.permitData[account][chainId] = {}
+
+      state.permitData[account][chainId][address] = {
+        rawSignature,
+        deadline,
+        value,
+        errorCount: state.permitData[account][chainId][address]?.errorCount || 0,
+      }
+    })
+    .addCase(revokePermit, (state, { payload: { chainId, address, account } }) => {
+      if (
+        !state.permitData[account] ||
+        !state.permitData[account][chainId] ||
+        !state.permitData[account][chainId][address]
+      )
         return
-      }
 
-      if (address) {
-        // this is intentionally added, to remove compiler error
-        const index = favoriteTokens.addresses.findIndex(addr => addr === address)
-        if (index === -1) {
-          favoriteTokens.addresses.push(address)
-          return
-        }
-        favoriteTokens.addresses.splice(index, 1)
+      state.permitData[account][chainId][address] = null
+    })
+    .addCase(permitError, (state, { payload: { chainId, address, account } }) => {
+      if (!state.permitData?.[account]?.[chainId]?.[address]) return
+      const { errorCount } = state.permitData[account][chainId][address] || {}
+      state.permitData[account][chainId][address] = {
+        rawSignature: undefined,
+        deadline: undefined,
+        value: undefined,
+        errorCount: (errorCount || 0) + 1,
+      }
+    })
+    .addCase(pinSlippageControl, (state, { payload }) => {
+      state.isSlippageControlPinned = payload
+    })
+    .addCase(setCrossChainSetting, (state, { payload }) => {
+      const setting = state.crossChain || CROSS_CHAIN_SETTING_DEFAULT
+      state.crossChain = { ...setting, ...payload }
+    })
+    .addCase(toggleKyberAIWidget, state => {
+      state.kyberAIWidget = !state.kyberAIWidget
+    })
+    .addCase(toggleMyEarningChart, state => {
+      state.myEarningChart = !state.myEarningChart
+    })
+    .addCase(toggleUseAggregatorForZap, state => {
+      if (state.useAggregatorForZap === undefined) {
+        state.useAggregatorForZap = false
+      } else {
+        state.useAggregatorForZap = !state.useAggregatorForZap
       }
     }),
 )

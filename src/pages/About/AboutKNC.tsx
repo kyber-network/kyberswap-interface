@@ -1,28 +1,41 @@
 import { Trans } from '@lingui/macro'
-import React from 'react'
 import { Archive, Repeat } from 'react-feather'
 import { Link } from 'react-router-dom'
 import { useMedia } from 'react-use'
 import { Flex, Text } from 'rebass'
 import { Pagination } from 'swiper'
-import { Swiper, SwiperSlide } from 'swiper/react/swiper-react'
+import { Swiper, SwiperSlide } from 'swiper/react'
 
 import GeckoterminalIcon from 'assets/images/geckoterminal_dark.png'
-import GeckoterminalIconLight from 'assets/images/geckoterminal_light.png'
 import KNCGraphic from 'assets/images/knc-graphic.png'
 import CoinGecko from 'assets/svg/coingecko_color.svg'
-import CoinGeckoLight from 'assets/svg/coingecko_color_light.svg'
 import CoinMarketCap from 'assets/svg/coinmarketcap.svg'
-import CoinMarketCapLight from 'assets/svg/coinmarketcap_light.svg'
-import KyberDaoLight from 'assets/svg/kyber-dao-light.svg'
 import KyberDao from 'assets/svg/kyber-dao.svg'
 import RocketIcon from 'assets/svg/rocket.svg'
 import TrophyIcon from 'assets/svg/trophy.svg'
+import Argent from 'assets/wallets/argent.svg'
+import ArgentLight from 'assets/wallets/argent_light.svg'
+import Coin98 from 'assets/wallets/coin98.svg'
+import Eidoo from 'assets/wallets/eidoo.svg'
+import Enjin from 'assets/wallets/enjin.svg'
+import KrystalWallet from 'assets/wallets/krystal.svg'
+import KrystalLight from 'assets/wallets/krystal_light.svg'
+import Ledger from 'assets/wallets/ledger.svg'
+import LedgerLight from 'assets/wallets/ledger_light.svg'
+import Metamask from 'assets/wallets/metamask.svg'
+import MetamaskLight from 'assets/wallets/metamask_light.svg'
+import Mew from 'assets/wallets/mew.svg'
+import Torus from 'assets/wallets/torus.svg'
+import Trezor from 'assets/wallets/trezor.svg'
+import TrezorLight from 'assets/wallets/trezor_light.svg'
+import Trust from 'assets/wallets/trust.svg'
+import TrustLight from 'assets/wallets/trust_light.svg'
 import {
   Binance,
   Bithumb,
+  Bitrue,
+  Coinbase,
   Etoro,
-  FTX,
   Gate,
   Gemini,
   Huobi,
@@ -30,10 +43,10 @@ import {
   Krystal,
   Kucoin,
   KyberSwap,
-  Okex,
+  Mexc,
+  Okx,
   TokyoCrypto,
   Upbit,
-  Wazirx,
 } from 'components/ExchangeIcons'
 import { FooterSocialLink } from 'components/Footer/Footer'
 import {
@@ -46,9 +59,10 @@ import {
   OptimismLogo,
   Polygon,
 } from 'components/Icons'
+import { APP_PATHS } from 'constants/index'
+import { useActiveWeb3React } from 'hooks/index'
 import useMixpanel, { MIXPANEL_TYPE } from 'hooks/useMixpanel'
 import useTheme from 'hooks/useTheme'
-import { useDarkModeManager } from 'state/user/hooks'
 import { ExternalLink, StyledInternalLink } from 'theme'
 
 import {
@@ -70,37 +84,38 @@ const LIST_EXCHANGES = [
   { name: 'KyberSwap', logo: <KyberSwap /> },
   { name: 'Krystal', logo: <Krystal /> },
   { name: 'Binance', logo: <Binance /> },
-  { name: 'FTX', logo: <FTX /> },
+  { name: 'Mexc', logo: <Mexc /> },
   { name: 'Etoro', logo: <Etoro /> },
   { name: 'Huobi', logo: <Huobi /> },
   { name: 'Upbit', logo: <Upbit /> },
   { name: 'Kraken', logo: <Kraken /> },
   { name: 'Kucoin', logo: <Kucoin /> },
   { name: 'Gate', logo: <Gate /> },
-  { name: 'Okex', logo: <Okex /> },
+  { name: 'Coinbase', logo: <Coinbase width={160} /> },
   { name: 'Bithumb', logo: <Bithumb /> },
   { name: 'Gemini', logo: <Gemini /> },
-  { name: 'Wazirx', logo: <Wazirx /> },
+  { name: 'Okx', logo: <Okx /> },
   { name: 'TokyoCrypto', logo: <TokyoCrypto /> },
+  { name: 'Bitrue', logo: <Bitrue /> },
 ]
 
 const LIST_WALLETS = [
-  { logo: 'ledger', lightLogo: 'ledger_light' },
-  { logo: 'metamask', lightLogo: 'metamask_light' },
-  { logo: 'coin98', lightLogo: 'coin98' },
-  { logo: 'krystal', lightLogo: 'krystal_light' },
-  { logo: 'trezor', lightLogo: 'trezor_light' },
-  { logo: 'mew', lightLogo: 'mew' },
-  { logo: 'trust', lightLogo: 'trust_light' },
-  { logo: 'enjin', lightLogo: 'enjin' },
-  { logo: 'torus', lightLogo: 'torus' },
-  { logo: 'argent', lightLogo: 'argent_light' },
-  { logo: 'eidoo', lightLogo: 'eidoo' },
+  { logo: Ledger, lightLogo: LedgerLight },
+  { logo: Metamask, lightLogo: MetamaskLight },
+  { logo: Coin98, lightLogo: Coin98 },
+  { logo: KrystalWallet, lightLogo: KrystalLight },
+  { logo: Trezor, lightLogo: TrezorLight },
+  { logo: Mew, lightLogo: Mew },
+  { logo: Trust, lightLogo: TrustLight },
+  { logo: Enjin, lightLogo: Enjin },
+  { logo: Torus, lightLogo: Torus },
+  { logo: Argent, lightLogo: ArgentLight },
+  { logo: Eidoo, lightLogo: Eidoo },
 ]
 
 function AboutKNC() {
+  const { networkInfo } = useActiveWeb3React()
   const theme = useTheme()
-  const [isDarkMode] = useDarkModeManager()
   const above768 = useMedia('(min-width: 768px)')
   const above500 = useMedia('(min-width: 500px)')
 
@@ -188,7 +203,7 @@ function AboutKNC() {
     <div
       style={{
         position: 'relative',
-        background: isDarkMode ? theme.buttonBlack : theme.white,
+        background: theme.buttonBlack,
         width: '100vw',
         overflow: 'hidden',
       }}
@@ -213,7 +228,7 @@ function AboutKNC() {
           >
             <Trans>
               KNC is a utility and governance token and an integral part of Kyber Network and its product KyberSwap -
-              the multi-chain decentralized exchange (DEX) protocol that provides the best rates for traders and
+              the multi-chain decentralized exchange (DEX) protocol that provides superior rates for traders and
               maximizes earnings for liquidity providers.
             </Trans>
           </Text>
@@ -276,7 +291,7 @@ function AboutKNC() {
             <BtnPrimary
               width="216px"
               as={Link}
-              to="/swap"
+              to={APP_PATHS.SWAP + '/' + networkInfo.route}
               onClick={() => mixpanelHandler(MIXPANEL_TYPE.ABOUT_SWAP_CLICKED)}
             >
               <Repeat />
@@ -292,12 +307,7 @@ function AboutKNC() {
             alignItems="center"
             flexDirection={above768 ? 'row' : 'column'}
           >
-            <img
-              width="85%"
-              src={isDarkMode ? KyberDao : KyberDaoLight}
-              alt="KyberDao"
-              style={{ display: above768 ? 'block' : 'none' }}
-            />
+            <img width="85%" src={KyberDao} alt="KyberDao" style={{ display: above768 ? 'block' : 'none' }} />
             <Flex width="100%" flexDirection="column" height="max-content">
               <Text fontSize={['20px', '24px']} fontWeight={500} color={theme.primary}>
                 <Trans>KYBER DAO</Trans>
@@ -318,21 +328,19 @@ function AboutKNC() {
                 alt="KyberDao"
                 style={{ display: above768 ? 'none' : 'block', marginTop: '40px' }}
               />
-              <ExternalLink href="https://kyber.org/vote">
-                <Flex
-                  width={above768 ? '236px' : '100%'}
-                  marginTop={['40px', '48px']}
-                  sx={{ gap: above768 ? '24px' : '16px' }}
-                  justifyContent="center"
-                >
-                  <BtnPrimary>
-                    <Archive />
-                    <Text fontSize="16px" marginLeft="8px">
-                      <Trans>Stake KNC</Trans>
-                    </Text>
-                  </BtnPrimary>
-                </Flex>
-              </ExternalLink>
+
+              <BtnPrimary
+                width={above768 ? '236px' : '100%'}
+                margin="40px 0 0"
+                as={Link}
+                to={APP_PATHS.KYBERDAO_STAKE}
+                onClick={() => mixpanelHandler(MIXPANEL_TYPE.ABOUT_STAKE_KNC_CLICKED)}
+              >
+                <Archive />
+                <Text fontSize="16px" marginLeft="8px">
+                  <Trans>Stake KNC</Trans>
+                </Text>
+              </BtnPrimary>
             </Flex>
           </Flex>
           <Text
@@ -391,12 +399,7 @@ function AboutKNC() {
           {above768 ? (
             <Exchange>
               {LIST_WALLETS.map(wallet => (
-                <img
-                  key={wallet.logo}
-                  src={require(`../../assets/wallets/${isDarkMode ? wallet.logo : wallet.lightLogo}.svg`).default}
-                  alt={wallet.logo}
-                  style={{ margin: 'auto' }}
-                />
+                <img key={wallet.logo} src={wallet.logo} alt={wallet.logo} style={{ margin: 'auto' }} />
               ))}
             </Exchange>
           ) : (
@@ -413,12 +416,7 @@ function AboutKNC() {
               {LIST_WALLETS.map(wallet => (
                 <SwiperSlide key={wallet.logo}>
                   <ExchangeWrapper>
-                    <img
-                      src={require(`../../assets/wallets/${isDarkMode ? wallet.logo : wallet.lightLogo}.svg`).default}
-                      alt={wallet.logo}
-                      width="160px"
-                      style={{ margin: 'auto' }}
-                    />
+                    <img src={wallet.logo} alt={wallet.logo} width="160px" style={{ margin: 'auto' }} />
                   </ExchangeWrapper>
                 </SwiperSlide>
               ))}
@@ -440,17 +438,13 @@ function AboutKNC() {
                 style={{ gap: '48px', alignItems: 'center' }}
               >
                 <ExternalLink href={`https://www.coingecko.com/en/coins/kyber-network-crystal`}>
-                  <img src={isDarkMode ? CoinGecko : CoinGeckoLight} alt="CoinGecko" width="165px" />
+                  <img src={CoinGecko} alt="CoinGecko" width="165px" />
                 </ExternalLink>
                 <ExternalLink href={`https://coinmarketcap.com/currencies/kyber-network-crystal-v2/`}>
-                  <img src={isDarkMode ? CoinMarketCap : CoinMarketCapLight} alt="CoinMarketCap" width="227px" />
+                  <img src={CoinMarketCap} alt="CoinMarketCap" width="227px" />
                 </ExternalLink>
                 <ExternalLink href="https://www.geckoterminal.com/eth/pools/0xa38a0165e82b7a5e8650109e9e54087a34c93020">
-                  <img
-                    src={isDarkMode ? GeckoterminalIcon : GeckoterminalIconLight}
-                    alt="Geckoterminal"
-                    width="235px"
-                  />
+                  <img src={GeckoterminalIcon} alt="Geckoterminal" width="235px" />
                 </ExternalLink>
               </Flex>
             </Flex>
@@ -458,7 +452,7 @@ function AboutKNC() {
           </MoreInfoWrapper>
         </Wrapper>
       </AboutPage>
-      <Footer background={isDarkMode ? theme.background : theme.white}>
+      <Footer background={theme.background}>
         <FooterContainer>
           <Flex flexWrap="wrap" sx={{ gap: '12px' }} justifyContent="center">
             <ExternalLink href={`https://docs.kyberswap.com`}>

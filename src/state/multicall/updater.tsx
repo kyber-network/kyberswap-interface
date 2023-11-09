@@ -1,14 +1,16 @@
 import { Contract } from '@ethersproject/contracts'
+import { ChainId } from '@kyberswap/ks-sdk-core'
 import { useEffect, useMemo, useRef } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
 
-import { useActiveWeb3React } from '../../hooks'
-import { useMulticallContract } from '../../hooks/useContract'
-import useDebounce from '../../hooks/useDebounce'
-import chunkArray from '../../utils/chunkArray'
-import { CancelledError, RetryableError, retry } from '../../utils/retry'
-import { useBlockNumber } from '../application/hooks'
-import { AppDispatch, AppState } from '../index'
+import { useActiveWeb3React } from 'hooks'
+import { useMulticallContract } from 'hooks/useContract'
+import useDebounce from 'hooks/useDebounce'
+import { useBlockNumber } from 'state/application/hooks'
+import { AppDispatch, AppState } from 'state/index'
+import chunkArray from 'utils/chunkArray'
+import { CancelledError, RetryableError, retry } from 'utils/retry'
+
 import {
   Call,
   errorFetchingMulticallResults,
@@ -24,15 +26,15 @@ const CALL_CHUNK_SIZE = 100
  * Fetches a chunk of calls, enforcing a minimum block number constraint
  * @param multicallContract multicall contract to fetch against
  * @param chunk chunk of calls to make
- * @param minBlockNumber minimum block number of the result set
+ * @param blockNumber block number passed as the block tag in the eth_call
  */
-async function fetchChunk(
+export async function fetchChunk(
   multicallContract: Contract,
   chunk: Call[],
-  minBlockNumber: number,
+  blockNumber: number,
 ): Promise<{ results: string[]; blockNumber: number }> {
-  console.debug('Fetching chunk', multicallContract, chunk, minBlockNumber)
-  let resultsBlockNumber, returnData
+  console.debug('Fetching chunk', { multicallContract, chunk, blockNumber })
+  let returnData
 
   try {
     const res = await multicallContract.callStatic.tryBlockAndAggregate(
@@ -42,11 +44,12 @@ async function fetchChunk(
         callData: obj.callData,
         gasLimit: obj.gasRequired ?? 1_000_000,
       })),
+      {
+        blockTag: blockNumber,
+      },
     )
 
-    resultsBlockNumber = res.blockNumber
     returnData = res.returnData.map((item: any) => item[1])
-    // ;[resultsBlockNumber, returnData] = await multicallContract.aggregate(chunk.map(obj => [obj.address, obj.callData]))
   } catch (e) {
     const error: any = e
     if (
@@ -54,16 +57,16 @@ async function fetchChunk(
       (error?.data?.message && error?.data?.message?.indexOf('header not found') !== -1) ||
       error.message?.indexOf('header not found') !== -1
     ) {
-      throw new RetryableError(`header not found for block number ${minBlockNumber}`)
-    } else {
+      throw new RetryableError(`header not found for block number ${blockNumber}`)
+    } else if (error.code === -32603 || error.message?.indexOf('execution ran out of gas') !== -1) {
       if (chunk.length > 1) {
-        if (process.env.NODE_ENV === 'development') {
+        if (import.meta.env.DEV) {
           console.debug('Splitting a chunk in 2', chunk)
         }
         const half = Math.floor(chunk.length / 2)
         const [c0, c1] = await Promise.all([
-          fetchChunk(multicallContract, chunk.slice(0, half), minBlockNumber),
-          fetchChunk(multicallContract, chunk.slice(half, chunk.length), minBlockNumber),
+          fetchChunk(multicallContract, chunk.slice(0, half), blockNumber),
+          fetchChunk(multicallContract, chunk.slice(half, chunk.length), blockNumber),
         ])
         return {
           results: c0.results.concat(c1.results),
@@ -74,11 +77,8 @@ async function fetchChunk(
     console.debug('Failed to fetch chunk inside retry', error)
     throw error
   }
-  if (resultsBlockNumber.toNumber() < minBlockNumber) {
-    console.debug(`Fetched results for old block number: ${resultsBlockNumber.toString()} vs. ${minBlockNumber}`)
-    throw new RetryableError('Fetched for old block number')
-  }
-  return { results: returnData, blockNumber: resultsBlockNumber.toNumber() }
+
+  return { results: returnData, blockNumber }
 }
 
 /**
@@ -87,11 +87,11 @@ async function fetchChunk(
  * @param allListeners the all listeners state
  * @param chainId the current chain id
  */
-export function activeListeningKeys(
+function activeListeningKeys(
   allListeners: AppState['multicall']['callListeners'],
-  chainId?: number,
+  chainId: ChainId,
 ): { [callKey: string]: number } {
-  if (!allListeners || !chainId) return {}
+  if (!allListeners) return {}
   const listeners = allListeners[chainId]
   if (!listeners) return {}
 
@@ -118,13 +118,13 @@ export function activeListeningKeys(
  * @param chainId the current chain id
  * @param latestBlockNumber the latest block number
  */
-export function outdatedListeningKeys(
+function outdatedListeningKeys(
   callResults: AppState['multicall']['callResults'],
   listeningKeys: { [callKey: string]: number },
-  chainId: number | undefined,
+  chainId: ChainId,
   latestBlockNumber: number | undefined,
 ): string[] {
-  if (!chainId || !latestBlockNumber) return []
+  if (!latestBlockNumber) return []
   const results = callResults[chainId]
   // no results at all, load everything
   if (!results) return Object.keys(listeningKeys)
@@ -170,7 +170,7 @@ export default function Updater(): null {
   )
 
   useEffect(() => {
-    if (!latestBlockNumber || !chainId || !multicallContract) return
+    if (!latestBlockNumber || !multicallContract) return
 
     const outdatedCallKeys: string[] = JSON.parse(serializedOutdatedCallKeys)
 

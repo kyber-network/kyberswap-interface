@@ -1,15 +1,17 @@
 import { BigNumber } from '@ethersproject/bignumber'
 import { Token } from '@kyberswap/ks-sdk-core'
-import React from 'react'
 
 import { ZERO_ADDRESS } from 'constants/index'
+import { EVMNetworkInfo } from 'constants/networks/type'
+import { NativeCurrencies } from 'constants/tokens'
 import { useActiveWeb3React } from 'hooks'
 import useMixpanel, { MIXPANEL_TYPE } from 'hooks/useMixpanel'
 import { useTimestampFromBlock } from 'hooks/useTimestampFromBlock'
 import useVesting from 'hooks/useVesting'
-import { useBlockNumber, useTokensPrice } from 'state/application/hooks'
-import { RewardLockerVersion } from 'state/farms/types'
+import { useBlockNumber } from 'state/application/hooks'
+import { RewardLockerVersion } from 'state/farms/classic/types'
 import { useAppDispatch } from 'state/hooks'
+import { useTokenPrices } from 'state/tokenPrices/hooks'
 import { setAttemptingTxn, setShowConfirm, setTxHash, setVestingError } from 'state/vesting/actions'
 import { fixedFormatting } from 'utils/formatBalance'
 
@@ -27,7 +29,7 @@ const RewardLockerSchedules = ({
   const dispatch = useAppDispatch()
   const currentBlockNumber = useBlockNumber()
   const currentTimestamp = Math.round(Date.now() / 1000)
-  const { account, chainId } = useActiveWeb3React()
+  const { account, chainId, networkInfo } = useActiveWeb3React()
   const { vestMultipleTokensAtIndices } = useVesting(rewardLockerAddress)
   const { mixpanelHandler } = useMixpanel()
   if (!schedules) {
@@ -36,22 +38,15 @@ const RewardLockerSchedules = ({
 
   const rewardTokenMap: { [address: string]: Token } = {}
   schedules.forEach(schedule => {
-    const address = (schedule[4] as Token).isNative ? ZERO_ADDRESS : schedule[4].address
+    const address =
+      schedule[4].address === ZERO_ADDRESS ? NativeCurrencies[chainId].wrapped.address : schedule[4].address
+
     if (!rewardTokenMap[address]) {
       rewardTokenMap[address] = schedule[4]
     }
   })
 
-  const rewardTokens = Object.values(rewardTokenMap)
-
-  const rewardPrices = useTokensPrice(rewardTokens)
-  const rewardPriceMap = rewardTokens.reduce((acc, token, index) => {
-    const address = token.isNative ? ZERO_ADDRESS : token.address
-    return {
-      ...acc,
-      [address]: rewardPrices[index],
-    }
-  }, {} as { [address: string]: number })
+  const rewardPriceMap = useTokenPrices(Object.keys(rewardTokenMap))
 
   const info = schedules.reduce<{
     [key: string]: {
@@ -67,7 +62,8 @@ const RewardLockerSchedules = ({
     }
   }>((result, schedule) => {
     if (!currentBlockNumber) return result
-    const address = (schedule[4] as Token).isNative ? ZERO_ADDRESS : schedule[4].address
+    const address =
+      schedule[4].address === ZERO_ADDRESS ? NativeCurrencies[chainId].wrapped.address : schedule[4].address
 
     if (!result[address]) {
       result[address] = {
@@ -132,7 +128,7 @@ const RewardLockerSchedules = ({
   }, {})
 
   const onClaimAll = async () => {
-    if (!chainId || !account) {
+    if (!account) {
       return
     }
 
@@ -178,6 +174,8 @@ const RewardLockerSchedules = ({
     return acc
   }, currentBlockNumber)
 
+  const blockDiff = (maxEndBlock || 0) - (currentBlockNumber || 0)
+
   const endTimestampFromBlock = useTimestampFromBlock(maxEndBlock)
 
   const endTime = schedules.reduce((acc, cur) => {
@@ -188,7 +186,7 @@ const RewardLockerSchedules = ({
     }
 
     return acc
-  }, endTimestampFromBlock || 0)
+  }, endTimestampFromBlock || currentTimestamp + blockDiff * ((networkInfo as EVMNetworkInfo).averageBlockTimeInSeconds || 0))
 
   return <VestingCard info={info} endTime={endTime} remainTime={endTime - currentTimestamp} onClaimAll={onClaimAll} />
 }

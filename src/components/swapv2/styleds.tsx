@@ -1,22 +1,20 @@
 import { transparentize } from 'polished'
 import { useState } from 'react'
 import { Text } from 'rebass'
-import styled, { css } from 'styled-components'
+import styled, { CSSProperties, DefaultTheme, css, keyframes } from 'styled-components'
 
-import { ButtonEmpty } from 'components/Button'
+import { ReactComponent as Alert } from 'assets/images/alert.svg'
+import { AutoColumn } from 'components/Column'
 import Modal, { ModalProps } from 'components/Modal'
 import { Z_INDEXS } from 'constants/styles'
 import useTheme from 'hooks/useTheme'
-import { errorFriendly } from 'utils/dmm'
-
-import { ReactComponent as Alert } from '../../assets/images/alert.svg'
-import { AutoColumn } from '../Column'
+import { friendlyError } from 'utils/errorMessage'
 
 export const PageWrapper = styled.div`
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  padding: 24px 36px;
+  padding: 24px 36px 0;
   gap: 24px;
   width: 100%;
   max-width: 1464px;
@@ -28,54 +26,6 @@ export const PageWrapper = styled.div`
     gap: 16px;
     padding: 20px 16px;
 `};
-`
-
-export const TabContainer = styled.div`
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-
-  @media only screen and (min-width: 768px) {
-    flex-direction: row;
-    justify-content: space-between;
-    align-items: center;
-  }
-`
-
-export const TabWrapper = styled.div`
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-
-  @media only screen and (min-width: 768px) {
-    margin-bottom: 0;
-  }
-`
-
-export const Tab = styled(ButtonEmpty)<{ isActive: boolean }>`
-  width: fit-content;
-  margin-right: 1.5rem;
-  font-weight: 400;
-  padding: 0;
-  padding-bottom: 4px;
-  color: ${({ theme, isActive }) => (isActive ? theme.primary : theme.subText)};
-  border-radius: 0;
-
-  &:hover {
-    text-decoration: none;
-  }
-
-  &:focus {
-    text-decoration: none;
-  }
-
-  &:last-child {
-    margin-right: 0;
-  }
-
-  ${({ theme }) => theme.mediaWidth.upToSmall`
-    margin-right: 12px;
-  `}
 `
 
 export const Container = styled.div`
@@ -101,47 +51,9 @@ export const Wrapper = styled.div`
   background: ${({ theme }) => theme.background};
 `
 
-export const ArrowWrapper = styled.div<{ rotated?: boolean }>`
-  padding: 8px;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  background: ${({ theme }) => theme.buttonBlack};
-  width: fit-content;
-  height: fit-content;
-  cursor: pointer;
-  border-radius: 999px;
+export const BottomGrouping = styled.div``
 
-  transform: rotate(${({ rotated }) => (rotated ? '180deg' : '0')});
-  transition: transform 300ms;
-
-  :hover {
-    opacity: 0.8;
-  }
-`
-
-export const SectionBreak = styled.div`
-  height: 1px;
-  width: 100%;
-  background-color: ${({ theme }) => theme.bg3};
-`
-
-export const BottomGrouping = styled.div`
-  margin-top: 24px;
-`
-
-export const ErrorText = styled(Text)<{ severity?: 0 | 1 | 2 | 3 | 4 }>`
-  color: ${({ theme, severity }) =>
-    severity === 3 || severity === 4
-      ? theme.red1
-      : severity === 2
-      ? theme.yellow2
-      : severity === 1
-      ? theme.text
-      : theme.green1};
-`
-
-export const StyledBalanceMaxMini = styled.button`
+export const StyledBalanceMaxMini = styled.button<{ hover?: boolean }>`
   height: 22px;
   width: 22px;
   background-color: transparent;
@@ -150,27 +62,30 @@ export const StyledBalanceMaxMini = styled.button`
   padding: 0.2rem;
   font-size: 0.875rem;
   font-weight: 400;
-  margin-left: 0.25rem;
   cursor: pointer;
   color: ${({ theme }) => theme.text2};
   display: flex;
   justify-content: center;
   align-items: center;
   float: right;
-
-  :hover {
-    background-color: ${({ theme }) => theme.bg3};
-  }
-  :focus {
-    background-color: ${({ theme }) => theme.bg3};
-    outline: none;
-  }
+  ${({ hover }) =>
+    hover &&
+    css`
+      :hover {
+        background-color: ${({ theme }) => theme.bg3};
+      }
+      :focus {
+        background-color: ${({ theme }) => theme.bg3};
+        outline: none;
+      }
+    `}
 `
 
 export const TruncatedText = styled(Text)`
   text-overflow: ellipsis;
-  width: 220px;
   overflow: hidden;
+  font-size: 24px;
+  font-weight: 500;
 `
 
 // styles
@@ -213,17 +128,17 @@ const SwapCallbackErrorInner = styled.div`
   }
 `
 
-export function SwapCallbackError({ error }: { error: string }) {
+export function SwapCallbackError({ error, style = {} }: { error: string; style?: CSSProperties }) {
   const theme = useTheme()
   const [showDetail, setShowDetail] = useState<boolean>(false)
   return (
-    <SwapCallbackErrorInner>
+    <SwapCallbackErrorInner style={style}>
       <Alert style={{ marginBottom: 'auto' }} />
       <AutoColumn style={{ flexBasis: '100%', margin: '10px 0 auto 8px' }}>
         <Text fontSize="16px" fontWeight="500" color={theme.red} lineHeight={'24px'}>
-          {errorFriendly(error)}
+          {friendlyError(error)}
         </Text>
-        {error !== errorFriendly(error) && (
+        {error !== friendlyError(error) && (
           <Text
             color={theme.primary}
             fontSize="12px"
@@ -234,8 +149,14 @@ export function SwapCallbackError({ error }: { error: string }) {
           </Text>
         )}
         {showDetail && (
-          <Text color={theme.text} fontSize="10px" margin={'10px 0 4px 0'} lineHeight={'16px'}>
-            {error}
+          <Text
+            color={theme.text}
+            fontSize="10px"
+            margin="10px 0 4px 0"
+            lineHeight="16px"
+            sx={{ wordBreak: 'break-word' }}
+          >
+            {typeof error === 'string' ? error : JSON.stringify(error)}
           </Text>
         )}
       </AutoColumn>
@@ -243,19 +164,10 @@ export function SwapCallbackError({ error }: { error: string }) {
   )
 }
 
-export const SwapShowAcceptChanges = styled(AutoColumn)`
-  background-color: ${({ theme }) => transparentize(0.9, theme.primary)};
-  color: ${({ theme }) => theme.primary};
-  padding: 0.5rem;
-  border-radius: 12px;
-  margin-top: 8px;
-`
-
 export const GroupButtonReturnTypes = styled.div`
   display: flex;
-  margin-top: 20px;
   border-radius: 999px;
-  background: ${({ theme }) => theme.tabBackgound};
+  background: ${({ theme }) => theme.tabBackground};
   padding: 2px;
 `
 
@@ -266,40 +178,12 @@ export const ButtonReturnType = styled.div<{ active?: boolean }>`
   display: flex;
   align-items: center;
   justify-content: center;
-  background-color: ${({ theme, active }) => (active ? theme.tabActive : theme.tabBackgound)};
+  background-color: ${({ theme, active }) => (active ? theme.tabActive : theme.tabBackground)};
   color: ${({ theme, active }) => (active ? theme.text : theme.subText)};
   font-size: 12px;
   font-weight: 500;
   cursor: pointer;
   transition: color 300ms;
-`
-
-export const SwapFormActions = styled.div`
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-`
-
-export const KyberTag = styled.div`
-  position: absolute;
-  align-items: center;
-  display: flex;
-  top: 12px;
-  left: 12px;
-  font-weight: 500;
-  color: ${({ theme }) => theme.apr};
-  font-size: 0.75rem;
-  z-index: 2;
-`
-
-export const PriceImpactHigh = styled.div<{ veryHigh?: boolean }>`
-  border-radius: 999px;
-  padding: 12px 16px;
-  background: ${({ theme, veryHigh }) => (veryHigh ? `${theme.red}66` : `${theme.warning}66`)};
-  margin-top: 28px;
-  display: flex;
-  align-items: center;
-  font-size: 12px;
 `
 
 export const SwapFormWrapper = styled.div<{ isShowTutorial?: boolean }>`
@@ -309,6 +193,7 @@ export const SwapFormWrapper = styled.div<{ isShowTutorial?: boolean }>`
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+  gap: 16px;
   @media only screen and (min-width: 1100px) {
     position: ${({ isShowTutorial }) => (isShowTutorial ? 'unset' : 'sticky')};
     /**
@@ -332,6 +217,16 @@ export const InfoComponentsWrapper = styled.div`
   ${({ theme }) => theme.mediaWidth.upToMedium`
     width: 100%;
   `};
+`
+
+export const KyberAIBannerWrapper = styled.div`
+  width: 100%;
+  max-height: 84px;
+  margin-bottom: 16px;
+
+  ${({ theme }) => theme.mediaWidth.upToSmall`
+    max-height: 132px;
+  `}
 `
 
 export const LiveChartWrapper = styled.div`
@@ -408,5 +303,19 @@ export const IconButton = styled(StyledActionButtonSwapForm)<{ enableClickToRefr
   &:hover {
     cursor: default;
     background-color: transparent;
+  }
+`
+
+export const highlight = (theme: DefaultTheme) => keyframes`
+  0% {
+    box-shadow: 0 0 0 0 ${theme.primary};
+  }
+
+  70% {
+    box-shadow: 0 0 0 2px ${theme.primary};
+  }
+
+  100% {
+    box-shadow: 0 0 0 0 ${theme.primary};
   }
 `

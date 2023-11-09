@@ -1,8 +1,6 @@
-import { t } from '@lingui/macro'
-import React from 'react'
 import styled from 'styled-components'
 
-import { escapeRegExp } from '../../utils'
+import { escapeRegExp } from 'utils'
 
 const StyledInput = styled.input<{ error?: boolean; fontSize?: string; align?: string }>`
   width: 0;
@@ -43,21 +41,22 @@ const StyledInput = styled.input<{ error?: boolean; fontSize?: string; align?: s
 
 const inputRegex = RegExp(`^\\d*(?:\\\\[.])?\\d*$`) // match escaped "." characters via in a non-capturing group
 
-export const Input = React.memo(function InnerInput({
+export const Input = function InnerInput({
   value,
   onUserInput,
   placeholder,
+  maxLength = 79,
   ...rest
 }: {
   value: string | number
-  onUserInput: (input: string) => void
+  onUserInput?: (input: string) => void
   error?: boolean
   fontSize?: string
   align?: 'right' | 'left'
 } & Omit<React.HTMLProps<HTMLInputElement>, 'ref' | 'onChange' | 'as'>) {
   const enforcer = (nextUserInput: string) => {
     if (nextUserInput === '' || inputRegex.test(escapeRegExp(nextUserInput))) {
-      onUserInput(nextUserInput)
+      onUserInput?.(nextUserInput)
     }
   }
 
@@ -71,7 +70,7 @@ export const Input = React.memo(function InnerInput({
       }}
       // universal input options
       inputMode="decimal"
-      title={t`Token Amount`}
+      title={value.toString()}
       autoComplete="off"
       autoCorrect="off"
       // text-specific options
@@ -79,11 +78,11 @@ export const Input = React.memo(function InnerInput({
       pattern="^[0-9]*[.,]?[0-9]*$"
       placeholder={placeholder || '0.0'}
       minLength={1}
-      maxLength={79}
+      maxLength={maxLength}
       spellCheck="false"
     />
   )
-})
+}
 
 export default Input
 

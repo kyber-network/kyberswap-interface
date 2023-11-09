@@ -15,15 +15,17 @@ import {
 import { Trans, t } from '@lingui/macro'
 import { captureException } from '@sentry/react'
 import JSBI from 'jsbi'
-import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Flex, Text } from 'rebass'
 
+import { NotificationType } from 'components/Announcement/type'
 import { ButtonConfirmed, ButtonError, ButtonLight, ButtonPrimary } from 'components/Button'
 import { BlackCard } from 'components/Card'
 import { AutoColumn } from 'components/Column'
 import CurrencyInputPanel from 'components/CurrencyInputPanel'
 import CurrencyLogo from 'components/CurrencyLogo'
 import CurrentPrice from 'components/CurrentPrice'
+import Dots from 'components/Dots'
 import DoubleCurrencyLogo from 'components/DoubleLogo'
 import Loader from 'components/Loader'
 import Row, { AutoRow, RowBetween, RowFixed } from 'components/Row'
@@ -33,31 +35,38 @@ import TransactionConfirmationModal, {
   TransactionErrorContent,
 } from 'components/TransactionConfirmationModal'
 import ZapError from 'components/ZapError'
-import FormattedPriceImpact from 'components/swap/FormattedPriceImpact'
-import { Dots } from 'components/swap/styleds'
-import { NETWORKS_INFO } from 'constants/networks'
-import { nativeOnChain } from 'constants/tokens'
-import { useActiveWeb3React } from 'hooks'
+import FormattedPriceImpact from 'components/swapv2/FormattedPriceImpact'
+import { didUserReject } from 'constants/connectors/utils'
+import { APP_PATHS, EIP712Domain } from 'constants/index'
+import { EVMNetworkInfo } from 'constants/networks/type'
+import { NativeCurrencies } from 'constants/tokens'
+import { useActiveWeb3React, useWeb3React } from 'hooks'
 import { useCurrency } from 'hooks/Tokens'
 import { ApprovalState, useApproveCallback } from 'hooks/useApproveCallback'
 import { usePairContract } from 'hooks/useContract'
 import useIsArgentWallet from 'hooks/useIsArgentWallet'
 import useTheme from 'hooks/useTheme'
 import useTransactionDeadline from 'hooks/useTransactionDeadline'
-import { useTokensPrice, useWalletModalToggle } from 'state/application/hooks'
+import { Wrapper } from 'pages/MyPool/styleds'
+import { useNotify, useWalletModalToggle } from 'state/application/hooks'
 import { Field } from 'state/burn/actions'
 import { useBurnState, useDerivedZapOutInfo, useZapOutActionHandlers } from 'state/burn/hooks'
+import { useTokenPrices } from 'state/tokenPrices/hooks'
 import { useTransactionAdder } from 'state/transactions/hooks'
-import { useIsExpertMode, useUserSlippageTolerance } from 'state/user/hooks'
+import { TRANSACTION_TYPE } from 'state/transactions/type'
+import { useDegenModeManager, useUserSlippageTolerance } from 'state/user/hooks'
 import { StyledInternalLink, TYPE, UppercaseText } from 'theme'
-import { calculateGasMargin, formattedNum, getZapContract } from 'utils'
+import { calculateGasMargin, formattedNum } from 'utils'
 import { currencyId } from 'utils/currencyId'
 import { useCurrencyConvertedToNative } from 'utils/dmm'
+import { friendlyError } from 'utils/errorMessage'
 import { formatJSBIValue } from 'utils/formatBalance'
+import { getZapContract } from 'utils/getContract'
+import { formatDisplayNumber } from 'utils/numbers'
 import { computePriceImpactWithoutFee, warningSeverity } from 'utils/prices'
+import { ErrorName } from 'utils/sentry'
 import useDebouncedChangeHandler from 'utils/useDebouncedChangeHandler'
 
-import { Wrapper } from '../Pool/styleds'
 import {
   CurrentPriceWrapper,
   DetailBox,
@@ -80,7 +89,8 @@ export default function ZapOut({
   pairAddress: string
 }) {
   const [currencyA, currencyB] = [useCurrency(currencyIdA) ?? undefined, useCurrency(currencyIdB) ?? undefined]
-  const { account, chainId, library } = useActiveWeb3React()
+  const { account, chainId, isEVM, networkInfo } = useActiveWeb3React()
+  const { library } = useWeb3React()
 
   const nativeA = useCurrencyConvertedToNative(currencyA as Currency)
   const nativeB = useCurrencyConvertedToNative(currencyB as Currency)
@@ -88,7 +98,8 @@ export default function ZapOut({
 
   const theme = useTheme()
 
-  const expertMode = useIsExpertMode()
+  const [isDegenMode] = useDegenModeManager()
+  const notify = useNotify()
 
   // toggle wallet when disconnected
   const toggleWalletModal = useWalletModalToggle()
@@ -161,12 +172,12 @@ export default function ZapOut({
   const [signatureData, setSignatureData] = useState<{ v: number; r: string; s: string; deadline: number } | null>(null)
   const [approval, approveCallback] = useApproveCallback(
     parsedAmounts[Field.LIQUIDITY],
-    !!chainId
+    isEVM
       ? isStaticFeePair
         ? isOldStaticFeeContract
-          ? NETWORKS_INFO[chainId].classic.oldStatic?.zap
-          : NETWORKS_INFO[chainId].classic.static.zap
-        : NETWORKS_INFO[chainId].classic.dynamic?.zap
+          ? (networkInfo as EVMNetworkInfo).classic.oldStatic?.zap
+          : (networkInfo as EVMNetworkInfo).classic.static.zap
+        : (networkInfo as EVMNetworkInfo).classic.dynamic?.zap
       : undefined,
   )
 
@@ -191,12 +202,6 @@ export default function ZapOut({
     // try to gather a signature for permission
     const nonce = await pairContract.nonces(account)
 
-    const EIP712Domain = [
-      { name: 'name', type: 'string' },
-      { name: 'version', type: 'string' },
-      { name: 'chainId', type: 'uint256' },
-      { name: 'verifyingContract', type: 'address' },
-    ]
     const domain = {
       name: isStaticFeePair ? 'KyberSwap LP' : 'KyberDMM LP',
       version: '1',
@@ -212,11 +217,13 @@ export default function ZapOut({
     ]
     const message = {
       owner: account,
-      spender: isStaticFeePair
-        ? isOldStaticFeeContract
-          ? NETWORKS_INFO[chainId].classic.oldStatic?.zap
-          : NETWORKS_INFO[chainId].classic.static.zap
-        : NETWORKS_INFO[chainId].classic.dynamic?.zap,
+      spender: isEVM
+        ? isStaticFeePair
+          ? isOldStaticFeeContract
+            ? (networkInfo as EVMNetworkInfo).classic.oldStatic?.zap
+            : (networkInfo as EVMNetworkInfo).classic.static.zap
+          : (networkInfo as EVMNetworkInfo).classic.dynamic?.zap
+        : undefined,
       value: liquidityAmount.quotient.toString(),
       nonce: nonce.toHexString(),
       deadline: deadline.toNumber(),
@@ -231,23 +238,32 @@ export default function ZapOut({
       message,
     })
 
-    library
-      .send('eth_signTypedData_v4', [account, data])
-      .then(splitSignature)
-      .then(signature => {
-        setSignatureData({
-          v: signature.v,
-          r: signature.r,
-          s: signature.s,
-          deadline: deadline.toNumber(),
+    try {
+      await library
+        .send('eth_signTypedData_v4', [account, data])
+        .then(splitSignature)
+        .then(signature => {
+          setSignatureData({
+            v: signature.v,
+            r: signature.r,
+            s: signature.s,
+            deadline: deadline.toNumber(),
+          })
         })
-      })
-      .catch(error => {
-        // for all errors other than 4001 (EIP-1193 user rejected request), fall back to manual approve
-        if (error?.code !== 4001) {
-          approveCallback()
-        }
-      })
+    } catch (error) {
+      if (didUserReject(error)) {
+        notify(
+          {
+            title: t`Approve failed`,
+            summary: friendlyError(error),
+            type: NotificationType.ERROR,
+          },
+          8000,
+        )
+      } else {
+        approveCallback()
+      }
+    }
   }
 
   // wrapped onUserInput to clear signatures
@@ -263,6 +279,7 @@ export default function ZapOut({
     (typedValue: string): void => onUserInput(Field.LIQUIDITY, typedValue),
     [onUserInput],
   )
+
   const onCurrencyInput = useCallback(
     (typedValue: string): void => onUserInput(independentTokenField, typedValue),
     [independentTokenField, onUserInput],
@@ -271,7 +288,7 @@ export default function ZapOut({
   // tx sending
   const addTransactionWithType = useTransactionAdder()
   async function onRemove() {
-    if (!chainId || !library || !account || !deadline) throw new Error('missing dependencies')
+    if (!isEVM || !library || !account || !deadline) throw new Error('missing dependencies')
     const { [Field.CURRENCY_A]: currencyAmountA, [Field.CURRENCY_B]: currencyAmountB } = parsedAmounts
     if (!currencyAmountA || !currencyAmountB) {
       throw new Error('missing currency amounts')
@@ -360,7 +377,7 @@ export default function ZapOut({
 
     // All methods of new zap static fee contract include factory address as first arg
     if (isStaticFeePair && !isOldStaticFeeContract) {
-      args.unshift(NETWORKS_INFO[chainId].classic.static.factory)
+      args.unshift((networkInfo as EVMNetworkInfo).classic.static.factory)
     }
     const safeGasEstimates: (BigNumber | undefined)[] = await Promise.all(
       methodNames.map(methodName =>
@@ -368,7 +385,7 @@ export default function ZapOut({
           .then(calculateGasMargin)
           .catch(err => {
             // we only care if the error is something other than the user rejected the tx
-            if ((err as any)?.code !== 4001) {
+            if (!didUserReject(err)) {
               console.error(`estimateGas failed`, methodName, args, err)
             }
 
@@ -379,6 +396,11 @@ export default function ZapOut({
               setZapOutError(t`Insufficient Liquidity in the Liquidity Pool to Swap`)
             } else {
               setZapOutError(err?.message)
+              if (!didUserReject(err)) {
+                const e = new Error('estimate gas zap out failed', { cause: err })
+                e.name = ErrorName.RemoveClassicLiquidityError
+                captureException(e, { extra: { args } })
+              }
             }
 
             return undefined
@@ -402,38 +424,49 @@ export default function ZapOut({
         gasLimit: safeGasEstimate,
       })
         .then((response: TransactionResponse) => {
-          if (!!currencyA && !!currencyB) {
+          if (currencyA && currencyB) {
             setAttemptingTxn(false)
-
-            addTransactionWithType(response, {
-              type: 'Remove liquidity',
-              summary: parsedAmounts[independentTokenField]?.toSignificant(6) + ' ' + independentToken?.symbol,
-              arbitrary: {
-                poolAddress: pairAddress,
-                token_1: currencyA.symbol,
-                token_2: currencyB.symbol,
-                remove_liquidity_method: 'single token',
-                amp: new Fraction(amp).divide(JSBI.BigInt(10000)).toSignificant(5),
+            const tokenAmount = parsedAmounts[independentTokenField]
+            const tokenAmountStr = tokenAmount?.toSignificant(6)
+            addTransactionWithType({
+              hash: response.hash,
+              type: TRANSACTION_TYPE.CLASSIC_REMOVE_LIQUIDITY,
+              extraInfo: {
+                tokenAddressIn: currencyA.wrapped.address,
+                tokenAddressOut: currencyB.wrapped.address,
+                tokenSymbolIn: currencyA.symbol,
+                tokenSymbolOut: currencyB.symbol,
+                [(tokenAmount as TokenAmount)?.currency?.address === currencyA?.wrapped.address
+                  ? 'tokenAmountIn'
+                  : 'tokenAmountOut']: tokenAmountStr,
+                contract: pairAddress,
+                arbitrary: {
+                  poolAddress: pairAddress,
+                  token_1: currencyA.symbol,
+                  token_2: currencyB.symbol,
+                  remove_liquidity_method: 'single token',
+                  amp: new Fraction(amp).divide(JSBI.BigInt(10000)).toSignificant(5),
+                },
               },
             })
 
             setTxHash(response.hash)
           }
         })
-        .catch((err: Error) => {
+        .catch((error: Error) => {
           setAttemptingTxn(false)
-          const e = new Error('zap out failed', { cause: err })
-          e.name = 'ZapError'
-          captureException(e, { extra: { args } })
-          // we only care if the error is something _other_ than the user rejected the tx
-          if ((err as any)?.code !== 4001) {
-            console.error(err)
-          }
 
-          if (err.message.includes('INSUFFICIENT_OUTPUT_AMOUNT')) {
-            setZapOutError(t`Insufficient Liquidity in the Liquidity Pool to Swap`)
-          } else {
-            setZapOutError(err?.message)
+          const message = error.message.includes('INSUFFICIENT')
+            ? t`Insufficient liquidity available. Please reload page or increase max slippage and try again!`
+            : error.message
+
+          setZapOutError(message)
+
+          if (!didUserReject(error)) {
+            console.error('Remove Classic Liquidity Error:', { message, error })
+            const e = new Error(friendlyError(message), { cause: error })
+            e.name = ErrorName.RemoveClassicLiquidityError
+            captureException(e, { extra: { args } })
           }
         })
     }
@@ -479,7 +512,12 @@ export default function ZapOut({
         )
       : undefined
 
-  const usdPrices = useTokensPrice([tokenA, tokenB])
+  const tokenAddresses: string[] = useMemo(
+    () => [tokenA, tokenB].map(token => token?.address as string).filter(item => !!item),
+    [tokenA, tokenB],
+  )
+  const marketPriceMap = useTokenPrices(tokenAddresses)
+  const usdPrices = [tokenA, tokenB].map(item => marketPriceMap[item?.address || ''] || 0)
 
   const independentTokenPrice = independentTokenField === Field.CURRENCY_A ? usdPrices[0] : usdPrices[1]
 
@@ -487,16 +525,14 @@ export default function ZapOut({
     parsedAmounts[independentTokenField] && independentTokenPrice
       ? parseFloat((parsedAmounts[independentTokenField] as TokenAmount).toSignificant(6)) * independentTokenPrice
       : 0
-
+  const noZapDependentAmount = noZapAmounts[dependentTokenField]
   const priceImpact =
     priceToSwap &&
-    noZapAmounts[dependentTokenField] &&
+    noZapDependentAmount &&
     amountOut &&
-    computePriceImpact(
-      priceToSwap,
-      noZapAmounts[dependentTokenField] as CurrencyAmount<Currency>,
-      amountOut as CurrencyAmount<Currency>,
-    )
+    !priceToSwap.equalTo(0) &&
+    !noZapDependentAmount.equalTo(0) &&
+    computePriceImpact(priceToSwap, noZapDependentAmount, amountOut as CurrencyAmount<Currency>)
 
   const priceImpactWithoutFee = pair && priceImpact ? computePriceImpactWithoutFee([pair], priceImpact) : undefined
 
@@ -602,6 +638,12 @@ export default function ZapOut({
     )
   }
 
+  const lpToken = useMemo(() => {
+    return (
+      pair && new Token(chainId, pair.liquidityToken?.address, pair.liquidityToken?.decimals, `LP Tokens`, `LP Tokens`)
+    )
+  }, [chainId, pair])
+
   return (
     <>
       <Wrapper>
@@ -635,7 +677,13 @@ export default function ZapOut({
                     </Text>
 
                     <Text fontSize={12} fontWeight={500}>
-                      <Trans>Balance</Trans>: {!userLiquidity ? <Loader /> : userLiquidity?.toSignificant(6)} LP Tokens
+                      <Trans>Balance</Trans>:{' '}
+                      {!userLiquidity ? (
+                        <Loader />
+                      ) : (
+                        formatDisplayNumber(userLiquidity, { style: 'decimal', significantDigits: 6 })
+                      )}{' '}
+                      LP Tokens
                     </Text>
                   </RowBetween>
                   <Row style={{ alignItems: 'flex-end' }}>
@@ -664,17 +712,10 @@ export default function ZapOut({
                   hideLogo
                   value={formattedAmounts[Field.LIQUIDITY]}
                   onUserInput={onLiquidityInput}
-                  showMaxButton={false}
+                  onMax={null}
+                  onHalf={null}
                   disableCurrencySelect
-                  currency={
-                    new Token(
-                      chainId,
-                      pair.liquidityToken?.address,
-                      pair.liquidityToken?.decimals,
-                      `LP Tokens`,
-                      `LP Tokens`,
-                    )
-                  }
+                  currency={lpToken}
                   id="liquidity-amount"
                 />
               )}
@@ -687,7 +728,8 @@ export default function ZapOut({
                   value={formattedAmounts[independentTokenField]}
                   onUserInput={onCurrencyInput}
                   onSwitchCurrency={handleSwitchCurrency}
-                  showMaxButton={false}
+                  onMax={null}
+                  onHalf={null}
                   currency={currencies[independentTokenField]}
                   id="zap-out-input"
                   label={t`Output`}
@@ -706,15 +748,18 @@ export default function ZapOut({
                         replace
                         to={
                           independentTokenField === Field.CURRENCY_A
-                            ? `/remove/${
+                            ? `/${networkInfo.route}${APP_PATHS.CLASSIC_REMOVE_POOL}/${
                                 selectedCurrencyIsETHER
                                   ? currencyId(WETH[chainId], chainId)
-                                  : currencyId(nativeOnChain(chainId), chainId)
+                                  : currencyId(NativeCurrencies[chainId], chainId)
                               }/${currencyId(currencies[dependentTokenField] as Currency, chainId)}/${pairAddress}`
-                            : `/remove/${currencyId(currencies[dependentTokenField] as Currency, chainId)}/${
+                            : `/${networkInfo.route}${APP_PATHS.CLASSIC_REMOVE_POOL}/${currencyId(
+                                currencies[dependentTokenField] as Currency,
+                                chainId,
+                              )}/${
                                 selectedCurrencyIsETHER
                                   ? currencyId(WETH[chainId], chainId)
-                                  : currencyId(nativeOnChain(chainId), chainId)
+                                  : currencyId(NativeCurrencies[chainId], chainId)
                               }/${pairAddress}`
                         }
                       >
@@ -794,7 +839,7 @@ export default function ZapOut({
               <div style={{ position: 'relative' }}>
                 {!account ? (
                   <ButtonLight onClick={toggleWalletModal}>
-                    <Trans>Connect Wallet</Trans>
+                    <Trans>Connect</Trans>
                   </ButtonLight>
                 ) : (
                   <RowBetween>
@@ -807,7 +852,7 @@ export default function ZapOut({
                         signatureData !== null ||
                         !userLiquidity ||
                         userLiquidity.equalTo('0') ||
-                        (priceImpactSeverity > 3 && !expertMode)
+                        (priceImpactSeverity > 3 && !isDegenMode)
                       }
                       margin="0 1rem 0 0"
                       padding="16px"
@@ -831,7 +876,7 @@ export default function ZapOut({
                       disabled={
                         !isValid ||
                         (signatureData === null && approval !== ApprovalState.APPROVED) ||
-                        (priceImpactSeverity > 3 && !expertMode)
+                        (priceImpactSeverity > 3 && !isDegenMode)
                       }
                       error={
                         !!parsedAmounts[Field.CURRENCY_A] &&
@@ -842,7 +887,7 @@ export default function ZapOut({
                       <Text fontSize={16} fontWeight={500}>
                         {error
                           ? error
-                          : priceImpactSeverity > 3 && !expertMode
+                          : priceImpactSeverity > 3 && !isDegenMode
                           ? t`Remove`
                           : priceImpactSeverity > 2
                           ? t`Remove Anyway`

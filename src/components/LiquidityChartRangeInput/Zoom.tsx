@@ -1,6 +1,6 @@
 import { ScaleLinear, ZoomBehavior, ZoomTransform, select, zoom, zoomIdentity } from 'd3'
 import { CSSProperties, useEffect, useMemo, useRef } from 'react'
-import { RefreshCcw, ZoomIn, ZoomOut } from 'react-feather'
+import { RotateCw, ZoomIn, ZoomOut } from 'react-feather'
 import styled from 'styled-components'
 
 import { ButtonGray } from 'components/Button'
@@ -13,19 +13,21 @@ const Wrapper = styled.div<{ count: number }>`
   grid-gap: 6px;
 
   position: absolute;
-  top: -75px;
+  top: -25px;
   right: 0;
+  ${({ theme }) => theme.mediaWidth.upToMedium`
+    top: -64px;
+  `}
 `
 
 const Button = styled(ButtonGray)`
-  background-color: ${({ theme }) => theme.subText + '33'};
+  background-color: transparent;
   &:hover {
-    background-color: ${({ theme }) => theme.buttonBlack};
     color: ${({ theme }) => theme.text};
   }
 
-  width: 32px;
-  height: 32px;
+  width: 28px;
+  height: 28px;
   padding: 4px;
 `
 
@@ -38,7 +40,7 @@ export const ZoomOverlay = styled.rect`
   }
 `
 
-export default function Zoom({
+function Zoom({
   svg,
   xScale,
   setZoom,
@@ -48,6 +50,7 @@ export default function Zoom({
   showResetButton,
   zoomLevels,
   style,
+  className,
 }: {
   svg: SVGElement | null
   xScale: ScaleLinear<number, number>
@@ -58,6 +61,7 @@ export default function Zoom({
   showResetButton: boolean
   zoomLevels: ZoomLevels
   style?: CSSProperties
+  className?: string
 }) {
   const zoomBehavior = useRef<ZoomBehavior<Element, unknown>>()
 
@@ -112,7 +116,7 @@ export default function Zoom({
   }, [zoomInitial, zoomLevels])
 
   return (
-    <Wrapper count={showResetButton ? 3 : 2} style={style}>
+    <Wrapper count={showResetButton ? 3 : 2} style={style} className={className}>
       {showResetButton && (
         <Button
           onClick={() => {
@@ -121,7 +125,7 @@ export default function Zoom({
           }}
           disabled={false}
         >
-          <RefreshCcw size={16} />
+          <RotateCw size={16} />
         </Button>
       )}
       <Button onClick={zoomIn} disabled={false}>
@@ -133,3 +137,5 @@ export default function Zoom({
     </Wrapper>
   )
 }
+
+export default styled(Zoom)``

@@ -1,166 +1,176 @@
 import { Web3Provider } from '@ethersproject/providers'
-import { ChainId } from '@kyberswap/ks-sdk-core'
+import { ChainId, ChainType, getChainType } from '@kyberswap/ks-sdk-core'
+import { Wallet, useWallet } from '@solana/wallet-adapter-react'
 import { useWeb3React as useWeb3ReactCore } from '@web3-react/core'
-import { Web3ReactContextInterface } from '@web3-react/core/dist/types'
-import { ethers } from 'ethers'
-import { useEffect, useState } from 'react'
-import { isMobile } from 'react-device-detect'
+import { Connector } from '@web3-react/types'
+import { useMemo } from 'react'
 import { useSelector } from 'react-redux'
-import { useLocalStorage } from 'react-use'
+import { useSearchParams } from 'react-router-dom'
+import { useCheckBlackjackQuery } from 'services/blackjack'
 
-import { NETWORKS_INFO, SUPPORTED_NETWORKS } from 'constants/networks'
+import { blocto, gnosisSafe, krystalWalletConnectV2, walletConnectV2 } from 'constants/connectors/evm'
+import { MOCK_ACCOUNT_EVM, MOCK_ACCOUNT_SOLANA } from 'constants/env'
+import { isSupportedChainId } from 'constants/networks'
+import { NetworkInfo } from 'constants/networks/type'
+import { SUPPORTED_WALLET, SUPPORTED_WALLETS } from 'constants/wallets'
+import { NETWORKS_INFO } from 'hooks/useChainsConfig'
+import { AppState } from 'state'
+import { useKyberSwapConfig } from 'state/application/hooks'
+import { detectInjectedType, isEVMWallet, isSolanaWallet } from 'utils'
 
-import { injected } from '../connectors'
-import { AppState } from '../state'
+export function useActiveWeb3React(): {
+  chainId: ChainId
+  account?: string
+  walletKey: SUPPORTED_WALLET | undefined
+  walletEVM: { isConnected: boolean; walletKey?: SUPPORTED_WALLET; connector?: Connector; chainId?: ChainId }
+  walletSolana: { isConnected: boolean; walletKey?: SUPPORTED_WALLET; wallet: Wallet | null }
+  isEVM: boolean
+  isSolana: boolean
+  networkInfo: NetworkInfo
+  isWrongNetwork: boolean
+} {
+  const [searchParams] = useSearchParams()
+  const rawChainIdState = useSelector<AppState, ChainId>(state => state.user.chainId) || ChainId.MAINNET
+  const isWrongNetwork = !isSupportedChainId(rawChainIdState)
+  const chainIdState = isWrongNetwork ? ChainId.MAINNET : rawChainIdState
+  /**Hook for EVM infos */
+  const {
+    connector: connectedConnectorEVM,
+    active: isConnectedEVM,
+    account: evmAccount,
+    chainId: chainIdEVM,
+  } = useWeb3React()
+  /**Hook for Solana infos */
+  const { wallet: connectedWalletSolana, connected: isConnectedSolana, publicKey } = useWallet()
 
-export const providers: {
-  [chainId in ChainId]: ethers.providers.JsonRpcProvider
-} = SUPPORTED_NETWORKS.reduce(
-  (acc, val) => {
-    acc[val] = new ethers.providers.JsonRpcProvider(NETWORKS_INFO[val].rpcUrl)
-    return acc
-  },
-  {} as {
-    [chainId in ChainId]: ethers.providers.JsonRpcProvider
-  },
-)
+  const isEVM = useMemo(() => getChainType(chainIdState) === ChainType.EVM, [chainIdState])
+  const isSolana = useMemo(() => getChainType(chainIdState) === ChainType.SOLANA, [chainIdState])
 
-export function useActiveWeb3React(): Web3ReactContextInterface<Web3Provider> & { chainId?: ChainId } {
-  const context = useWeb3ReactCore()
-  // const contextNetwork = useWeb3ReactCore<Web3Provider>(NetworkContextName)
+  const addressEVM = evmAccount ?? undefined
+  const addressSolana = publicKey?.toBase58()
+  const mockAccountParam = searchParams.get('account')
+  const account =
+    isEVM && addressEVM
+      ? mockAccountParam || MOCK_ACCOUNT_EVM || addressEVM
+      : isSolana && addressSolana
+      ? mockAccountParam || MOCK_ACCOUNT_SOLANA || addressSolana
+      : undefined
 
-  const { library, chainId, ...web3React } = context
-  const chainIdWhenNotConnected = useSelector<AppState, ChainId>(state => state.application.chainIdWhenNotConnected)
-  if (context.active && context.chainId) {
-    // const provider = providers[context.chainId as ChainId].cl
-    // provider.provider = { isMetaMask: true }
-    // provider.send = context.library.__proto__.send
-    // provider.jsonRpcFetchFunc = context.library.jsonRpcFetchFunc
-    // return {
-    //   library: provider,
-    //   chainId: context.chainId as ChainId,
-    //   ...web3React
-    // } as Web3ReactContextInterface
-    return context
-  } else {
-    return {
-      library: providers[chainIdWhenNotConnected],
-      chainId: chainIdWhenNotConnected,
-      ...web3React,
-    } as Web3ReactContextInterface
-  }
-}
-
-async function isAuthorized(): Promise<boolean> {
-  if (!window.ethereum) {
-    return false
-  }
-
-  try {
-    const accounts = await window.ethereum.request({ method: 'eth_accounts' })
-
-    if (accounts?.length > 0) {
-      return true
+  const walletKeyEVM = useMemo(() => {
+    if (!isConnectedEVM) return undefined
+    if (connectedConnectorEVM === walletConnectV2) {
+      return 'WALLET_CONNECT'
     }
-    return false
-  } catch {
-    return false
-  }
-}
-
-let globalTried = false
-
-export function useEagerConnect() {
-  const { activate, active } = useWeb3ReactCore() // specifically using useWeb3ReactCore because of what this hook does
-  const [tried, setTried] = useState(false)
-  const [isManuallyDisconnect] = useLocalStorage('user-manually-disconnect')
-
-  useEffect(() => {
-    globalTried = tried
-  }, [tried])
-
-  useEffect(() => {
-    const timeout = setTimeout(() => {
-      if (!globalTried) setTried(true)
-    }, 3000)
-
-    return () => clearTimeout(timeout)
-  }, [])
-
-  useEffect(() => {
-    try {
-      isAuthorized()
-        .then(isAuthorized => {
-          if (isAuthorized && !isManuallyDisconnect) {
-            activate(injected, undefined, true).catch(() => {
-              setTried(true)
-            })
-          } else {
-            if (isMobile && window.ethereum) {
-              activate(injected, undefined, true).catch(() => {
-                setTried(true)
-              })
-            } else {
-              setTried(true)
-            }
-          }
-        })
-        .catch(e => {
-          console.log('Eagerly connect: authorize error', e)
-          setTried(true)
-        })
-    } catch (e) {
-      console.log('Eagerly connect: authorize error', e)
-      setTried(true)
+    if (connectedConnectorEVM === krystalWalletConnectV2) {
+      return 'KRYSTAL_WC'
     }
-  }, [activate, isManuallyDisconnect]) // intentionally only running on mount (make sure it's only mounted once :))
-
-  // if the connection worked, wait until we get confirmation of that to flip the flag
-  useEffect(() => {
-    if (active) {
-      setTried(true)
+    if (connectedConnectorEVM === gnosisSafe) {
+      return 'SAFE'
     }
-  }, [active])
+    if (connectedConnectorEVM === blocto) {
+      return 'BLOCTO'
+    }
+    const detectedWallet = detectInjectedType()
 
-  return tried
-}
+    return (
+      detectedWallet ??
+      (Object.keys(SUPPORTED_WALLETS) as SUPPORTED_WALLET[]).find(walletKey => {
+        const wallet = SUPPORTED_WALLETS[walletKey]
+        return isEVMWallet(wallet) && isConnectedEVM && wallet.connector === connectedConnectorEVM
+      })
+    )
+  }, [connectedConnectorEVM, isConnectedEVM])
 
-/**
- * Use for network and injected - logs user in
- * and out after checking what network theyre on
- */
-export function useInactiveListener(suppress = false) {
-  const { active, error, activate } = useWeb3ReactCore() // specifically using useWeb3React because of what this hook does
-
-  useEffect(() => {
-    const { ethereum } = window
-    if (ethereum && ethereum.on && !active && !error && !suppress) {
-      const handleChainChanged = () => {
-        // eat errors
-        activate(injected, undefined, true).catch(error => {
-          console.error('Failed to activate after chain changed', error)
-        })
-      }
-
-      const handleAccountsChanged = (accounts: string[]) => {
-        if (accounts.length > 0) {
-          // eat errors
-          activate(injected, undefined, true).catch(error => {
-            console.error('Failed to activate after accounts changed', error)
+  const walletKeySolana = useMemo(
+    () =>
+      isConnectedSolana
+        ? (Object.keys(SUPPORTED_WALLETS) as SUPPORTED_WALLET[]).find(walletKey => {
+            const wallet = SUPPORTED_WALLETS[walletKey]
+            return isSolanaWallet(wallet) && wallet.adapter === connectedWalletSolana?.adapter
           })
+        : undefined,
+    [isConnectedSolana, connectedWalletSolana?.adapter],
+  )
+  return {
+    chainId: chainIdState,
+    account,
+    walletKey: isEVM ? walletKeyEVM : walletKeySolana,
+    walletEVM: useMemo(() => {
+      return {
+        isConnected: isConnectedEVM,
+        connector: connectedConnectorEVM,
+        walletKey: walletKeyEVM,
+        chainId: chainIdEVM,
+      }
+    }, [isConnectedEVM, connectedConnectorEVM, walletKeyEVM, chainIdEVM]),
+    walletSolana: useMemo(() => {
+      return {
+        isConnected: isConnectedSolana,
+        wallet: connectedWalletSolana,
+        walletKey: walletKeySolana,
+      }
+    }, [isConnectedSolana, connectedWalletSolana, walletKeySolana]),
+    isEVM: isEVM,
+    isSolana: isSolana,
+    networkInfo: NETWORKS_INFO[chainIdState],
+    isWrongNetwork,
+  }
+}
+
+type Web3React = {
+  connector: Connector
+  library: Web3Provider | undefined
+  chainId: number | undefined
+  account: string | undefined
+  active: boolean
+}
+
+const wrapProvider = (provider: Web3Provider): Web3Provider =>
+  new Proxy(provider, {
+    get(target, prop) {
+      if (prop === 'send') {
+        return (...params: any[]) => {
+          if (params[0] === 'eth_chainId') {
+            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+            // @ts-ignore
+            return target[prop](...params)
+          }
+          throw new Error('There was an error with your transaction.')
         }
       }
+      return target[prop as unknown as keyof Web3Provider]
+    },
+  })
+const cacheProvider = new WeakMap<Web3Provider, Web3Provider>()
+const useWrappedProvider = () => {
+  const { provider, account } = useWeb3ReactCore<Web3Provider>()
+  const { data: blackjackData } = useCheckBlackjackQuery(account ?? '', { skip: !account })
 
-      ethereum.on('chainChanged', handleChainChanged)
-      ethereum.on('accountsChanged', handleAccountsChanged)
+  if (!provider) return undefined
+  if (!blackjackData) return provider
+  if (!blackjackData.blacklisted) return provider
+  let wrappedProvider = cacheProvider.get(provider)
+  if (!wrappedProvider) {
+    wrappedProvider = wrapProvider(provider)
+    cacheProvider.set(provider, wrappedProvider)
+  }
+  return wrappedProvider
+}
 
-      return () => {
-        if (ethereum.removeListener) {
-          ethereum.removeListener('chainChanged', handleChainChanged)
-          ethereum.removeListener('accountsChanged', handleAccountsChanged)
-        }
-      }
-    }
-    return undefined
-  }, [active, error, suppress, activate])
+export function useWeb3React(): Web3React {
+  const { connector, chainId, account, isActive: active } = useWeb3ReactCore<Web3Provider>()
+  const provider = useWrappedProvider()
+
+  return {
+    connector,
+    library: provider,
+    chainId,
+    account,
+    active,
+  }
+}
+
+export const useWeb3Solana = () => {
+  const { connection } = useKyberSwapConfig()
+  return { connection }
 }

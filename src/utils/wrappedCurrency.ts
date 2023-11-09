@@ -1,9 +1,11 @@
-import { ChainId, Currency, WETH } from '@kyberswap/ks-sdk-core'
+import { Currency, Token, WETH } from '@kyberswap/ks-sdk-core'
 
-import { nativeOnChain } from 'constants/tokens'
+import { ZERO_ADDRESS } from 'constants/index'
+import { NativeCurrencies } from 'constants/tokens'
 
 export function unwrappedToken(token: Currency): Currency {
-  if (token.equals(WETH[token.chainId as ChainId])) return nativeOnChain(token.chainId)
+  if (token.equals(WETH[token.chainId])) return NativeCurrencies[token.chainId]
+  if (token instanceof Token && token.address === ZERO_ADDRESS) return NativeCurrencies[token.chainId]
 
   return token
 }

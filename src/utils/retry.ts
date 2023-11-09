@@ -1,4 +1,4 @@
-function wait(ms: number): Promise<void> {
+export function wait(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms))
 }
 
@@ -66,4 +66,12 @@ export function retry<T>(
       rejectCancelled(new CancelledError())
     },
   }
+}
+
+export const timeoutReject = (ms: number, msg = 'timeout'): Promise<never> => {
+  return new Promise((resolve, reject) => {
+    setTimeout(() => {
+      return reject(new Error(msg))
+    }, ms)
+  })
 }

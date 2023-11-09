@@ -3,9 +3,10 @@ import { FeeAmount, Pool } from '@kyberswap/ks-sdk-elastic'
 import { useEffect } from 'react'
 import useSWR from 'swr'
 
+import { POOL_FARM_BASE_URL } from 'constants/env'
 import { ZERO_ADDRESS } from 'constants/index'
-import { NETWORKS_INFO } from 'constants/networks'
-import { nativeOnChain } from 'constants/tokens'
+import { NETWORKS_INFO, isEVM } from 'constants/networks'
+import { NativeCurrencies } from 'constants/tokens'
 import { useActiveWeb3React } from 'hooks'
 import { useAppDispatch } from 'state/hooks'
 import { ElasticPool, RawToken } from 'state/prommPools/useGetElasticPools/useGetElasticPoolsV2'
@@ -21,10 +22,8 @@ interface FarmingPool {
   startTime: string
   endTime: string
   feeTarget: string
-  vestingDuration: string
   farm: {
     id: string // address of fair launch contract
-    rewardLocker: string
   }
   rewardTokensIds: string[]
   totalRewardAmounts: string[]
@@ -44,19 +43,18 @@ interface Response {
 
 const useGetElasticFarms = () => {
   const { chainId } = useActiveWeb3React()
-  const chainRoute = chainId ? NETWORKS_INFO[chainId].internalRoute : ''
+  const endpoint = isEVM(chainId)
+    ? `${POOL_FARM_BASE_URL}/${NETWORKS_INFO[chainId].poolFarmRoute}/api/v1/elastic-new/farm-pools?page=1&perPage=10000`
+    : ''
 
-  // TODO: `chainRoute` may not be correct, update this when BE is available in other chains
-  return useSWR<Response>(
-    `${process.env.REACT_APP_POOL_FARM_BASE_URL}/${chainRoute}/api/v1/elastic/farm-pools?page=1&perPage=10000`,
-    (url: string) => fetch(url).then(resp => resp.json()),
-    {
-      refreshInterval: 15_000,
-    },
-  )
+  return useSWR<Response>(endpoint, (url: string) => fetch(url).then(resp => resp.json()), {
+    revalidateIfStale: false,
+    revalidateOnFocus: false,
+    revalidateOnReconnect: false,
+  })
 }
 
-const FarmUpdaterV2: React.FC<CommonProps> = ({ interval }) => {
+const FarmUpdaterV2: React.FC<CommonProps> = ({}) => {
   const dispatch = useAppDispatch()
   const { chainId } = useActiveWeb3React()
   const { data, error, isValidating } = useGetElasticFarms()
@@ -64,10 +62,8 @@ const FarmUpdaterV2: React.FC<CommonProps> = ({ interval }) => {
 
   useEffect(() => {
     if (isValidating) {
-      console.time('getFarmFromBackend')
       dispatch(setLoading({ chainId, loading: true }))
     } else {
-      console.timeEnd('getFarmFromBackend')
       dispatch(setLoading({ chainId, loading: false }))
     }
   }, [chainId, dispatch, isValidating])
@@ -85,7 +81,6 @@ const FarmUpdaterV2: React.FC<CommonProps> = ({ interval }) => {
         string,
         {
           id: string
-          rewardLocker: string
           pools: FarmingPool[]
         }
       > = {}
@@ -94,7 +89,6 @@ const FarmUpdaterV2: React.FC<CommonProps> = ({ interval }) => {
         if (!poolsByFairLaunchContract[fairLaunchAddr]) {
           poolsByFairLaunchContract[fairLaunchAddr] = {
             id: fairLaunchAddr,
-            rewardLocker: farmingPool.farm.rewardLocker,
             pools: [],
           }
         }
@@ -103,14 +97,14 @@ const FarmUpdaterV2: React.FC<CommonProps> = ({ interval }) => {
       })
 
       const formattedPoolData: ElasticFarm[] = Object.values(poolsByFairLaunchContract).map(
-        ({ id, rewardLocker, pools: rawPools }) => {
+        ({ id, pools: rawPools }) => {
           const pools = rawPools.map(rawPool => {
-            const token0Address = isAddressString(rawPool.pool.token0.id)
-            const token1Address = isAddressString(rawPool.pool.token1.id)
+            const token0Address = isAddressString(chainId, rawPool.pool.token0?.id)
+            const token1Address = isAddressString(chainId, rawPool.pool.token1?.id)
 
             const token0 =
               token0Address === WETH[chainId].address
-                ? nativeOnChain(chainId)
+                ? NativeCurrencies[chainId]
                 : new Token(
                     chainId,
                     token0Address,
@@ -121,7 +115,7 @@ const FarmUpdaterV2: React.FC<CommonProps> = ({ interval }) => {
 
             const token1 =
               token1Address === WETH[chainId].address
-                ? nativeOnChain(chainId)
+                ? NativeCurrencies[chainId]
                 : new Token(
                     chainId,
                     token1Address,
@@ -149,7 +143,6 @@ const FarmUpdaterV2: React.FC<CommonProps> = ({ interval }) => {
               pid: rawPool.pid,
               id: rawPool.id,
               feeTarget: rawPool.feeTarget,
-              vestingDuration: Number(rawPool.vestingDuration),
               token0,
               token1,
               poolAddress: rawPool.pool.id,
@@ -158,14 +151,14 @@ const FarmUpdaterV2: React.FC<CommonProps> = ({ interval }) => {
               poolTvl: Number(rawPool.pool.totalValueLockedUsd),
               rewardTokens: rawPool.rewardTokens.map(token => {
                 return token.id === ZERO_ADDRESS
-                  ? nativeOnChain(chainId)
+                  ? NativeCurrencies[chainId]
                   : new Token(chainId, token.id, Number(token.decimals), token.symbol, token.name)
               }),
               totalRewards: rawPool.rewardTokens.map((token, i) => {
                 const rewardAmount = rawPool.totalRewardAmounts[i]
                 const t =
                   token.id === ZERO_ADDRESS
-                    ? nativeOnChain(chainId)
+                    ? NativeCurrencies[chainId]
                     : new Token(chainId, token.id, Number(token.decimals), token.symbol, token.name)
                 return CurrencyAmount.fromRawAmount(t, rewardAmount)
               }),
@@ -188,7 +181,6 @@ const FarmUpdaterV2: React.FC<CommonProps> = ({ interval }) => {
 
           return {
             id,
-            rewardLocker,
             pools,
           }
         },

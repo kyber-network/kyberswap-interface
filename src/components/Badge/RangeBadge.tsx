@@ -1,12 +1,10 @@
 import { Trans } from '@lingui/macro'
-import React from 'react'
 import { AlertCircle, Info } from 'react-feather'
 import styled from 'styled-components'
 
 import Badge, { BadgeVariant } from 'components/Badge'
+import { MouseoverTooltip } from 'components/Tooltip'
 import useTheme from 'hooks/useTheme'
-
-import { MouseoverTooltip } from '../../components/Tooltip'
 
 const BadgeWrapper = styled.div`
   font-size: 12px;
@@ -24,33 +22,41 @@ export default function RangeBadge({
   removed,
   inRange,
   hideText = false,
+  size = 16,
 }: {
   removed: boolean | undefined
   inRange: boolean | undefined
   hideText?: boolean
+  size?: number
 }) {
   const theme = useTheme()
   return (
     <BadgeWrapper>
       {removed ? (
         <MouseoverTooltip text={<Trans>Your position has 0 liquidity, and is not earning fees</Trans>}>
-          <Badge variant={BadgeVariant.NEGATIVE}>
-            <AlertCircle width={16} height={16} />
-            &nbsp;
-            <BadgeText>
-              <Trans>Closed</Trans>
-            </BadgeText>
+          <Badge variant={BadgeVariant.NEGATIVE} style={{ padding: hideText ? '4px' : undefined }}>
+            <AlertCircle width={size} height={size} />
+            {!hideText && (
+              <>
+                &nbsp;
+                <BadgeText>
+                  <Trans>Closed</Trans>
+                </BadgeText>
+              </>
+            )}
           </Badge>
         </MouseoverTooltip>
       ) : inRange ? (
         <MouseoverTooltip
           text={
-            <Trans>The price of this pool is within your selected range. Your position is currently earning fees</Trans>
+            <Trans>
+              The price of this pool is within your selected range. Your position is currently earning fees.
+            </Trans>
           }
         >
           <Badge variant={BadgeVariant.PRIMARY} style={{ padding: hideText ? '4px' : undefined }}>
             {/* <ActiveDot /> &nbsp; */}
-            <Info size={16} color={theme.primary} />
+            <Info size={size} color={theme.primary} />
             {!hideText && (
               <>
                 &nbsp;
@@ -66,12 +72,12 @@ export default function RangeBadge({
           text={
             <Trans>
               The price of this pool is outside of your selected price range. Currently, your position is not earning
-              any fees or rewards
+              any fees or rewards.
             </Trans>
           }
         >
           <Badge variant={BadgeVariant.WARNING} style={{ padding: hideText ? '4px' : undefined }}>
-            <Info size={16} color={theme.warning} />
+            <Info size={size} color={theme.warning} />
             {!hideText && (
               <>
                 &nbsp;

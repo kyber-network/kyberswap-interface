@@ -9,12 +9,14 @@ import JSBI from 'jsbi'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Flex, Text } from 'rebass'
 
+import { NotificationType } from 'components/Announcement/type'
 import { ButtonConfirmed, ButtonError, ButtonLight, ButtonPrimary } from 'components/Button'
 import { BlackCard } from 'components/Card'
 import { AutoColumn } from 'components/Column'
 import CurrencyInputPanel from 'components/CurrencyInputPanel'
 import CurrencyLogo from 'components/CurrencyLogo'
 import CurrentPrice from 'components/CurrentPrice'
+import Dots from 'components/Dots'
 import DoubleCurrencyLogo from 'components/DoubleLogo'
 import Loader from 'components/Loader'
 import Row, { AutoRow, RowBetween, RowFixed } from 'components/Row'
@@ -23,35 +25,39 @@ import TransactionConfirmationModal, {
   ConfirmationModalContent,
   TransactionErrorContent,
 } from 'components/TransactionConfirmationModal'
-import { Dots } from 'components/swap/styleds'
-import { NETWORKS_INFO } from 'constants/networks'
-import { nativeOnChain } from 'constants/tokens'
-import { useActiveWeb3React } from 'hooks'
+import { didUserReject } from 'constants/connectors/utils'
+import { APP_PATHS, EIP712Domain } from 'constants/index'
+import { EVMNetworkInfo } from 'constants/networks/type'
+import { NativeCurrencies } from 'constants/tokens'
+import { useActiveWeb3React, useWeb3React } from 'hooks'
 import { useCurrency } from 'hooks/Tokens'
 import { ApprovalState, useApproveCallback } from 'hooks/useApproveCallback'
 import { usePairContract } from 'hooks/useContract'
 import useIsArgentWallet from 'hooks/useIsArgentWallet'
 import useTheme from 'hooks/useTheme'
 import useTransactionDeadline from 'hooks/useTransactionDeadline'
-import { useTokensPrice, useWalletModalToggle } from 'state/application/hooks'
+import { Wrapper } from 'pages/MyPool/styleds'
+import { useNotify, useWalletModalToggle } from 'state/application/hooks'
 import { Field } from 'state/burn/actions'
 import { useBurnActionHandlers, useBurnState, useDerivedBurnInfo } from 'state/burn/hooks'
+import { useTokenPrices } from 'state/tokenPrices/hooks'
 import { useTransactionAdder } from 'state/transactions/hooks'
+import { TRANSACTION_TYPE } from 'state/transactions/type'
 import { useUserSlippageTolerance } from 'state/user/hooks'
 import { StyledInternalLink, TYPE, UppercaseText } from 'theme'
+import { calculateGasMargin, calculateSlippageAmount, formattedNum } from 'utils'
+import { currencyId } from 'utils/currencyId'
+import { friendlyError } from 'utils/errorMessage'
+import { formatJSBIValue } from 'utils/formatBalance'
 import {
-  calculateGasMargin,
-  calculateSlippageAmount,
-  formattedNum,
   getDynamicFeeRouterContract,
   getOldStaticFeeRouterContract,
   getStaticFeeRouterContract,
-} from 'utils'
-import { currencyId } from 'utils/currencyId'
-import { formatJSBIValue } from 'utils/formatBalance'
+} from 'utils/getContract'
+import { formatDisplayNumber } from 'utils/numbers'
+import { ErrorName } from 'utils/sentry'
 import useDebouncedChangeHandler from 'utils/useDebouncedChangeHandler'
 
-import { Wrapper } from '../Pool/styleds'
 import {
   CurrentPriceWrapper,
   DetailBox,
@@ -74,18 +80,20 @@ export default function TokenPair({
   pairAddress: string
 }) {
   const [currencyA, currencyB] = [useCurrency(currencyIdA) ?? undefined, useCurrency(currencyIdB) ?? undefined]
-  const { account, chainId, library } = useActiveWeb3React()
+  const { account, chainId, isEVM, networkInfo } = useActiveWeb3React()
+  const { library } = useWeb3React()
 
   const nativeA = currencyA as Currency
   const nativeB = currencyB as Currency
   const [tokenA, tokenB] = useMemo(() => [currencyA?.wrapped, currencyB?.wrapped], [currencyA, currencyB])
 
-  const currencyAIsETHER = !!(chainId && currencyA && currencyA.isNative)
-  const currencyAIsWETH = !!(chainId && currencyA && currencyA.equals(WETH[chainId]))
-  const currencyBIsETHER = !!(chainId && currencyB && currencyB.isNative)
-  const currencyBIsWETH = !!(chainId && currencyB && currencyB.equals(WETH[chainId]))
+  const currencyAIsETHER = !!currencyA?.isNative
+  const currencyAIsWETH = !!currencyA?.equals(WETH[chainId])
+  const currencyBIsETHER = !!currencyB?.isNative
+  const currencyBIsWETH = !!currencyB?.equals(WETH[chainId])
 
   const theme = useTheme()
+  const notify = useNotify()
 
   // toggle wallet when disconnected
   const toggleWalletModal = useWalletModalToggle()
@@ -94,12 +102,12 @@ export default function TokenPair({
   const { independentField, typedValue } = useBurnState()
   const { pair, userLiquidity, parsedAmounts, amountsMin, price, error, isStaticFeePair, isOldStaticFeeContract } =
     useDerivedBurnInfo(currencyA ?? undefined, currencyB ?? undefined, pairAddress)
-  const contractAddress = chainId
+  const contractAddress = isEVM
     ? isStaticFeePair
       ? isOldStaticFeeContract
-        ? NETWORKS_INFO[chainId].classic.oldStatic?.router
-        : NETWORKS_INFO[chainId].classic.static.router
-      : NETWORKS_INFO[chainId].classic.dynamic?.router
+        ? (networkInfo as EVMNetworkInfo).classic.oldStatic?.router
+        : (networkInfo as EVMNetworkInfo).classic.static.router
+      : (networkInfo as EVMNetworkInfo).classic.dynamic?.router
     : undefined
   const amp = pair?.amp || JSBI.BigInt(0)
   const { onUserInput: _onUserInput } = useBurnActionHandlers()
@@ -157,16 +165,10 @@ export default function TokenPair({
     // try to gather a signature for permission
     const nonce = await pairContract.nonces(account)
 
-    const EIP712Domain = [
-      { name: 'name', type: 'string' },
-      { name: 'version', type: 'string' },
-      { name: 'chainId', type: 'uint256' },
-      { name: 'verifyingContract', type: 'address' },
-    ]
     const domain = {
       name: isStaticFeePair ? 'KyberSwap LP' : 'KyberDMM LP',
       version: '1',
-      chainId: chainId,
+      chainId,
       verifyingContract: pair.liquidityToken.address,
     }
     const Permit = [
@@ -178,7 +180,6 @@ export default function TokenPair({
     ]
     const message = {
       owner: account,
-      TransactionErrorContent,
       spender: contractAddress,
       value: liquidityAmount.quotient.toString(),
       nonce: nonce.toHexString(),
@@ -194,23 +195,32 @@ export default function TokenPair({
       message,
     })
 
-    library
-      .send('eth_signTypedData_v4', [account, data])
-      .then(splitSignature)
-      .then(signature => {
-        setSignatureData({
-          v: signature.v,
-          r: signature.r,
-          s: signature.s,
-          deadline: deadline.toNumber(),
+    try {
+      await library
+        .send('eth_signTypedData_v4', [account, data])
+        .then(splitSignature)
+        .then(signature => {
+          setSignatureData({
+            v: signature.v,
+            r: signature.r,
+            s: signature.s,
+            deadline: deadline.toNumber(),
+          })
         })
-      })
-      .catch(error => {
-        // for all errors other than 4001 (EIP-1193 user rejected request), fall back to manual approve
-        if (error?.code !== 4001) {
-          approveCallback()
-        }
-      })
+    } catch (error) {
+      if (didUserReject(error)) {
+        notify(
+          {
+            title: t`Approve failed`,
+            summary: friendlyError(error),
+            type: NotificationType.ERROR,
+          },
+          8000,
+        )
+      } else {
+        approveCallback()
+      }
+    }
   }
 
   // wrapped onUserInput to clear signatures
@@ -238,7 +248,7 @@ export default function TokenPair({
   // tx sending
   const addTransactionWithType = useTransactionAdder()
   async function onRemove() {
-    if (!chainId || !library || !account || !deadline) throw new Error('missing dependencies')
+    if (!library || !account || !deadline) throw new Error('missing dependencies')
     const { [Field.CURRENCY_A]: currencyAmountA, [Field.CURRENCY_B]: currencyAmountB } = parsedAmounts
     if (!currencyAmountA || !currencyAmountB) {
       throw new Error('missing currency amounts')
@@ -341,7 +351,11 @@ export default function TokenPair({
           .then(calculateGasMargin)
           .catch(error => {
             console.error(`estimateGas failed`, methodName, args, error)
-            setRemoveLiquidityError(error.toString())
+            const e = new Error('Remove Classic Liquidity Error', { cause: error })
+            e.name = ErrorName.RemoveClassicLiquidityError
+            captureException(e, { extra: { methodName, args } })
+
+            setRemoveLiquidityError(error?.message || JSON.stringify(error))
             return undefined
           }),
       ),
@@ -365,49 +379,59 @@ export default function TokenPair({
         .then((response: TransactionResponse) => {
           if (!!currencyA && !!currencyB) {
             setAttemptingTxn(false)
-
-            addTransactionWithType(response, {
-              type: 'Remove liquidity',
-              summary:
-                parsedAmounts[Field.CURRENCY_A]?.toSignificant(6) +
-                ' ' +
-                (currencyAIsWETH ? nativeOnChain(chainId).symbol : currencyA.symbol) +
-                ' and ' +
-                parsedAmounts[Field.CURRENCY_B]?.toSignificant(6) +
-                ' ' +
-                (currencyBIsWETH ? nativeOnChain(chainId).symbol : currencyB.symbol),
-              arbitrary: {
-                poolAddress: pairAddress,
-                token_1: currencyA.symbol,
-                token_2: currencyB.symbol,
-                remove_liquidity_method: 'token pair',
-                amp: new Fraction(amp).divide(JSBI.BigInt(10000)).toSignificant(5),
+            const tokenAmountIn = parsedAmounts[Field.CURRENCY_A]?.toSignificant(6) ?? ''
+            const tokenAmountOut = parsedAmounts[Field.CURRENCY_B]?.toSignificant(6) ?? ''
+            const tokenSymbolIn = currencyAIsWETH ? NativeCurrencies[chainId].symbol : currencyA.symbol
+            const tokenSymbolOut = currencyBIsWETH ? NativeCurrencies[chainId].symbol : currencyB.symbol
+            addTransactionWithType({
+              hash: response.hash,
+              type: TRANSACTION_TYPE.CLASSIC_REMOVE_LIQUIDITY,
+              extraInfo: {
+                tokenAmountIn,
+                tokenAmountOut,
+                tokenSymbolIn,
+                tokenSymbolOut,
+                tokenAddressIn: currencyA.wrapped.address,
+                tokenAddressOut: currencyB.wrapped.address,
+                contract: pairAddress,
+                arbitrary: {
+                  poolAddress: pairAddress,
+                  token_1: currencyA.symbol,
+                  token_2: currencyB.symbol,
+                  remove_liquidity_method: 'token pair',
+                  amp: new Fraction(amp).divide(JSBI.BigInt(10000)).toSignificant(5),
+                },
               },
             })
 
             setTxHash(response.hash)
           }
         })
-        .catch((err: Error) => {
+        .catch((error: Error) => {
           setAttemptingTxn(false)
-          const e = new Error('Remove Liquidity Error', { cause: err })
-          e.name = 'RemoveLiquidityError'
-          captureException(e, { extra: { args } })
-          // we only care if the error is something _other_ than the user rejected the tx
-          if ((err as any)?.code !== 4001) {
-            console.error(err)
-          }
 
-          if (err.message.includes('INSUFFICIENT')) {
-            setRemoveLiquidityError(t`Insufficient liquidity available. Please reload page and try again!`)
-          } else {
-            setRemoveLiquidityError(err?.message)
+          const message = error.message.includes('INSUFFICIENT')
+            ? t`Insufficient liquidity available. Please reload page or increase max slippage and try again!`
+            : error.message
+
+          setRemoveLiquidityError(message)
+
+          if (!didUserReject(error)) {
+            console.error('Remove Classic Liquidity Error:', { message, error })
+            const e = new Error(friendlyError(error), { cause: error })
+            e.name = ErrorName.RemoveClassicLiquidityError
+            captureException(e, { extra: { args } })
           }
         })
     }
   }
 
-  const usdPrices = useTokensPrice([tokenA, tokenB])
+  const tokenAddresses: string[] = useMemo(
+    () => [tokenA, tokenB].map(token => token?.address as string).filter(item => !!item),
+    [tokenA, tokenB],
+  )
+  const marketPriceMap = useTokenPrices(tokenAddresses)
+  const usdPrices = [tokenA, tokenB].map(item => marketPriceMap[item?.address || ''] || 0)
 
   const estimatedUsdCurrencyA =
     parsedAmounts[Field.CURRENCY_A] && usdPrices[0]
@@ -569,7 +593,7 @@ export default function TokenPair({
               <TransactionErrorContent onDismiss={handleDismissConfirmation} message={removeLiquidityError} />
             ) : (
               <ConfirmationModalContent
-                title={'You will receive'}
+                title={t`You will receive`}
                 onDismiss={handleDismissConfirmation}
                 topContent={modalHeader}
                 bottomContent={modalBottom}
@@ -589,7 +613,13 @@ export default function TokenPair({
                     </Text>
 
                     <Text fontSize={12} fontWeight={500}>
-                      <Trans>Balance</Trans>: {!userLiquidity ? <Loader /> : userLiquidity?.toSignificant(6)} LP Tokens
+                      <Trans>Balance</Trans>:{' '}
+                      {!userLiquidity ? (
+                        <Loader />
+                      ) : (
+                        formatDisplayNumber(userLiquidity, { style: 'decimal', significantDigits: 6 })
+                      )}{' '}
+                      LP Tokens
                     </Text>
                   </RowBetween>
                   <Row style={{ alignItems: 'flex-end' }}>
@@ -618,7 +648,8 @@ export default function TokenPair({
                   hideLogo
                   value={formattedAmounts[Field.LIQUIDITY]}
                   onUserInput={onLiquidityInput}
-                  showMaxButton={false}
+                  onMax={null}
+                  onHalf={null}
                   disableCurrencySelect
                   currency={
                     new Token(
@@ -640,7 +671,8 @@ export default function TokenPair({
                   <CurrencyInputPanel
                     value={formattedAmounts[Field.CURRENCY_A]}
                     onUserInput={onCurrencyAInput}
-                    showMaxButton={false}
+                    onMax={null}
+                    onHalf={null}
                     currency={currencyA}
                     label={t`Output`}
                     onCurrencySelect={() => null}
@@ -652,8 +684,8 @@ export default function TokenPair({
                     {pairAddress && chainId && (currencyAIsETHER || currencyAIsWETH) && (
                       <StyledInternalLink
                         replace
-                        to={`/remove/${
-                          currencyAIsETHER ? currencyId(WETH[chainId], chainId) : nativeOnChain(chainId).symbol
+                        to={`/${networkInfo.route}${APP_PATHS.CLASSIC_REMOVE_POOL}/${
+                          currencyAIsETHER ? currencyId(WETH[chainId], chainId) : NativeCurrencies[chainId].symbol
                         }/${currencyIdB}/${pairAddress}`}
                       >
                         {currencyAIsETHER ? <Trans>Use Wrapped Token</Trans> : <Trans>Use Native Token</Trans>}
@@ -666,7 +698,8 @@ export default function TokenPair({
                   <CurrencyInputPanel
                     value={formattedAmounts[Field.CURRENCY_B]}
                     onUserInput={onCurrencyBInput}
-                    showMaxButton={false}
+                    onMax={null}
+                    onHalf={null}
                     currency={currencyB}
                     onCurrencySelect={() => null}
                     disableCurrencySelect={true}
@@ -677,8 +710,8 @@ export default function TokenPair({
                     {pairAddress && chainId && (currencyBIsWETH || currencyBIsETHER) && (
                       <StyledInternalLink
                         replace
-                        to={`/remove/${currencyIdA}/${
-                          currencyBIsETHER ? currencyId(WETH[chainId], chainId) : nativeOnChain(chainId).symbol
+                        to={`/${networkInfo.route}${APP_PATHS.CLASSIC_REMOVE_POOL}/${currencyIdA}/${
+                          currencyBIsETHER ? currencyId(WETH[chainId], chainId) : NativeCurrencies[chainId].symbol
                         }/${pairAddress}`}
                       >
                         {currencyBIsETHER ? <Trans>Use Wrapped Token</Trans> : <Trans>Use Native Token</Trans>}
@@ -737,7 +770,7 @@ export default function TokenPair({
               <div style={{ position: 'relative' }}>
                 {!account ? (
                   <ButtonLight onClick={toggleWalletModal}>
-                    <Trans>Connect Wallet</Trans>
+                    <Trans>Connect</Trans>
                   </ButtonLight>
                 ) : (
                   <RowBetween>

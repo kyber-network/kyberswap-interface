@@ -1,10 +1,10 @@
 import { ChainId, Currency, CurrencyAmount, Token, TokenAmount } from '@kyberswap/ks-sdk-core'
+import JSBI from 'jsbi'
 import { useMemo } from 'react'
 
 import { useActiveWeb3React } from 'hooks'
+import { useAllTokenBalances, useNativeBalance } from 'state/wallet/hooks'
 import { isTokenNative } from 'utils/tokenInfo'
-
-import { useAllTokenBalances, useETHBalances } from '../../state/wallet/hooks'
 
 // compare two token amounts with highest one coming first
 function balanceComparator(
@@ -12,7 +12,14 @@ function balanceComparator(
   balanceB?: TokenAmount | CurrencyAmount<Currency>,
 ) {
   if (balanceA && balanceB) {
-    return balanceA.greaterThan(balanceB) ? -1 : balanceA.equalTo(balanceB) ? 0 : 1
+    return JSBI.greaterThan(
+      JSBI.multiply(balanceA.quotient, balanceB.decimalScale),
+      JSBI.multiply(balanceB.quotient, balanceA.decimalScale),
+    )
+      ? -1
+      : balanceA.equalTo(balanceB)
+      ? 0
+      : 1
   } else if (balanceA && balanceA.greaterThan('0')) {
     return -1
   } else if (balanceB && balanceB.greaterThan('0')) {
@@ -26,7 +33,7 @@ function getTokenComparator(
     [tokenAddress: string]: TokenAmount | undefined
   },
   ethBalance: CurrencyAmount<Currency> | undefined,
-  chainId: ChainId | undefined,
+  chainId: ChainId,
 ): (tokenA: Token, tokenB: Token) => number {
   return function sortTokens(tokenA: Token, tokenB: Token): number {
     // -1 = a is first
@@ -48,20 +55,18 @@ function getTokenComparator(
     }
   }
 }
-const EMPTY_ARRAY: any = []
-export function useTokenComparator(inverted: boolean, containsETH = false): (tokenA: Token, tokenB: Token) => number {
-  const balances = useAllTokenBalances()
-  const { account, chainId } = useActiveWeb3React()
-  const accounts = useMemo(() => (containsETH ? [account] : EMPTY_ARRAY), [containsETH, account])
-  const ethBalance = useETHBalances(accounts)
-  const value = Object.values(ethBalance)[0]
-  // eslint-disable-next-line
-  const memoEthBalance = useMemo(() => value, [value?.toExact()]) // do not put value dependency here
+
+const EMPTY_OBJECT = {}
+export function useTokenComparator(inverted: boolean, customChain?: ChainId): (tokenA: Token, tokenB: Token) => number {
+  const { chainId: currentChain } = useActiveWeb3React()
+  const chainId = customChain || currentChain
+  const balances = useAllTokenBalances(chainId)
+  const ethBalance = useNativeBalance(chainId)
   return useMemo(() => {
-    const comparator = getTokenComparator(balances ?? {}, memoEthBalance, chainId)
+    const comparator = getTokenComparator(balances ?? EMPTY_OBJECT, ethBalance, chainId)
     if (inverted) {
       return (tokenA: Token, tokenB: Token) => comparator(tokenA, tokenB) * -1
     }
     return comparator
-  }, [balances, inverted, memoEthBalance, chainId])
+  }, [balances, inverted, ethBalance, chainId])
 }

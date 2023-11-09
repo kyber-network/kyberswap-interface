@@ -1,5 +1,4 @@
 import { Trans } from '@lingui/macro'
-import React from 'react'
 import { Repeat } from 'react-feather'
 import { Link } from 'react-router-dom'
 import { useMedia } from 'react-use'
@@ -7,10 +6,13 @@ import { Box, Flex, Text } from 'rebass'
 
 import { ButtonLight, ButtonPrimary } from 'components/Button'
 import { MoneyBagOutline } from 'components/Icons'
+import { APP_PATHS } from 'constants/index'
+import { useActiveWeb3React } from 'hooks'
 import useMixpanel, { MIXPANEL_TYPE } from 'hooks/useMixpanel'
 import useTheme from 'hooks/useTheme'
 
 const KyberSwapGeneralIntro = () => {
+  const { networkInfo, isSolana } = useActiveWeb3React()
   const above768 = useMedia('(min-width: 768px)')
   const theme = useTheme()
   const { mixpanelHandler } = useMixpanel()
@@ -27,8 +29,8 @@ const KyberSwapGeneralIntro = () => {
         }}
       >
         <Trans>
-          KyberSwap is a decentralized exchange (DEX) aggregator. We provide our traders with the{' '}
-          <b>best token prices</b> by analyzing rates across thousands of exchanges instantly!
+          KyberSwap is a decentralized exchange (DEX) aggregator. We provide our traders with{' '}
+          <b>superior token prices</b> by analyzing rates across thousands of exchanges instantly!
         </Trans>
       </Text>
     )
@@ -58,7 +60,7 @@ const KyberSwapGeneralIntro = () => {
       <ButtonPrimary
         onClick={() => mixpanelHandler(MIXPANEL_TYPE.ABOUT_SWAP_CLICKED)}
         as={Link}
-        to="/swap?highlightBox=true"
+        to={`${APP_PATHS.SWAP}/${networkInfo.route}?highlightBox=true`}
         style={{
           width: '216px',
           padding: '10px 12px',
@@ -77,7 +79,7 @@ const KyberSwapGeneralIntro = () => {
     return (
       <ButtonLight
         as={Link}
-        to={'/pools?tab=elastic'}
+        to={`${APP_PATHS.POOLS}/${networkInfo.route}?tab=elastic`}
         onClick={() => mixpanelHandler(MIXPANEL_TYPE.ABOUT_START_EARNING_CLICKED)}
         style={{
           width: '216px',
@@ -88,6 +90,41 @@ const KyberSwapGeneralIntro = () => {
           <Trans>Start Earning</Trans>
         </Text>
       </ButtonLight>
+    )
+  }
+
+  if (above768 && isSolana) {
+    return (
+      <Box
+        style={{
+          marginTop: '36px',
+          display: 'flex',
+          flexFlow: 'column',
+          alignItems: 'center',
+          gap: '36px',
+          padding: '0px 80px',
+        }}
+      >
+        <Text
+          as="span"
+          sx={{
+            fontWeight: 400,
+            fontSize: '18px',
+            lineHeight: '28px',
+            textAlign: 'center',
+          }}
+        >
+          <Trans>
+            KyberSwap is a decentralized exchange (DEX) aggregator. We provide our traders with{' '}
+            <b>superior token prices</b> by analyzing rates across thousands of exchanges instantly!
+          </Trans>{' '}
+          <Trans>
+            KyberSwap is also an automated market maker (AMM) with industry-leading liquidity protocols and{' '}
+            <b>concentrated liquidity</b>. Liquidity providers can add liquidity to our pools & <b>earn fees</b>!
+          </Trans>
+        </Text>
+        {renderSwapNowButton()}
+      </Box>
     )
   }
 
@@ -126,27 +163,43 @@ const KyberSwapGeneralIntro = () => {
         rowGap: '48px',
       }}
     >
-      <Flex
-        flexDirection={'column'}
-        sx={{
-          alignItems: 'center',
-          rowGap: '16px',
-        }}
-      >
-        {renderKyberSwapIntroDEX()}
-        {renderSwapNowButton()}
-      </Flex>
+      {isSolana ? (
+        <Flex
+          flexDirection={'column'}
+          sx={{
+            alignItems: 'center',
+            rowGap: '16px',
+          }}
+        >
+          {renderKyberSwapIntroDEX()}
+          {renderKyberSwapIntroAMM()}
+          {renderSwapNowButton()}
+        </Flex>
+      ) : (
+        <>
+          <Flex
+            flexDirection={'column'}
+            sx={{
+              alignItems: 'center',
+              rowGap: '16px',
+            }}
+          >
+            {renderKyberSwapIntroDEX()}
+            {renderSwapNowButton()}
+          </Flex>
 
-      <Flex
-        flexDirection={'column'}
-        sx={{
-          alignItems: 'center',
-          rowGap: '16px',
-        }}
-      >
-        {renderKyberSwapIntroAMM()}
-        {renderStartEarningButton()}
-      </Flex>
+          <Flex
+            flexDirection={'column'}
+            sx={{
+              alignItems: 'center',
+              rowGap: '16px',
+            }}
+          >
+            {renderKyberSwapIntroAMM()}
+            {renderStartEarningButton()}
+          </Flex>
+        </>
+      )}
     </Flex>
   )
 }

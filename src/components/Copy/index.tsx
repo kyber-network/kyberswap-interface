@@ -1,58 +1,122 @@
-import React, { CSSProperties } from 'react'
-import { CheckCircle, Copy } from 'react-feather'
-import styled from 'styled-components'
+import React, { CSSProperties, ReactNode, forwardRef, useCallback } from 'react'
+import { CheckCircle } from 'react-feather'
+import styled, { keyframes } from 'styled-components'
 
-import useCopyClipboard from '../../hooks/useCopyClipboard'
+import CopyIcon from 'components/Icons/CopyIcon'
+import { RowFit } from 'components/Row'
+import useCopyClipboard from 'hooks/useCopyClipboard'
 
-const CopyIcon = styled.div<{ margin?: string }>`
+const Wrapper = styled.div<{ margin?: string; size?: string }>`
   flex-shrink: 0;
-  margin-left: 4px;
-  ${({ margin }) => `margin: ${margin};`}
+  margin-left: ${({ margin }) => margin || '4px'};
   text-decoration: none;
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
   :hover,
   :active,
   :focus {
-    text-decoration: none;
     opacity: 0.8;
-    cursor: pointer;
-    color: ${({ theme }) => theme.text2};
   }
 `
 
-const TransactionStatusText = styled.span`
-  font-size: 0.825rem;
-  ${({ theme }) => theme.flexRowNoWrap};
-  align-items: center;
+const copy = keyframes`
+  0%{
+    transform: translateY(0);
+    visibility: visible;
+  }
+  20%{
+    transform: translateY(100%);
+    visibility: hidden;
+  }
+  80%{
+    transform: translateY(-100%);
+    visibility: hidden;
+  }
+  100%{
+    transform: translateY(0);
+    visibility: visible;
+  }
+`
+const check = keyframes`
+  0%{
+    transform: translateY(-100%);
+  }
+  20%{
+    transform: translateY(0);
+  }
+  80%{
+    transform: translateY(0);
+  }
+  100%{
+    transform: translateY(100%);
+  }
 `
 
-export default function CopyHelper({
-  toCopy,
-  margin,
-  style = {},
-}: {
+const CopyIconWrapper = styled.div`
+  position: absolute;
+  display: flex;
+  align-items: center;
+  left: 0;
+  &.copied {
+    animation: ${copy} 1.5s;
+  }
+`
+const CheckIconWrapper = styled.div`
+  transform: translateY(-100%);
+  color: ${({ theme }) => theme.primary};
+  &.copied {
+    animation: ${check} 1.5s;
+  }
+`
+
+type Props = {
   toCopy: string
   children?: React.ReactNode
   margin?: string
   style?: CSSProperties
-}) {
-  const [isCopied, setCopied] = useCopyClipboard()
+  size?: string | number
+  text?: ReactNode
+  color?: string
+}
 
-  const onCopy = (event: React.MouseEvent<HTMLDivElement, MouseEvent>) => {
-    event.stopPropagation()
-    setCopied(toCopy)
-  }
+const CopyHelper = forwardRef<HTMLDivElement, Props>(function CopyHelper(
+  { toCopy, margin, style = {}, size, text, color },
+  ref,
+) {
+  const [isCopied, setCopied] = useCopyClipboard(2000)
+
+  const onCopy = useCallback(
+    (event: React.MouseEvent<HTMLDivElement, MouseEvent>) => {
+      event.stopPropagation()
+      setCopied(toCopy)
+    },
+    [toCopy, setCopied],
+  )
+  const copyIcon = (
+    <>
+      <CopyIconWrapper className={isCopied ? 'copied' : ''} style={{ color: color }}>
+        <CopyIcon size={size || 14} />
+      </CopyIconWrapper>
+      <CheckIconWrapper className={isCopied ? 'copied' : ''}>
+        <CheckCircle size={size || 14} />
+      </CheckIconWrapper>
+    </>
+  )
 
   return (
-    <CopyIcon onClick={onCopy} margin={margin} style={style}>
-      {isCopied ? (
-        <TransactionStatusText>
-          <CheckCircle size={'14'} />
-        </TransactionStatusText>
+    <Wrapper ref={ref} onMouseDown={onCopy} margin={margin} style={style}>
+      {text ? (
+        <RowFit>
+          {copyIcon}&nbsp;{text}
+        </RowFit>
       ) : (
-        <TransactionStatusText>
-          <Copy size={'14'} />
-        </TransactionStatusText>
+        copyIcon
       )}
-    </CopyIcon>
+    </Wrapper>
   )
-}
+})
+
+export default CopyHelper
