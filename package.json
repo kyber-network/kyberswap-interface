@@ -196,6 +196,79 @@
     "vite-tsconfig-paths": "^4.0.8"
   },
   "resolutions": {
+
+    "@kyberswap/ks-sdk-core": "^0.0.16",
+    "trezor-connect": "8.1.15",
+    "react-error-overlay": "6.0.9"
+  },
+  "scripts": {
+    "i18n:extract": "lingui extract",
+    "i18n:compile": "lingui compile",
+    "i18n": "yarn i18n:extract && yarn i18n:compile",
+    "start": "react-app-rewired start",
+    "start-local": "env-cmd -f .env.local react-app-rewired start",
+    "start-dev": "env-cmd -f .env.dev react-app-rewired start",
+    "start-stg": "env-cmd -f .env.stg react-app-rewired start",
+    "start-production": "env-cmd -f .env.production react-app-rewired start",
+    "build": "yarn i18n && env-cmd -f .env react-app-rewired build",
+    "build-dev": "yarn i18n && env-cmd -f .env.dev react-app-rewired build",
+    "build-stg": "yarn i18n && env-cmd -f .env.stg react-app-rewired build",
+    "build-prod": "yarn i18n && env-cmd -f .env.production react-app-rewired build",
+    "test": "react-scripts test --env=jsdom",
+    "eject": "react-scripts eject",
+    "analyze": "source-map-explorer 'build/static/js/*.js'",
+    "lint": "yarn eslint ."
+  },
+  "browserslist": [
+    ">0.2%",
+    "not dead",
+    "not op_mini all"
+  ],
+  "license": "GPL-3.0-or-later",
+  "dependencies": {
+    "@apollo/client": "^3.3.11",
+    "@datadog/browser-rum": "^4.21.2",
+    "@kyberswap/ks-sdk-classic": "^0.0.13",
+    "@kyberswap/ks-sdk-core": "^0.0.16",
+    "@kyberswap/ks-sdk-elastic": "^0.0.43",
+    "@lingui/react": "^3.14.0",
+    "@sentry/react": "^7.11.1",
+    "@sentry/tracing": "^7.11.1",
+    "@typeform/embed-react": "^1.2.4",
+    "aos": "^2.3.4",
+    "d3": "^7.3.0",
+    "dayjs": "^1.10.7",
+    "env-cmd": "^10.1.0",
+    "eslint-plugin-unused-imports": "^2.0.0",
+    "find-replacement-tx": "^1.2.3",
+    "firebase": "^9.8.2",
+    "graphql": "^15.5.0",
+    "graphql-request": "^3.7.0",
+    "html2canvas": "1.4.1",
+    "jsbi": "^3.1.4",
+    "mixpanel-browser": "^2.45.0",
+    "ms.macro": "^2.0.0",
+    "numbro": "^2.3.6",
+    "numeral": "^2.0.6",
+    "react-app-rewire-styled-components": "^3.0.2",
+    "react-app-rewired": "^2.2.1",
+    "react-copy-to-clipboard": "^5.0.4",
+    "react-google-recaptcha": "^2.1.0",
+    "react-gtm-module": "^2.0.11",
+    "react-helmet": "^6.1.0",
+    "react-indiana-drag-scroll": "^2.0.1",
+    "react-loading-skeleton": "^3.1.0",
+    "react-use": "^15.3.4",
+    "react-virtualized-auto-sizer": "^1.0.7",
+    "react-window": "^1.8.7",
+    "react-window-infinite-loader": "^1.0.8",
+    "recharts": "^2.1.13",
+    "swiper": "8.0.7",
+    "swr": "^1.0.1",
+    "ua-parser-js": "^1.0.2",
+    "uuidv4": "^6.2.12",
+    "walktour": "^5.1.1"
+
     "@kyberswap/ks-sdk-core": "1.0.13",
     "babel-plugin-lodash/@babel/types": "~7.20.0",
     "react-error-overlay": "6.0.9",
@@ -203,5 +276,6 @@
     "@lingui/cli": "3.14.0",
     "@lingui/core": "3.14.0",
     "@lingui/conf": "3.16.0"
+
   }
 }

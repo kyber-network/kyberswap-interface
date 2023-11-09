@@ -2,9 +2,14 @@ import { Currency, CurrencyAmount, Price, Token } from '@kyberswap/ks-sdk-core'
 import { Position } from '@kyberswap/ks-sdk-elastic'
 import { Trans, t } from '@lingui/macro'
 import { BigNumber } from 'ethers'
+
+import html2canvas from 'html2canvas'
+import { stringify } from 'qs'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
+
 import mixpanel from 'mixpanel-browser'
 import { stringify } from 'querystring'
-import React, { useEffect, useMemo, useState } from 'react'
+
 import { Link } from 'react-router-dom'
 import { Flex, Text } from 'rebass'
 import styled from 'styled-components'
@@ -162,7 +167,11 @@ function PositionListItem({
   } = positionDetails
 
   const { farms } = useElasticFarms()
+
+  const cardRef = useRef<HTMLDivElement>()
+
   const { farms: farmV2s, userInfo } = useElasticFarmsV2()
+
 
   let farmAddress = ''
   let pid = ''
@@ -305,6 +314,7 @@ function PositionListItem({
     return ''
   })()
 
+
   const [showQuickZap, setShowQuickZap] = useState(false)
 
   if (!position || !priceLower || !priceUpper) return <ContentLoader />
@@ -323,6 +333,7 @@ function PositionListItem({
           tokenId={positionDetails.tokenId.toString()}
           isFarmActive={hasActiveFarm}
           isFarmV2Active={hasActiveFarmV2}
+
         />
         <TabContainer style={{ marginTop: '1rem' }}>
           <Tab isActive={activeTab === TAB.MY_LIQUIDITY} padding="0" onClick={() => setActiveTab(TAB.MY_LIQUIDITY)}>
