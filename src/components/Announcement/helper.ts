@@ -1,13 +1,7 @@
 import { ChainId } from '@kyberswap/ks-sdk-core'
-import { useCallback } from 'react'
-import { useNavigate } from 'react-router-dom'
-import AnnouncementApi from 'services/announcement'
 
 import { AnnouncementTemplatePopup, PopupContentAnnouncement, PopupItemType } from 'components/Announcement/type'
-import { TIMES_IN_SECS } from 'constants/index'
-import { useActiveWeb3React } from 'hooks'
-import { useChangeNetwork } from 'hooks/web3/useChangeNetwork'
-import { useAppDispatch } from 'state/hooks'
+import { APP_PATHS, TIMES_IN_SECS } from 'constants/index'
 
 const LsKey = 'ack-announcements'
 export const getAnnouncementsAckMap = () => JSON.parse(localStorage[LsKey] || '{}')
@@ -34,6 +28,9 @@ export const isPopupCanShow = (
   chainId: ChainId,
   account: string | undefined,
 ) => {
+  if ([APP_PATHS.IAM_CONSENT, APP_PATHS.IAM_LOGIN, APP_PATHS.IAM_LOGOUT].includes(window.location.pathname))
+    return false
+
   const { templateBody = {}, metaMessageId } = popupInfo.content
   const { endAt, startAt, chainIds = [] } = templateBody as AnnouncementTemplatePopup
   const isRightChain = chainIds.includes(chainId + '')
@@ -44,62 +41,4 @@ export const isPopupCanShow = (
 
   const isExpired = Date.now() < startAt * 1000 || Date.now() > endAt * 1000
   return !isRead && !isExpired && isRightChain && isOwn
-}
-
-/**
- * this hook to navigate to specific url
- * detect using window.open or navigate (react-router)
- * check change chain if needed
- */
-export const useNavigateToUrl = () => {
-  const navigate = useNavigate()
-  const { chainId: currentChain } = useActiveWeb3React()
-  const { changeNetwork } = useChangeNetwork()
-
-  const redirect = useCallback(
-    (actionURL: string) => {
-      if (actionURL && actionURL.startsWith('/')) {
-        navigate(actionURL)
-        return
-      }
-      const { pathname, host, search } = new URL(actionURL)
-      if (window.location.host === host) {
-        navigate(`${pathname}${search}`)
-      } else {
-        window.open(actionURL)
-      }
-    },
-    [navigate],
-  )
-
-  return useCallback(
-    (actionURL: string, chainId?: ChainId) => {
-      try {
-        if (!actionURL) return
-        if (chainId && chainId !== currentChain) {
-          changeNetwork(chainId, () => redirect(actionURL), undefined, true)
-        } else {
-          redirect(actionURL)
-        }
-      } catch (error) {}
-    },
-    [changeNetwork, currentChain, redirect],
-  )
-}
-
-export const useInvalidateTags = (reducerPath: string) => {
-  const dispatch = useAppDispatch()
-  return useCallback(
-    (tag: string | string[]) => {
-      dispatch({
-        type: `${reducerPath}/invalidateTags`,
-        payload: Array.isArray(tag) ? tag : [tag],
-      })
-    },
-    [dispatch, reducerPath],
-  )
-}
-
-export const useInvalidateTagAnnouncement = () => {
-  return useInvalidateTags(AnnouncementApi.reducerPath)
 }

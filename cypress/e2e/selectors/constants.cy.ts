@@ -12,12 +12,14 @@ export enum TAG {
 }
 
 export const TOKEN_SYMBOLS = {
-    'Ethereum': ['BAND', 'DAI', 'USDT', 'USDC'],
-    'Arbitrum': ['ANGLE', 'DAI', 'USDT', 'USDC.e'],
-    'Optimism': ['BOB', 'DAI', 'USDT', 'USDC'],
-    'Avalanche': ['AAVE.e', 'sAVAX', 'USDT.e', 'USDC.e'],
-    'BNB': ['RICE', 'DAI', 'USDT', 'USDC']
+    'Ethereum': ['BAND', 'ETH', 'USDT', 'USDC', '1INCH'],
+    'Arbitrum': ['ANGLE', 'ARB', 'USDT', 'USDC.e', 'BOB'],
+    'Optimism': ['BOND', 'ETH', 'USDT', 'USDC', 'BOB'],
+    'Avalanche': ['AAVE.e', 'sAVAX', 'USDT.e', 'USDC.e', 'BUSD.e'],
+    'BNB': ['RICE', 'BUSD', 'USDT', 'USDC', 'BOB']
 }
+
+export const NETWORK_LIST = ['Ethereum', 'Arbitrum', 'Optimism', 'Avalanche', 'BNB Chain', 'Polygon PoS', 'Fantom', 'Linea', 'Base']
 
 export const UNWHITELIST_TOKENS = {
     "Ethereum":

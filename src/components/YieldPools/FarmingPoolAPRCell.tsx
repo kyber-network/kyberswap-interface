@@ -76,11 +76,11 @@ export const APRTooltipContent = ({
             whiteSpace: upToSmall ? 'wrap' : 'nowrap',
           }}
         >
-          <Trans>Estimated return from trading fees if you participate in the pool</Trans>
+          <Trans>Estimated return from trading fees if you participate in the pool.</Trans>
         </Text>
       </Flex>
 
-      {!!farmAPR && (
+      {!!maxFarmAPR && (
         <Flex
           sx={{
             flexDirection: 'column',
@@ -91,7 +91,7 @@ export const APRTooltipContent = ({
           <Text as="span" color={theme.warning}>
             Farm APR:{' '}
             <Text as="span" fontWeight={500}>
-              {formatDisplayNumber(farmAPR / 100, { style: 'percent', fractionDigits: 2 })}
+              {formatDisplayNumber(maxFarmAPR / 100, { style: 'percent', fractionDigits: 2 })}
             </Text>
           </Text>
           <Text
@@ -101,33 +101,7 @@ export const APRTooltipContent = ({
               whiteSpace: upToSmall ? 'wrap' : 'nowrap',
             }}
           >
-            <Trans>Estimated return from additional rewards if you also participate in the farm</Trans>
-          </Text>
-        </Flex>
-      )}
-
-      {!!farmV2APR && Number.isFinite(farmV2APR) && (
-        <Flex
-          sx={{
-            flexDirection: 'column',
-            fontSize: '12px',
-            lineHeight: '16px',
-          }}
-        >
-          <Text as="span" color={theme.warning}>
-            Farm APR:{' '}
-            <Text as="span" fontWeight={500}>
-              {formatDisplayNumber(farmV2APR / 100, { style: 'percent', fractionDigits: 2 })}
-            </Text>
-          </Text>
-          <Text
-            as="span"
-            fontStyle="italic"
-            sx={{
-              whiteSpace: upToSmall ? 'wrap' : 'nowrap',
-            }}
-          >
-            <Trans>Estimated return from additional rewards if you also participate in the farm</Trans>
+            <Trans>Estimated return from additional rewards if you also participate in the farm.</Trans>
           </Text>
         </Flex>
       )}
@@ -202,10 +176,7 @@ const FarmingPoolAPRCell: React.FC<Props> = ({
 
 export const ClassicFarmingPoolAPRCell = ({ poolAPR, farm }: { poolAPR: number; farm: Farm }) => {
   const theme = useTheme()
-  const lpTokenRatio = new Fraction(
-    farm.totalStake.toString(),
-    JSBI.exponentiate(JSBI.BigInt(10), JSBI.BigInt(18)),
-  ).divide(
+  const lpTokenRatio = farm.totalStake.divide(
     new Fraction(parseUnits(farm.totalSupply, 18).toString(), JSBI.exponentiate(JSBI.BigInt(10), JSBI.BigInt(18))),
   )
   const liquidity = parseFloat(lpTokenRatio.toSignificant(6)) * parseFloat(farm.reserveUSD)

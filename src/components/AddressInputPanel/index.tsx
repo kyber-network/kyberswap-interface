@@ -55,14 +55,17 @@ const Input = styled.input<{ error?: boolean }>`
   }
   padding: 0px;
   -webkit-appearance: textfield;
+  appearance: textfield;
 
   ::-webkit-search-decoration {
     -webkit-appearance: none;
+    appearance: none;
   }
 
   ::-webkit-outer-spin-button,
   ::-webkit-inner-spin-button {
     -webkit-appearance: none;
+    appearance: none;
   }
 `
 
@@ -174,6 +177,9 @@ export default function AddressInputPanel({
             <ExternalLink
               href={getEtherscanLink(chainId, name ?? address, 'address')}
               style={{ fontSize: '12px', marginLeft: '4px' }}
+              onClick={e => {
+                e.stopPropagation()
+              }}
             >
               ({networkInfo.etherscanName})
             </ExternalLink>

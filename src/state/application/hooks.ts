@@ -23,6 +23,9 @@ import { AppJsonRpcProvider } from 'constants/providers'
 import { KNC_ADDRESS } from 'constants/tokens'
 import { VERSION } from 'constants/v2'
 import { useActiveWeb3React } from 'hooks/index'
+
+import { PopupItemType, PopupItemType2 } from 'state/application/reducer'
+
 import { useAppSelector } from 'state/hooks'
 import { AppDispatch, AppState } from 'state/index'
 import { useTokenPricesWithLoading } from 'state/tokenPrices/hooks'
@@ -39,6 +42,7 @@ import {
   updateETHPrice,
   updatePrommETHPrice,
 } from './actions'
+import { ModalParams } from './types'
 
 export function useBlockNumber(): number | undefined {
   const { chainId } = useActiveWeb3React()
@@ -46,7 +50,7 @@ export function useBlockNumber(): number | undefined {
   return useSelector((state: AppState) => state.application.blockNumber[chainId])
 }
 
-export const useCloseModal = (modal: ApplicationModal) => {
+export const useCloseModal = (modal: ApplicationModal): (() => void) => {
   const dispatch = useDispatch<AppDispatch>()
 
   const onCloseModal = useCallback(() => {
@@ -61,10 +65,26 @@ export function useModalOpen(modal: ApplicationModal): boolean {
   return openModal === modal
 }
 
-export function useToggleModal(modal: ApplicationModal): () => void {
+export function useModalOpenParams<T extends ApplicationModal>(modal: T): ModalParams[T] | undefined {
+  const openModalParams = useSelector((state: AppState) => state.application.openModalParams[modal])
+  return openModalParams
+}
+
+type OpenModalReturnType<T extends ApplicationModal, U extends ModalParams[T]> = U extends undefined
+  ? () => void
+  : (params: U) => void
+
+export function useToggleModal<T extends ApplicationModal, U extends ModalParams[T]>(
+  modal: T,
+): OpenModalReturnType<T, U> {
   const open = useModalOpen(modal)
   const dispatch = useDispatch<AppDispatch>()
-  return useCallback(() => dispatch(setOpenModal(open ? null : modal)), [dispatch, modal, open])
+  return useCallback(
+    (params?: U) => {
+      dispatch(setOpenModal({ modal: open ? null : modal, params }))
+    },
+    [dispatch, modal, open],
+  ) as OpenModalReturnType<T, U>
 }
 
 export function useToggleNotificationCenter() {
@@ -76,9 +96,16 @@ export function useToggleNotificationCenter() {
   }, [clearAllPopup, toggleNotificationCenter])
 }
 
-export function useOpenModal(modal: ApplicationModal): () => void {
+export function useOpenModal<T extends ApplicationModal, U extends ModalParams[T]>(
+  modal: T,
+): OpenModalReturnType<T, U> {
   const dispatch = useDispatch<AppDispatch>()
-  return useCallback(() => dispatch(setOpenModal(modal)), [dispatch, modal])
+  return useCallback(
+    (params?: U) => {
+      dispatch(setOpenModal({ modal, params }))
+    },
+    [dispatch, modal],
+  ) as OpenModalReturnType<T, U>
 }
 
 export function useNetworkModalToggle(): () => void {
@@ -209,6 +236,7 @@ export function useActivePopups() {
   const { chainId, account } = useActiveWeb3React()
 
   return useMemo(() => {
+
     const topRightPopups = popups.filter(item => {
       const { popupType, content } = item
       if (popupType === PopupType.SIMPLE) return true
@@ -224,6 +252,7 @@ export function useActivePopups() {
     const snippetPopups = popups.filter(e => e.popupType === PopupType.SNIPPET && isPopupCanShow(e, chainId, account))
 
     const centerPopups = popups.filter(e => e.popupType === PopupType.CENTER && isPopupCanShow(e, chainId, account))
+
     return {
       topPopups,
       centerPopups,
@@ -314,6 +343,7 @@ const getPrommEthPrice = async (
   return [ethPrice, ethPriceOneDay, priceChangeETH]
 }
 
+// todo: should fetch from price service
 export function useETHPrice(version: string = VERSION.CLASSIC): AppState['application']['ethPrice'] {
   const dispatch = useDispatch()
   const { isEVM, chainId } = useActiveWeb3React()
@@ -324,7 +354,6 @@ export function useETHPrice(version: string = VERSION.CLASSIC): AppState['applic
   )
 
   useEffect(() => {
-    const controller = new AbortController()
     if (!isEVM) return
 
     async function checkForEthPrice() {
@@ -351,9 +380,6 @@ export function useETHPrice(version: string = VERSION.CLASSIC): AppState['applic
       }
     }
     checkForEthPrice()
-    return () => {
-      controller.abort()
-    }
   }, [dispatch, chainId, version, isEVM, elasticClient, classicClient, blockClient, isEnableBlockService])
 
   return ethPrice

@@ -8,7 +8,6 @@ import { Swiper, SwiperSlide } from 'swiper/react'
 
 import NotificationImage from 'assets/images/notification_default.png'
 import CtaButton from 'components/Announcement/Popups/CtaButton'
-import { useNavigateToUrl } from 'components/Announcement/helper'
 import {
   AnnouncementTemplatePopup,
   PopupContentAnnouncement,
@@ -19,7 +18,10 @@ import { AutoColumn } from 'components/Column'
 import { Z_INDEXS } from 'constants/styles'
 import useMixpanel, { MIXPANEL_TYPE } from 'hooks/useMixpanel'
 import useTheme from 'hooks/useTheme'
+
 import { useDetailAnnouncement, useRemovePopup } from 'state/application/hooks'
+import { useNavigateToUrl } from 'utils/redirect'
+
 
 const IMAGE_HEIGHT = '124px'
 const PADDING_MOBILE = '16px'
@@ -92,12 +94,14 @@ function SnippetPopupItem({
   index,
   showDetailAnnouncement,
 }: {
+
   index: number
   data: PopupItemType<PopupContentAnnouncement>
   showDetailAnnouncement: (index: number) => void
 }) {
   const { templateBody = {} } = data.content
   const { ctas = [], name, thumbnailImageURL } = templateBody as AnnouncementTemplatePopup
+
 
   const removePopup = useRemovePopup()
   const toggle = () => {
@@ -209,7 +213,9 @@ export default function SnippetPopup({
   data,
   clearAll,
 }: {
+
   data: PopupItemType<PopupContentAnnouncement>[]
+
   clearAll: () => void
 }) {
   const theme = useTheme()
@@ -239,7 +245,9 @@ export default function SnippetPopup({
         observeParents
         modules={[Navigation, Pagination]}
       >
+
         {data.map((banner, index) => (
+
           <SwiperSlide key={banner.key}>
             <SnippetPopupItem index={index} data={banner} showDetailAnnouncement={showDetailAnnouncement} />
           </SwiperSlide>

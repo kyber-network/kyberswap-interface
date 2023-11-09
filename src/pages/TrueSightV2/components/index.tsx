@@ -18,7 +18,7 @@ import { CloseIcon, MEDIA_WIDTHS } from 'theme'
 import { openFullscreen } from 'utils/index'
 
 import { MIXPANEL_KYBERAI_TAG } from '../constants'
-import useKyberAITokenOverview from '../hooks/useKyberAITokenOverview'
+import useKyberAIAssetOverview from '../hooks/useKyberAIAssetOverview'
 import { ChartTab } from '../types'
 import KyberAIShareModal from './KyberAIShareModal'
 
@@ -28,11 +28,7 @@ export const StyledSectionWrapper = styled.div<{ show?: boolean }>`
   padding: 16px;
   border-radius: 20px;
   border: 1px solid ${({ theme }) => theme.border};
-  /* ${({ theme }) => `background-color: ${theme.background};`} */
-  background: ${({ theme }) =>
-    theme.darkMode
-      ? `linear-gradient(332deg, rgb(32 32 32) 0%, rgba(15, 15, 15, 1) 80%)`
-      : `linear-gradient(34.68deg, rgba(193, 193, 193, 0.1) 9.77%, rgba(255, 255, 255, 0) 108.92%);`};
+  background: linear-gradient(332deg, rgb(32 32 32) 0%, rgba(15, 15, 15, 1) 80%);
   margin-bottom: 36px;
   display: flex;
   flex-direction: column;
@@ -62,6 +58,10 @@ export const SectionDescription = styled.div<{ show?: boolean }>`
     css`
       white-space: initial;
     `}
+
+  > * {
+    display: inline-block;
+  }
 `
 
 const ButtonWrapper = styled.div`
@@ -116,7 +116,7 @@ export const SectionWrapper = ({
   subTitle,
   description,
   id,
-  docsLinks,
+  docsLinks = [],
   shareContent,
   fullscreenButton,
   tabs,
@@ -144,10 +144,10 @@ export const SectionWrapper = ({
   const theme = useTheme()
   const mixpanelHandler = useMixpanelKyberAI()
   const { chain } = useParams()
-  const { data: token } = useKyberAITokenOverview()
+  const { data: token } = useKyberAIAssetOverview()
   const ref = useRef<HTMLDivElement>(null)
   const above768 = useMedia(`(min-width:${MEDIA_WIDTHS.upToSmall}px)`)
-  const [showText, setShowText] = useState(above768 ? true : false)
+  const [showText, setShowText] = useState(false)
   const [showShareModal, setShowShareModal] = useState(false)
   const [isTextExceeded, setIsTexExceeded] = useState(false)
   const [fullscreenMode, setFullscreenMode] = useState(false)
@@ -155,13 +155,15 @@ export const SectionWrapper = ({
   const descriptionRef = useRef<HTMLDivElement>(null)
 
   useLayoutEffect(() => {
-    setIsTexExceeded(
-      (description &&
-        descriptionRef.current &&
-        descriptionRef.current?.clientWidth <= descriptionRef.current?.scrollWidth) ||
-        false,
-    )
-  }, [description])
+    if (
+      description &&
+      descriptionRef.current &&
+      descriptionRef.current.clientWidth < descriptionRef.current.scrollWidth
+    ) {
+      setIsTexExceeded(true)
+      above768 && setShowText(true)
+    }
+  }, [description, descriptionRef, above768])
 
   const docsLink = activeTab === ChartTab.Second && !!docsLinks[1] ? docsLinks[1] : docsLinks[0]
 
@@ -261,10 +263,9 @@ export const SectionWrapper = ({
                   fontSize="14px"
                   color={theme.primary}
                   width="fit-content"
-                  style={{ cursor: 'pointer', flexBasis: 'fit-content', whiteSpace: 'nowrap' }}
+                  style={{ cursor: 'pointer', flexBasis: 'fit-content', whiteSpace: 'nowrap', marginLeft: '4px' }}
                   onClick={() => setShowText(prev => !prev)}
                 >
-                  {' '}
                   <Trans>Hide</Trans>
                 </Text>
               )}
@@ -365,10 +366,9 @@ export const SectionWrapper = ({
                     fontSize="12px"
                     color={theme.primary}
                     width="fit-content"
-                    style={{ cursor: 'pointer', flexBasis: 'fit-content', whiteSpace: 'nowrap' }}
+                    style={{ cursor: 'pointer', flexBasis: 'fit-content', whiteSpace: 'nowrap', marginLeft: '4px' }}
                     onClick={() => setShowText(prev => !prev)}
                   >
-                    {' '}
                     <Trans>Hide</Trans>
                   </Text>
                 )}

@@ -32,11 +32,10 @@ import {
   toggleLiveChart,
   toggleMyEarningChart,
   toggleTradeRoutes,
+  toggleUseAggregatorForZap,
   updateAcceptedTermVersion,
   updateChainId,
-  updateMatchesDarkMode,
   updateTokenAnalysisSettings,
-  updateUserDarkMode,
   updateUserDeadline,
   updateUserDegenMode,
   updateUserLocale,
@@ -61,13 +60,11 @@ export interface UserState {
   // the timestamp of the last updateVersion action
   lastUpdateVersionTimestamp?: number
 
-  userDarkMode: boolean | null // the user's choice for dark mode or light mode
-  matchesDarkMode: boolean // whether the dark mode media query matches
-
   userLocale: SupportedLocale | null
 
   userDegenMode: boolean
   userDegenModeAutoDisableTimestamp: number
+  useAggregatorForZap: boolean
 
   // user defined slippage tolerance in bips, used in all txns
   userSlippageTolerance: number
@@ -152,9 +149,8 @@ export const CROSS_CHAIN_SETTING_DEFAULT = {
 }
 
 const initialState: UserState = {
-  userDarkMode: null, // default to system preference
-  matchesDarkMode: true,
   userDegenMode: false,
+  useAggregatorForZap: true,
   userDegenModeAutoDisableTimestamp: 0,
   userLocale: null,
   userSlippageTolerance: INITIAL_ALLOWED_SLIPPAGE,
@@ -179,6 +175,8 @@ const initialState: UserState = {
     liveDEXTrades: true,
     fundingRateOnCEX: true,
     liquidationsOnCEX: true,
+    liquidityProfile: true,
+    markets: true,
   },
   favoriteTokensByChainId: {},
   favoriteTokensByChainIdv2: {},
@@ -213,14 +211,6 @@ export default createReducer(initialState, builder =>
       }
 
       state.lastUpdateVersionTimestamp = currentTimestamp()
-    })
-    .addCase(updateUserDarkMode, (state, action) => {
-      state.userDarkMode = action.payload.userDarkMode
-      state.timestamp = currentTimestamp()
-    })
-    .addCase(updateMatchesDarkMode, (state, action) => {
-      state.matchesDarkMode = action.payload.matchesDarkMode
-      state.timestamp = currentTimestamp()
     })
     .addCase(updateUserDegenMode, (state, action) => {
       state.userDegenMode = action.payload.userDegenMode
@@ -369,5 +359,12 @@ export default createReducer(initialState, builder =>
     })
     .addCase(toggleMyEarningChart, state => {
       state.myEarningChart = !state.myEarningChart
+    })
+    .addCase(toggleUseAggregatorForZap, state => {
+      if (state.useAggregatorForZap === undefined) {
+        state.useAggregatorForZap = false
+      } else {
+        state.useAggregatorForZap = !state.useAggregatorForZap
+      }
     }),
 )

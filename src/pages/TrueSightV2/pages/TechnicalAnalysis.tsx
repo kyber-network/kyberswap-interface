@@ -1,6 +1,5 @@
 import { Trans, t } from '@lingui/macro'
 import { createContext, useCallback, useMemo, useState } from 'react'
-import { useParams } from 'react-router-dom'
 import { Text } from 'rebass'
 import styled, { useTheme } from 'styled-components'
 
@@ -23,11 +22,10 @@ import ProchartShareContent from '../components/shareContent/ProchartShareConten
 import SupportResistanceShareContent from '../components/shareContent/SupportResistanceShareContent'
 import { FundingRateTable, LiveDEXTrades, SupportResistanceLevel } from '../components/table'
 import { KYBERAI_CHART_ID, NETWORK_TO_CHAINID } from '../constants'
+import useKyberAIAssetOverview from '../hooks/useKyberAIAssetOverview'
 import { useChartingDataQuery } from '../hooks/useKyberAIData'
-import useKyberAITokenOverview from '../hooks/useKyberAITokenOverview'
 import { ChartTab, ISRLevel, KyberAITimeframe, OHLCData } from '../types'
 import { navigateToLimitPage } from '../utils'
-import { defaultExplorePageToken } from './SingleToken'
 
 const Wrapper = styled.div`
   padding: 20px 0;
@@ -82,23 +80,24 @@ export const TechnicalAnalysisContext = createContext<TechnicalAnalysisContextPr
 
 export default function TechnicalAnalysis() {
   const theme = useTheme()
-  const { chain, address } = useParams()
+  const { data: tokenOverview, chain, address } = useKyberAIAssetOverview()
   const [tvWidget, setTvWidget] = useState<IChartingLibraryWidget | undefined>()
   const [prochartDataURL, setProchartDataURL] = useState<string | undefined>()
   const [liveChartTab, setLiveChartTab] = useState(ChartTab.First)
   const [showSRLevels, setShowSRLevels] = useState(true)
   const [priceChartResolution, setPriceChartResolution] = useState('4h')
   const now = Math.floor(Date.now() / 60000) * 60
-  const { data, isLoading } = useChartingDataQuery({
-    chain: chain || defaultExplorePageToken.chain,
-    address: address || defaultExplorePageToken.address,
-    from: now - ({ '1h': 1080000, '4h': 4320000, '1d': 12960000 }[priceChartResolution] || 1080000),
-    to: now,
-    candleSize: priceChartResolution,
-    currency: liveChartTab === ChartTab.First ? 'USD' : 'BTC',
-  })
-
-  const { data: tokenOverview } = useKyberAITokenOverview()
+  const { data, isLoading } = useChartingDataQuery(
+    {
+      chain: chain,
+      address: address,
+      from: now - ({ '1h': 1080000, '4h': 4320000, '1d': 12960000 }[priceChartResolution] || 1080000),
+      to: now,
+      candleSize: priceChartResolution,
+      currency: liveChartTab === ChartTab.First ? 'USD' : 'BTC',
+    },
+    { skip: !chain || !address, pollingInterval: 60000 },
+  )
 
   const SRLevels: ISRLevel[] = useMemo(() => {
     if (isLoading && !data) return []
@@ -196,7 +195,7 @@ export default function TechnicalAnalysis() {
         </SectionWrapper>
         <SectionWrapper
           show={tokenAnalysisSettings?.supportResistanceLevels}
-          title={t`Support & Resistance Levels`}
+          title={t`Support & Resistance Levels.`}
           subTitle={t`Note: These are estimated support / resistance levels only and should not be considered as financial advice`}
           description={
             <Trans>
@@ -243,7 +242,7 @@ export default function TechnicalAnalysis() {
         <SectionWrapper
           show={tokenAnalysisSettings?.liveDEXTrades}
           title={t`Live Trades`}
-          subTitle={t`Note:  Live trades may be slightly delayed`}
+          subTitle={t`Note:  Live trades may be slightly delayed.`}
           style={{ height: 'fit-content' }}
           shareContent={mobileMode => <DexTradesShareContent mobileMode={mobileMode} />}
           docsLinks={['https://docs.kyberswap.com/kyberswap-solutions/kyberai/technical-indicators/live-trades']}
@@ -253,7 +252,7 @@ export default function TechnicalAnalysis() {
         <SectionWrapper
           show={tokenAnalysisSettings?.fundingRateOnCEX}
           id={'fundingrate'}
-          title={t`Funding Rate on Centralized Exchanges`}
+          title={t`Funding Rate on Centralized Exchanges.`}
           description={
             <Trans>
               Funding rate is useful in identifying short-term trends.{' '}
@@ -287,7 +286,7 @@ export default function TechnicalAnalysis() {
         <SectionWrapper
           id={KYBERAI_CHART_ID.LIQUID_ON_CEX}
           show={tokenAnalysisSettings?.liquidationsOnCEX}
-          title={t`Liquidations on Centralized Exchanges`}
+          title={t`Liquidations on Centralized Exchanges.`}
           description={`Liquidations describe the forced closing of a trader's futures position due to the partial or total loss
           of their collateral. This happens when a trader has insufficient funds to keep a leveraged trade
           open. Leveraged trading is high risk & high reward. The higher the leverage, the easier it is for a trader to

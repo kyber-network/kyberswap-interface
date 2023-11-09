@@ -7,21 +7,21 @@ import { FeeAmount, Pool, Position } from '@kyberswap/ks-sdk-elastic'
 import { BigNumber } from 'ethers'
 import { Interface } from 'ethers/lib/utils'
 import { useEffect, useMemo, useRef } from 'react'
-import { useLazyGetFarmV2Query } from 'services/knprotocol'
+import knProtocolApi, { useLazyGetFarmV2Query } from 'services/knprotocol'
 
 import FarmV2QuoterABI from 'constants/abis/farmv2Quoter.json'
 import NFTPositionManagerABI from 'constants/abis/v2/ProAmmNFTPositionManager.json'
-import { ETHER_ADDRESS, ZERO_ADDRESS } from 'constants/index'
+import { ETHER_ADDRESS, RTK_QUERY_TAGS, ZERO_ADDRESS } from 'constants/index'
 import { EVMNetworkInfo } from 'constants/networks/type'
 import { NativeCurrencies } from 'constants/tokens'
 import { useActiveWeb3React } from 'hooks'
-import { useContract, useMulticallContract } from 'hooks/useContract'
+import { useMulticallContract, useReadingContract } from 'hooks/useContract'
 import { useKyberSwapConfig } from 'state/application/hooks'
-import { useAppDispatch, useAppSelector } from 'state/hooks'
+import { useAppDispatch } from 'state/hooks'
 import { useTokenPricesWithLoading } from 'state/tokenPrices/hooks'
 import { isAddressString } from 'utils'
 
-import { defaultChainData, setFarms, setLoading, setUserFarmInfo } from '.'
+import { setFarms, setLoading, setUserFarmInfo } from '.'
 import { ElasticFarmV2, SubgraphFarmV2, SubgraphToken, UserFarmV2Info } from './types'
 
 const positionManagerInterface = new Interface(NFTPositionManagerABI.abi)
@@ -106,11 +106,12 @@ const queryFarms = gql`
 export default function ElasticFarmV2Updater({ interval = true }: { interval?: boolean }) {
   const dispatch = useAppDispatch()
   const { networkInfo, isEVM, chainId, account } = useActiveWeb3React()
-  const elasticFarm = useAppSelector(state => state.elasticFarmV2[chainId] || defaultChainData)
+sticFarm = useAppSelector(state => state.elasticFarmV2[chainId] || defaultChainData)
+
   const { elasticClient, isEnableKNProtocol } = useKyberSwapConfig()
 
   const multicallContract = useMulticallContract()
-  const farmv2QuoterContract = useContract(
+  const farmv2QuoterContract = useReadingContract(
     isEVM ? (networkInfo as EVMNetworkInfo).elastic.farmv2Quoter : undefined,
     FarmV2QuoterABI,
   )
@@ -122,12 +123,10 @@ export default function ElasticFarmV2Updater({ interval = true }: { interval?: b
 
   const [getElasticFarmV2FromKnProtocol, { data: knProtocolData, error: knProtocolError }] = useLazyGetFarmV2Query()
 
-  const latestKnProtocolData = useRef(knProtocolData)
-
   const data = useMemo(() => {
     if (isEnableKNProtocol) {
       return {
-        farmV2S: knProtocolData?.data?.data || latestKnProtocolData.current?.data?.data || [],
+        farmV2S: knProtocolData?.data?.data || [],
       }
     } else return subgraphData
   }, [isEnableKNProtocol, knProtocolData, subgraphData])
@@ -138,26 +137,28 @@ export default function ElasticFarmV2Updater({ interval = true }: { interval?: b
   }, [isEnableKNProtocol, subgraphError, knProtocolError])
 
   useEffect(() => {
-    if (isEVM && !elasticFarm?.farms && !elasticFarm?.loading) {
-      dispatch(setLoading({ chainId, loading: true }))
-      if (isEnableKNProtocol) {
+    const getFarm = (chainId: number, withLoading = false) => {
+      if (withLoading) dispatch(setLoading({ chainId, loading: true }))
+      if (isEnableKNProtocol)
         getElasticFarmV2FromKnProtocol(chainId).finally(() => {
           dispatch(setLoading({ chainId, loading: false }))
         })
-      } else
+      else {
         getElasticFarmV2().finally(() => {
           dispatch(setLoading({ chainId, loading: false }))
         })
+      }
     }
-  }, [isEVM, chainId, dispatch, getElasticFarmV2, elasticFarm, getElasticFarmV2FromKnProtocol, isEnableKNProtocol])
+    Promise.resolve(dispatch(knProtocolApi.util.invalidateTags([RTK_QUERY_TAGS.GET_FARM_V2]))).then(() => {
+      dispatch(setFarms({ chainId, farms: [] }))
+      getFarm(chainId, true)
+    })
+    // for chain which is not enable kn protocol
+    setTimeout(() => {
+      dispatch(setLoading({ chainId, loading: false }))
+    }, 3000)
 
-  useEffect(() => {
-    const i = interval
-      ? setInterval(() => {
-          if (isEnableKNProtocol) getElasticFarmV2FromKnProtocol(chainId)
-          else getElasticFarmV2()
-        }, 10_000)
-      : undefined
+    const i = interval ? setInterval(() => getFarm(chainId, false), 10_000) : undefined
     return () => {
       i && clearInterval(i)
     }
@@ -297,7 +298,7 @@ export default function ElasticFarmV2Updater({ interval = true }: { interval?: b
               const apr =
                 farm.isSettled || +farm.endTime < Date.now() / 1000 || farm.liquidity === '0'
                   ? 0
-                  : (100 * (totalFarmRewardUsd * +r.weight * 365)) / totalFarmingTime / denominator
+                  : (100 * (totalFarmRewardUsd * +r.weight * 365)) / totalFarmingTime / denominator || 0
 
               return {
                 ...r,

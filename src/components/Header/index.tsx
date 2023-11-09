@@ -1,6 +1,6 @@
 import { Trans } from '@lingui/macro'
 import { lighten } from 'polished'
-import { Link } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 import { useMedia } from 'react-use'
 import styled from 'styled-components'
 
@@ -16,7 +16,7 @@ import { THRESHOLD_HEADER, Z_INDEXS } from 'constants/styles'
 import { useActiveWeb3React } from 'hooks'
 import useMixpanel, { MIXPANEL_TYPE } from 'hooks/useMixpanel'
 import useTheme from 'hooks/useTheme'
-import { useHolidayMode, useIsDarkMode } from 'state/user/hooks'
+import { useHolidayMode } from 'state/user/hooks'
 import { MEDIA_WIDTHS } from 'theme'
 
 import KyberAINavItem from './KyberAINavItem'
@@ -176,9 +176,11 @@ const LogoIcon = styled.div`
 
 export default function Header() {
   const { networkInfo } = useActiveWeb3React()
-  const isDark = useIsDarkMode()
   const [holidayMode] = useHolidayMode()
   const theme = useTheme()
+  const { pathname } = useLocation()
+  const isPartnerSwap = pathname.startsWith(APP_PATHS.PARTNER_SWAP)
+
   const { mixpanelHandler } = useMixpanel()
   const upToXXSmall = useMedia(`(max-width: ${MEDIA_WIDTHS.upToXXSmall}px)`)
   const menu = (
@@ -188,52 +190,61 @@ export default function Header() {
       <Menu />
     </HeaderElementWrap>
   )
+
   return (
     <HeaderFrame>
       <HeaderRow>
-        <Title to={`${APP_PATHS.SWAP}/${networkInfo.route}`}>
-          {holidayMode ? (
-            <LogoIcon>
-              <IconImage
-                isChristmas
-                src={isDark ? '/christmas-logo-dark.svg' : '/christmas-logo-light.svg'}
-                alt="logo"
-              />
-            </LogoIcon>
-          ) : (
-            <LogoIcon>
-              <IconImage src={isDark ? '/logo-dark.svg' : '/logo.svg'} alt="logo" />
-            </LogoIcon>
-          )}
-        </Title>
-        <HeaderLinks>
-          <SwapNavGroup />
-          <EarnNavGroup />
-          <KyberAINavItem />
-          <CampaignNavGroup />
-          <KyberDAONavGroup />
-          <AnalyticNavGroup />
-          <AboutNavGroup />
-          <BlogWrapper>
-            <StyledNavExternalLink
-              onClick={() => {
-                mixpanelHandler(MIXPANEL_TYPE.BLOG_MENU_CLICKED)
-              }}
-              target="_blank"
-              href="https://blog.kyberswap.com"
-            >
-              <Trans>Blog</Trans>
-            </StyledNavExternalLink>
-          </BlogWrapper>
-        </HeaderLinks>
+        {isPartnerSwap ? (
+          <LogoIcon>
+            <IconImage src={'/logo-dark.svg'} alt="logo" />
+          </LogoIcon>
+        ) : (
+          <Title to={`${APP_PATHS.SWAP}/${networkInfo.route}`}>
+            {holidayMode ? (
+              <LogoIcon>
+                <IconImage isChristmas src={'/christmas-logo-dark.svg'} alt="logo" />
+              </LogoIcon>
+            ) : (
+              <LogoIcon>
+                <IconImage src={'/logo-dark.svg'} alt="logo" />
+              </LogoIcon>
+            )}
+          </Title>
+        )}
+        {!isPartnerSwap && (
+          <HeaderLinks>
+            <SwapNavGroup />
+            <EarnNavGroup />
+            <KyberAINavItem />
+            <CampaignNavGroup />
+            <KyberDAONavGroup />
+            <AnalyticNavGroup />
+            <AboutNavGroup />
+            <BlogWrapper>
+              <StyledNavExternalLink
+                onClick={() => {
+                  mixpanelHandler(MIXPANEL_TYPE.BLOG_MENU_CLICKED)
+                }}
+                target="_blank"
+                href="https://blog.kyberswap.com"
+              >
+                <Trans>Blog</Trans>
+              </StyledNavExternalLink>
+            </BlogWrapper>
+          </HeaderLinks>
+        )}
       </HeaderRow>
       <HeaderControls>
         {upToXXSmall ? (
           <HeaderElement>
             <SelectNetwork />
             <SelectWallet />
-            {menu}
-            <SignWallet />
+            {!isPartnerSwap && (
+              <>
+                {menu}
+                <SignWallet />
+              </>
+            )}
           </HeaderElement>
         ) : (
           <>
@@ -241,10 +252,12 @@ export default function Header() {
               <SelectNetwork />
               <SelectWallet />
             </HeaderElement>
-            <HeaderElement style={{ justifyContent: 'flex-end' }}>
-              {menu}
-              <SignWallet />
-            </HeaderElement>
+            {!isPartnerSwap && (
+              <HeaderElement style={{ justifyContent: 'flex-end' }}>
+                {menu}
+                <SignWallet />
+              </HeaderElement>
+            )}
           </>
         )}
       </HeaderControls>

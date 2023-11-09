@@ -58,6 +58,65 @@
         s.parentNode.insertBefore(g, s)
       })()
   </script>
+
+  <script>
+    !(function () {
+      var analytics = (window.analytics = window.analytics || [])
+      if (!analytics.initialize)
+        if (analytics.invoked) window.console && console.error && console.error('Segment snippet included twice.')
+        else {
+          analytics.invoked = !0
+          analytics.methods = [
+            'trackSubmit',
+            'trackClick',
+            'trackLink',
+            'trackForm',
+            'pageview',
+            'identify',
+            'reset',
+            'group',
+            'track',
+            'ready',
+            'alias',
+            'debug',
+            'page',
+            'once',
+            'off',
+            'on',
+            'addSourceMiddleware',
+            'addIntegrationMiddleware',
+            'setAnonymousId',
+            'addDestinationMiddleware',
+          ]
+          analytics.factory = function (e) {
+            return function () {
+              if (window.analytics.initialized) return window.analytics[e].apply(window.analytics, arguments)
+              var i = Array.prototype.slice.call(arguments)
+              i.unshift(e)
+              analytics.push(i)
+              return analytics
+            }
+          }
+          for (var i = 0; i < analytics.methods.length; i++) {
+            var key = analytics.methods[i]
+            analytics[key] = analytics.factory(key)
+          }
+          analytics.load = function (key, i) {
+            var t = document.createElement('script')
+            t.type = 'text/javascript'
+            t.async = !0
+            t.src = '/libs/red2.js'
+            var n = document.getElementsByTagName('script')[0]
+            n.parentNode.insertBefore(t, n)
+            analytics._loadOptions = i
+          }
+          analytics._writeKey = 'DgnqvAHbWsKaPnkdvC19EMC8DbXh1G52'
+          analytics.SNIPPET_VERSION = '4.16.1'
+          analytics.load('DgnqvAHbWsKaPnkdvC19EMC8DbXh1G52')
+          analytics.page()
+        }
+    })()
+  </script>
 </head>
 
 <body>
@@ -76,12 +135,8 @@
       font-family: 'Work Sans', 'Inter var', sans-serif;
     }
 
-    [data-theme='dark'] .preloadhtml {
+    .preloadhtml {
       background-color: #0f0f0f;
-    }
-
-    [data-theme='light'] .preloadhtml {
-      background-color: rgb(245, 245, 245);
     }
 
     .preloadhtml-header {
@@ -114,25 +169,13 @@
       gap: 6px;
     }
 
-    [data-theme='dark'] .preloadhtml-header-link-item {
+    .preloadhtml-header-link-item {
       color: rgb(169, 169, 169);
-    }
-
-    [data-theme='light'] .preloadhtml-header-link-item {
-      color: rgb(94, 94, 94);
     }
 
     .preloadhtml-logo {
       width: 140px;
       height: 51.38px;
-    }
-
-    [data-theme='dark'] .onlyVisibleInLightMode {
-      display: none;
-    }
-
-    [data-theme='light'] .onlyVisibleInDarkMode {
-      display: none;
     }
 
     @keyframes pulse {
@@ -153,7 +196,6 @@
     <div class="preloadhtml-header">
       <div class="preloadhtml-logo">
         <img class="onlyVisibleInDarkMode" style="margin-top: 1px" width="140px" src="/logo-dark.svg" alt="DmmLogo" />
-        <img class="onlyVisibleInLightMode" style="margin-top: 1px" width="140px" src="/logo.svg" alt="DmmLogo" />
       </div>
       <div class="preloadhtml-header-link">
         <div style="color: #31cb9e" class="preloadhtml-header-link-item">Swap</div>
@@ -195,58 +237,8 @@
     <div style="height: 180px; display: flex">
       <img class="onlyVisibleInDarkMode" style="animation: pulse 800ms linear infinite; margin: auto" width="160px"
         src="/logo-dark.svg" alt="DmmLogo" />
-      <img class="onlyVisibleInLightMode" style="animation: pulse 800ms linear infinite; margin: auto" width="160px"
-        src="/logo.svg" alt="DmmLogo" />
     </div>
   </div>
-  <script>
-      ; (() => {
-        function doesUseDarkMode() {
-          const rawLocalState = window.localStorage.getItem('redux_localstorage_simple_user')
-          const hasRawLocalState = typeof rawLocalState === 'string'
-          if (hasRawLocalState) {
-            try {
-              // need JSON.parse here as we useLocalStorage when storing theme mode
-              const localState = JSON.parse(rawLocalState)
-              return localState.userDarkMode
-            } catch (e) {
-              // empty
-            }
-          }
-        }
-
-        function setInitialColorMode(usePrefersColorScheme) {
-          function getInitialColorMode() {
-            const useDarkMode = doesUseDarkMode()
-            if (typeof useDarkMode === 'boolean') {
-              return useDarkMode ? 'dark' : 'light'
-            }
-
-            if (usePrefersColorScheme === false) {
-              // default to 'dark'.
-              return 'dark'
-            }
-
-            // If there is no saved preference, use a media query
-            const mediaQuery = '(prefers-color-scheme: dark)'
-            const mql = window.matchMedia(mediaQuery)
-            const hasImplicitPreference = typeof mql.matches === 'boolean'
-            if (hasImplicitPreference) {
-              return mql.matches ? 'dark' : 'light'
-            }
-
-            // default to 'dark'.
-            return 'dark'
-          }
-          const colorMode = getInitialColorMode()
-          // add HTML attribute if dark mode
-          if (colorMode === 'dark') {
-            document.documentElement.setAttribute('data-theme', 'dark')
-          } else document.documentElement.setAttribute('data-theme', 'light')
-        }
-        setInitialColorMode(false)
-      })()
-  </script>
   <script src="/charting_library/charting_library.standalone.js"></script>
   <script>
     // customer support widget
@@ -263,7 +255,20 @@
       },
     }
   </script>
-  <script async src="/libs/zenddesk.js?key=a73faacd-ba50-493a-8bf5-4b6878035346&v=1" id="ze-snippet"></script>
+
+  <script>
+      ; (function () {
+        const isPartnerSwap = window.location.pathname.startsWith('/partner-swap')
+        if (!isPartnerSwap) {
+          const script = document.createElement('script')
+          script.async = true
+          script.id = 'ze-snippet'
+          script.src = '/libs/zenddesk.js?key=a73faacd-ba50-493a-8bf5-4b6878035346&v=1'
+
+          document.body.appendChild(script)
+        }
+      })()
+  </script>
   <!--
       This HTML file is a template.
       If you open it directly in the browser, you will see an empty page.

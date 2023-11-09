@@ -1,19 +1,21 @@
 import { KyberOauth2Api } from '@kybernetwork/oauth2'
+import { FetchBaseQueryArgs } from '@reduxjs/toolkit/dist/query/fetchBaseQuery'
 import { BaseQueryFn, fetchBaseQuery } from '@reduxjs/toolkit/query'
+import axios from 'axios'
 
-import { checkIamDown } from 'utils/iamError'
+import { checkApiDown } from 'utils/iamError'
 
-const queryWithToken = async (config: any, baseUrl: string) => {
+const queryWithTokenAndTracking = async (config: any, baseUrl: string, withAccessToken = true) => {
   try {
     if (config.method?.toLowerCase() !== 'get') {
       // mapping rtk query vs axios
       config.data = config.data || config.body
     }
-    config.url = baseUrl + config.url
-    const result = await KyberOauth2Api.call(config)
+    config.url = (config.url.startsWith('http') ? '' : baseUrl) + config.url
+    const result = await (withAccessToken ? KyberOauth2Api.call(config) : axios(config))
     return { data: result.data }
   } catch (err) {
-    checkIamDown(err)
+    checkApiDown(err)
     return {
       error: {
         status: err.response?.status,
@@ -25,21 +27,21 @@ const queryWithToken = async (config: any, baseUrl: string) => {
 
 // this query is use for private api call: this will attach access token in every request, auto refresh token if expired
 const baseQueryOauth =
-  ({ baseUrl = '' }: { baseUrl?: string }): BaseQueryFn =>
+  ({ baseUrl = '', trackingOnly }: { baseUrl?: string; trackingOnly?: boolean }): BaseQueryFn =>
   async config => {
-    return queryWithToken(config, baseUrl)
+    return queryWithTokenAndTracking(config, baseUrl, !trackingOnly)
   }
 
 // same as baseQueryOauth, but has flag to revert if meet incident
 export const baseQueryOauthDynamic =
-  ({ baseUrl = '' }: { baseUrl?: string }): BaseQueryFn =>
+  ({ baseUrl = '', ...baseFetchOption }: FetchBaseQueryArgs): BaseQueryFn =>
   async (args, WebApi, extraOptions) => {
     if (!args.authentication) {
       // to quickly revert if meet incident
-      const rawBaseQuery = fetchBaseQuery({ baseUrl })
+      const rawBaseQuery = fetchBaseQuery({ baseUrl, ...baseFetchOption })
       return rawBaseQuery(args, WebApi, extraOptions)
     }
-    return queryWithToken(args, baseUrl)
+    return queryWithTokenAndTracking(args, baseUrl)
   }
 
 export default baseQueryOauth

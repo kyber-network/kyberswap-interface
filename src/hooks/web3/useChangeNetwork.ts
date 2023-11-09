@@ -1,10 +1,11 @@
 import { ChainId } from '@kyberswap/ks-sdk-core'
 import { t } from '@lingui/macro'
 import { captureException } from '@sentry/react'
+import { AddEthereumChainParameter } from '@web3-react/types'
 import { useCallback } from 'react'
 
 import { NotificationType } from 'components/Announcement/type'
-import { walletConnectV2 } from 'constants/connectors/evm'
+import { krystalWalletConnectV2, walletConnectV2 } from 'constants/connectors/evm'
 import { didUserReject } from 'constants/connectors/utils'
 import { NETWORKS_INFO, isEVM, isSolana } from 'constants/networks'
 import { useActiveWeb3React, useWeb3React } from 'hooks'
@@ -95,7 +96,7 @@ export function useChangeNetwork() {
       notify({
         title,
         type: NotificationType.ERROR,
-        summary: message,
+        summary: friendlyError(message),
       })
       customFailureCallback?.(error)
     },
@@ -128,9 +129,13 @@ export function useChangeNetwork() {
         nativeCurrency: {
           name: NETWORKS_INFO[desiredChainId].nativeToken.name,
           symbol: NETWORKS_INFO[desiredChainId].nativeToken.symbol,
-          decimals: NETWORKS_INFO[desiredChainId].nativeToken.decimal,
+          decimals: 18 as const,
         },
         blockExplorerUrls: [NETWORKS_INFO[desiredChainId].etherscanUrl],
+      }
+      const addChainParameterWeb3: AddEthereumChainParameter = {
+        ...addChainParameter,
+        chainId: desiredChainId,
       }
 
       enum Solution {
@@ -138,7 +143,7 @@ export function useChangeNetwork() {
         provider_request = 'provider_request',
       }
       const solutions = {
-        [Solution.web3_react]: async () => await connector.activate(addChainParameter),
+        [Solution.web3_react]: async () => await connector.activate(addChainParameterWeb3),
         [Solution.provider_request]: async () => {
           const activeProvider = library?.provider ?? window.ethereum
           if (activeProvider?.request) {
@@ -214,7 +219,7 @@ export function useChangeNetwork() {
         extra: {
           wallet: walletEVM.walletKey,
           desiredChainId,
-          addChainParameter,
+          addChainParameterWeb3,
           friendlyMessages: errors.map(friendlyError),
           errors,
         },
@@ -261,7 +266,7 @@ export function useChangeNetwork() {
           )
 
           // walletconnect v2 not support add network, so halt execution here
-          if (didUserReject(error) || connector === walletConnectV2) {
+          if (didUserReject(error) || connector === walletConnectV2 || connector === krystalWalletConnectV2) {
             failureCallback(desiredChainId, error, customFailureCallback)
             return
           }

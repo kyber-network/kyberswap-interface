@@ -2,7 +2,7 @@ import { Trans, t } from '@lingui/macro'
 import React, { ReactNode, useCallback, useEffect, useRef, useState } from 'react'
 import { X } from 'react-feather'
 import Skeleton, { SkeletonTheme } from 'react-loading-skeleton'
-import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { useLocalStorage, useMedia } from 'react-use'
 import { Text } from 'rebass'
 import styled, { css, keyframes } from 'styled-components'
@@ -16,26 +16,26 @@ import useDebounce from 'hooks/useDebounce'
 import { MIXPANEL_TYPE, useMixpanelKyberAI } from 'hooks/useMixpanel'
 import { useOnClickOutside } from 'hooks/useOnClickOutside'
 import useTheme from 'hooks/useTheme'
+import { useFormatParamsFromUrl } from 'pages/TrueSightV2/utils'
 import { MEDIA_WIDTHS } from 'theme'
 
-import { KYBERAI_LISTYPE_TO_MIXPANEL, NETWORK_IMAGE_URL } from '../constants'
+import { KYBERAI_LISTYPE_TO_MIXPANEL } from '../constants'
 import { useLazySearchTokenQuery, useSearchTokenQuery, useTokenListQuery } from '../hooks/useKyberAIData'
 import { ITokenList, ITokenSearchResult, KyberAIListType } from '../types'
 import { formatTokenPrice } from '../utils'
+import WatchlistButton from './WatchlistButton'
 
 const formatTokenType = (token: ITokenList): ITokenSearchResult => {
-  const token0 = token.tokens[0]
   return {
-    address: token0.address,
+    assetId: token.assetId,
     name: token.name,
     symbol: token.symbol,
-    logo: token0.logo,
-    chain: token0.chain,
+    logo: token.logo,
     price: token.price,
-    priceChange24h: token.percent_change_24h,
+    priceChange24h: token.priceChange24H,
     kyberScore: {
-      score: token.ks_3d?.[token.ks_3d.length - 1].kyber_score || 0,
-      label: token.ks_3d?.[token.ks_3d.length - 1].tag || '',
+      score: token.kyberScore || 0,
+      label: token.kyberScoreTag || '',
     },
   }
 }
@@ -206,11 +206,13 @@ const TokenItem = ({ token, onClick }: { token: ITokenSearchResult; onClick?: ()
     <DropdownItem
       onClick={() => {
         onClick?.()
-        navigate(`${APP_PATHS.KYBERAI_EXPLORE}/${token.chain}/${token.address}`)
+        navigate(`${APP_PATHS.KYBERAI_EXPLORE}/${token.assetId}`)
       }}
     >
       <td>
         <RowFit gap="10px">
+          <WatchlistButton size={16} assetId={token.assetId} symbol={token.symbol} />
+
           <div style={{ position: 'relative' }}>
             <div style={{ borderRadius: '50%', overflow: 'hidden' }}>
               <img
@@ -231,13 +233,13 @@ const TokenItem = ({ token, onClick }: { token: ITokenSearchResult; onClick?: ()
                 backgroundColor: theme.tableHeader,
               }}
             >
-              <img
+              {/* <img
                 src={NETWORK_IMAGE_URL[token.chain]}
                 alt="eth"
                 width={above768 ? '12px' : '10px'}
                 height={above768 ? '12px' : '10px'}
                 style={{ display: 'block' }}
-              />
+              /> */}
             </div>
           </div>
           <Text fontSize={above768 ? '12px' : '10px'} color={theme.text}>
@@ -305,7 +307,6 @@ let checkedNewData = false
 const SearchWithDropdown = () => {
   const theme = useTheme()
   const mixpanelHandler = useMixpanelKyberAI()
-  const [searchParams] = useSearchParams()
   const { pathname } = useLocation()
 
   const [expanded, setExpanded] = useState(false)
@@ -322,7 +323,7 @@ const SearchWithDropdown = () => {
   )
   const [history, setHistory] = useLocalStorage<Array<ITokenSearchResult>>('kyberai-search-history')
   const saveToHistory = (token: ITokenSearchResult) => {
-    if (!(history && history.findIndex(t => t.address === token.address && t.chain === token.chain) >= 0)) {
+    if (!(history && history.some(t => t.assetId === token.assetId))) {
       setHistory([token, ...(history || [])].slice(0, 3))
     }
   }
@@ -333,7 +334,7 @@ const SearchWithDropdown = () => {
       const fetchHistoryTokenInfo = async () => {
         const results = await Promise.all(
           history.map(t => {
-            return getTokenData({ q: t.address, size: 1 }, true).unwrap()
+            return getTokenData({ q: t.assetId, size: 1 }, true).unwrap()
           }),
         )
         setHistory(results.map(res => res[0]))
@@ -343,7 +344,7 @@ const SearchWithDropdown = () => {
     }
   }, [history, getTokenData, setHistory])
 
-  const listType = (searchParams.get('listType') as KyberAIListType) || KyberAIListType.BULLISH
+  const { listType } = useFormatParamsFromUrl()
 
   const { data: top5bullish, isLoading: isBullishLoading } = useTokenListQuery({
     type: KyberAIListType.BULLISH,
@@ -363,6 +364,7 @@ const SearchWithDropdown = () => {
   const above768 = useMedia(`(min-width:${MEDIA_WIDTHS.upToSmall}px)`)
 
   useOnClickOutside(wrapperRef, () => setExpanded(false))
+
   useEffect(() => {
     if (!inputRef.current) return
     const inputEl = inputRef.current
@@ -407,7 +409,7 @@ const SearchWithDropdown = () => {
           <SearchResultTableWrapper>
             {searchResult.map(item => (
               <TokenItem
-                key={item.address}
+                key={item.assetId}
                 token={item}
                 onClick={() => {
                   setExpanded(false)
@@ -445,7 +447,7 @@ const SearchWithDropdown = () => {
           {history && (
             <SearchResultTableWrapper
               header={
-                <RowFit color={theme.subText} gap="4px">
+                <RowFit color={theme.subText} gap="10px">
                   <History />
                   <Text fontSize="12px">Search History</Text>
                 </RowFit>
@@ -458,7 +460,7 @@ const SearchWithDropdown = () => {
           )}
           <SearchResultTableWrapper
             header={
-              <RowFit color={theme.subText} gap="4px">
+              <RowFit color={theme.subText} gap="10px">
                 <Icon id="bullish" size={16} />
                 <Text fontSize="12px">Bullish Tokens</Text>
               </RowFit>
@@ -488,7 +490,7 @@ const SearchWithDropdown = () => {
           </SearchResultTableWrapper>
           <SearchResultTableWrapper
             header={
-              <RowFit color={theme.subText} gap="4px">
+              <RowFit color={theme.subText} gap="10px">
                 <Icon id="bearish" size={16} />
                 <Text fontSize="12px">Bearish Tokens</Text>
               </RowFit>
