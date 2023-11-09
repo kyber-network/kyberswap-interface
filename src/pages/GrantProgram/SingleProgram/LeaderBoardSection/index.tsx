@@ -7,7 +7,7 @@ import Loader from 'components/Loader'
 import useGetLeaderboardGrantProgram, { RankByParam } from 'hooks/campaigns/useGetLeaderboardGrantProgram'
 import useTheme from 'hooks/useTheme'
 import { ProjectRanking } from 'types/grantProgram'
-import { formattedNumLong } from 'utils'
+import { formatDisplayNumber } from 'utils/numbers'
 
 import { HeaderText } from '../../styleds'
 import LeaderBoard from './LeaderBoard'
@@ -42,7 +42,7 @@ const rankByConfigs: RankByConfig[] = [
   },
   {
     extracter: (p: ProjectRanking) => {
-      return formattedNumLong(Number(p.totalVolume), true)
+      return formatDisplayNumber(p.totalVolume, { style: 'currency', significantDigits: 10, fractionDigits: 0 })
     },
     param: 'total_volume',
     title: t`Trading Volume`,
@@ -120,7 +120,7 @@ const LeaderBoardSection: React.FC<Props> = ({ programId, showRefreshTimer }) =>
                 color: theme.subText,
               }}
             >
-              <Trans>Currently there are no Projects</Trans>
+              <Trans>Currently there are no Projects.</Trans>
             </Text>
           </Flex>
         </AbsoluteContainer>
@@ -157,7 +157,7 @@ const LeaderBoardSection: React.FC<Props> = ({ programId, showRefreshTimer }) =>
           width: '100%',
         }}
       >
-        <Trophy key={rankByConfig.param} rankByConfig={rankByConfig} programId={programId} />
+        <Trophy rankByConfig={rankByConfig} programId={programId} />
 
         <Container>
           <RankByWrapper>

@@ -3,7 +3,7 @@ import { FeeAmount } from '@kyberswap/ks-sdk-elastic'
 import { Trans } from '@lingui/macro'
 import { format } from 'd3'
 import { saturate } from 'polished'
-import { CSSProperties, ReactNode, useCallback, useMemo, useState } from 'react'
+import { CSSProperties, ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { BarChart2, Inbox } from 'react-feather'
 import { batch } from 'react-redux'
 import { Text } from 'rebass'
@@ -21,31 +21,63 @@ import { useDensityChartData } from './hooks'
 import { ZoomLevels } from './types'
 
 const ZOOM_LEVELS: Record<FeeAmount, ZoomLevels> = {
+  [FeeAmount.VERY_STABLE]: {
+    initialMin: 0.999,
+    initialMax: 1.001,
+    min: 0.00001,
+    max: 1.5,
+  },
+
+  [FeeAmount.VERY_STABLE1]: {
+    initialMin: 0.999,
+    initialMax: 1.001,
+    min: 0.00001,
+    max: 1.5,
+  },
+  [FeeAmount.VERY_STABLE2]: {
+    initialMin: 0.999,
+    initialMax: 1.001,
+    min: 0.00001,
+    max: 1.5,
+  },
   [FeeAmount.STABLE]: {
     initialMin: 0.999,
     initialMax: 1.001,
     min: 0.00001,
     max: 1.5,
   },
-  [FeeAmount.LOWEST]: {
-    initialMin: 0.999,
-    initialMax: 1.001,
-    min: 0.00001,
-    max: 1.5,
-  },
-  [FeeAmount.LOW]: {
-    initialMin: 0.999,
-    initialMax: 1.001,
-    min: 0.00001,
-    max: 1.5,
-  },
-  [FeeAmount.MEDIUM]: {
+  [FeeAmount.MOST_PAIR]: {
     initialMin: 0.5,
     initialMax: 2,
     min: 0.00001,
     max: 20,
   },
-  [FeeAmount.HIGH]: {
+  [FeeAmount.MOST_PAIR1]: {
+    initialMin: 0.5,
+    initialMax: 2,
+    min: 0.00001,
+    max: 20,
+  },
+  [FeeAmount.MOST_PAIR2]: {
+    initialMin: 0.5,
+    initialMax: 2,
+    min: 0.00001,
+    max: 20,
+  },
+  [FeeAmount.EXOTIC]: {
+    initialMin: 0.5,
+    initialMax: 2,
+    min: 0.00001,
+    max: 20,
+  },
+
+  [FeeAmount.VOLATILE]: {
+    initialMin: 0.5,
+    initialMax: 2,
+    min: 0.00001,
+    max: 20,
+  },
+  [FeeAmount.RARE]: {
     initialMin: 0.5,
     initialMax: 2,
     min: 0.00001,
@@ -86,6 +118,7 @@ export default function LiquidityChartRangeInput({
   interactive,
   style = {},
   height,
+  className,
 }: {
   currencyA: Currency | undefined
   currencyB: Currency | undefined
@@ -99,12 +132,13 @@ export default function LiquidityChartRangeInput({
   interactive: boolean
   style?: CSSProperties
   height?: string
+  className?: string
 }) {
   const theme = useTheme()
-  const [ref, setRef] = useState<HTMLDivElement | null>(null)
+  const ref = useRef<HTMLDivElement>(null)
 
-  const tokenAColor = useColor(currencyA?.wrapped)
-  const tokenBColor = useColor(currencyB?.wrapped)
+  const tokenAColor = useColor(currencyA)
+  const tokenBColor = useColor(currencyB)
 
   const isSorted = currencyA && currencyB && currencyA?.wrapped.sortsBefore(currencyB?.wrapped)
 
@@ -166,14 +200,29 @@ export default function LiquidityChartRangeInput({
     [isSorted, price, ticksAtLimit],
   )
 
+  const [, reRender] = useState({})
+  const isClient = typeof window === 'object'
+
+  useEffect(() => {
+    // reset width of warning on screen resize (mobile device rotating, resizing browser window)
+    if (!isClient) return
+
+    function handleResize() {
+      reRender({})
+    }
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [isClient])
+
+  const clientWidth = ref.current?.clientWidth
   const viewBoxWidth = useMemo(() => {
     if (!height) return 400
-    if (ref?.clientWidth) return ref.clientWidth * 0.8
+    if (clientWidth) return clientWidth * 0.8
     return 400
-  }, [height, ref])
+  }, [height, clientWidth])
 
   return (
-    <AutoColumn ref={newRef => setRef(newRef)} gap="md" style={{ minHeight: '237px', ...style }}>
+    <AutoColumn ref={ref} gap="md" style={{ minHeight: '237px', ...style }} className={className}>
       {isUninitialized ? (
         <InfoBox
           message={<Trans>Your position will appear here.</Trans>}
@@ -209,7 +258,7 @@ export default function LiquidityChartRangeInput({
             brushLabels={brushLabelValue}
             brushDomain={brushDomain}
             onBrushDomainChange={onBrushDomainChangeEnded}
-            zoomLevels={ZOOM_LEVELS[feeAmount ?? FeeAmount.MEDIUM]}
+            zoomLevels={ZOOM_LEVELS[feeAmount ?? FeeAmount.MOST_PAIR2]}
             ticksAtLimit={ticksAtLimit}
           />
         </ChartWrapper>

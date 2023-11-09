@@ -1,10 +1,8 @@
 import { ChainId } from '@kyberswap/ks-sdk-core'
 
 import EthereumLogo from 'assets/images/ethereum-logo.png'
-import AURORA from 'assets/networks/aurora-network.svg'
-import { AGGREGATOR_API, KS_SETTING_API } from 'constants/env'
+import auroraIcon from 'assets/networks/aurora.svg'
 import { EVMNetworkInfo } from 'constants/networks/type'
-import { createClient } from 'utils/client'
 
 const EMPTY = ''
 const EMPTY_ARRAY: any[] = []
@@ -16,28 +14,26 @@ const auroraInfo: EVMNetworkInfo = {
   ksSettingRoute: 'aurora',
   priceRoute: 'aurora',
   poolFarmRoute: 'aurora',
+  aggregatorRoute: 'aurora',
   name: 'Aurora',
-  icon: AURORA,
-  iconDark: NOT_SUPPORT,
+  icon: auroraIcon,
   iconSelected: NOT_SUPPORT,
-  iconDarkSelected: NOT_SUPPORT,
-  blockClient: createClient('https://aurora-graph.kyberengineering.io/subgraphs/name/kybernetwork/aurora-blocks'),
+
+  defaultBlockSubgraph: 'https://aurora-graph.kyberengineering.io/subgraphs/name/kybernetwork/aurora-blocks',
   etherscanUrl: 'https://aurorascan.dev',
   etherscanName: 'Aurora Explorer',
-  tokenListUrl: `${KS_SETTING_API}/v1/tokens?chainIds=${ChainId.AURORA}&isWhitelisted=${true}`,
   bridgeURL: EMPTY,
   nativeToken: {
     symbol: 'ETH',
     name: 'ETH',
     logo: EthereumLogo,
     decimal: 18,
-    minForGas: 10 ** 16,
+    minForGas: 2 * 10 ** 16,
   },
-  rpcUrl: 'https://aurora.kyberengineering.io',
-  routerUri: `${AGGREGATOR_API}/aurora/route/encode`,
+  defaultRpcUrl: 'https://aurora.kyberengineering.io',
   multicall: '0xBF69a56D35B8d6f5A8e0e96B245a72F735751e54',
   classic: {
-    client: createClient('https://api.thegraph.com/subgraphs/name/kybernetwork/kyberswap-exchange-aurora'),
+    defaultSubgraph: 'https://api.thegraph.com/subgraphs/name/kybernetwork/kyberswap-exchange-aurora',
     static: {
       zap: '0x2abE8750e4a65584d7452316356128C936273e0D',
       router: '0x5649B4DD00780e99Bab7Abb4A3d581Ea1aEB23D0',
@@ -55,7 +51,7 @@ const auroraInfo: EVMNetworkInfo = {
   },
   elastic: {
     // Aurora not supports elastic
-    client: createClient('https://api.thegraph.com/subgraphs/name/kybernetwork/kyberswap-elastic-aurora'),
+    defaultSubgraph: 'https://api.thegraph.com/subgraphs/name/kybernetwork/kyberswap-elastic-aurora',
     startBlock: 0,
     coreFactory: '0x5F1dddbf348aC2fbe22a163e30F99F9ECE3DD50a',
     nonfungiblePositionManager: '0x2B1c7b41f6A8F2b2bc45C3233a5d5FB3cD6dC9A8',
@@ -65,16 +61,13 @@ const auroraInfo: EVMNetworkInfo = {
     routers: '0xC1e7dFE73E1598E3910EF4C7845B68A9Ab6F4c83',
     farms: [],
   },
-  limitOrder: {
-    production: NOT_SUPPORT,
-    development: NOT_SUPPORT,
-  },
+  limitOrder: NOT_SUPPORT,
   averageBlockTimeInSeconds: 1,
   coingeckoNetworkId: 'aurora',
   coingeckoNativeTokenId: 'ethereum',
   deBankSlug: 'aurora',
-  trueSightId: NOT_SUPPORT,
   dexToCompare: 'trisolaris',
+  geckoTermialId: 'aurora',
 }
 
 export default auroraInfo

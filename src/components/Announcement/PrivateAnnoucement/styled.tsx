@@ -5,7 +5,7 @@ export const InboxItemWrapper = styled.div<{ isRead: boolean }>`
   border-bottom: 1px solid ${({ theme }) => theme.border};
   background-color: ${({ theme }) => theme.background};
   font-size: 12px;
-  padding: 20px;
+  padding: 20px 18px;
   gap: 8px;
   display: flex;
   flex-direction: column;
@@ -53,5 +53,5 @@ export const InboxItemRow = styled.div`
 export const RowItem = styled.div`
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
 `

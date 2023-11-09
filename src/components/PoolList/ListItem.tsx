@@ -1,11 +1,11 @@
-import { ChainId, Fraction } from '@kyberswap/ks-sdk-core'
+import { Fraction } from '@kyberswap/ks-sdk-core'
 import { Trans, t } from '@lingui/macro'
 import JSBI from 'jsbi'
 import { rgba } from 'polished'
 import React from 'react'
 import { AlertTriangle, Info, Minus, Plus, Share2 } from 'react-feather'
 import { useDispatch } from 'react-redux'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import { Flex, Text } from 'rebass'
 
 import { ButtonEmpty } from 'components/Button'
@@ -19,18 +19,21 @@ import { FeeTag } from 'components/YieldPools/ElasticFarmGroup/styleds'
 import { ClassicFarmingPoolAPRCell } from 'components/YieldPools/FarmingPoolAPRCell'
 import { APP_PATHS, MAX_ALLOW_APY } from 'constants/index'
 import { useActiveWeb3React } from 'hooks'
+import { ClassicPoolData } from 'hooks/pool/classic/type'
 import useTheme from 'hooks/useTheme'
 import { IconWrapper } from 'pages/Pools/styleds'
-import { usePoolDetailModalToggle, useToggleEthPowAckModal } from 'state/application/hooks'
-import { useActiveAndUniqueFarmsData } from 'state/farms/hooks'
+import { usePoolDetailModalToggle } from 'state/application/hooks'
+import { useActiveAndUniqueFarmsData } from 'state/farms/classic/hooks'
 import { setSelectedPool } from 'state/pools/actions'
-import { SubgraphPoolData, UserLiquidityPosition, useSharedPoolIdManager, useUrlOnEthPowAck } from 'state/pools/hooks'
-import { formattedNum, shortenAddress } from 'utils'
+import { UserLiquidityPosition, useSharedPoolIdManager } from 'state/pools/hooks'
+import { shortenAddress } from 'utils'
 import { currencyId } from 'utils/currencyId'
 import { getMyLiquidity, getTradingFeeAPR, parseSubgraphPoolData } from 'utils/dmm'
+import { formatDisplayNumber, parseFraction } from 'utils/numbers'
+import { getTokenSymbolWithHardcode } from 'utils/tokenInfo'
 
-export interface ListItemGroupProps {
-  poolData: SubgraphPoolData
+interface ListItemGroupProps {
+  poolData: ClassicPoolData
   userLiquidityPositions: { [key: string]: UserLiquidityPosition }
 }
 
@@ -43,10 +46,6 @@ const ListItem = ({ poolData, userLiquidityPositions }: ListItemGroupProps) => {
 
   const amp = new Fraction(poolData.amp).divide(JSBI.BigInt(10000))
 
-  const navigate = useNavigate()
-  const [, setUrlOnEthPoWAck] = useUrlOnEthPowAck()
-  const toggleEthPowAckModal = useToggleEthPowAckModal()
-
   const { data: uniqueAndActiveFarms } = useActiveAndUniqueFarmsData()
   const farm = uniqueAndActiveFarms.find(f => f.id.toLowerCase() === poolData.id.toLowerCase())
 
@@ -58,6 +57,8 @@ const ListItem = ({ poolData, userLiquidityPositions }: ListItemGroupProps) => {
     poolData,
     chainId,
   )
+  const currency0Symbol = getTokenSymbolWithHardcode(chainId, currency0.wrapped.address, currency0.symbol)
+  const currency1Symbol = getTokenSymbolWithHardcode(chainId, currency1.wrapped.address, currency1.symbol)
   const realPercentToken0 =
     reserve0 && virtualReserve0 && reserve1 && virtualReserve1
       ? reserve0.asFraction
@@ -73,8 +74,16 @@ const ListItem = ({ poolData, userLiquidityPositions }: ListItemGroupProps) => {
 
   const oneYearFL = getTradingFeeAPR(poolData.reserveUSD, fee24H).toFixed(2)
 
-  const ampLiquidity = formattedNum(`${parseFloat(amp.toSignificant(5)) * parseFloat(poolData.reserveUSD)}`, true)
-  const totalValueLocked = formattedNum(`${parseFloat(poolData.reserveUSD)}`, true)
+  const ampLiquidity = formatDisplayNumber(amp.multiply(parseFraction(poolData.reserveUSD)), {
+    style: 'currency',
+    significantDigits: 7,
+    fractionDigits: 4,
+  })
+  const totalValueLocked = formatDisplayNumber(poolData.reserveUSD, {
+    style: 'currency',
+    significantDigits: 7,
+    fractionDigits: 4,
+  })
 
   const onTogglePoolDetailModal = (event: React.MouseEvent<HTMLButtonElement, MouseEvent>) => {
     event.stopPropagation()
@@ -111,7 +120,7 @@ const ListItem = ({ poolData, userLiquidityPositions }: ListItemGroupProps) => {
           paddingRight: '20px', // to make all the APR numbers vertically align
         }}
       >
-        {oneYearFL}%
+        {formatDisplayNumber(Number(oneYearFL) / 100, { style: 'percent', fractionDigits: 2 })}
       </Flex>
     )
   }
@@ -122,9 +131,9 @@ const ListItem = ({ poolData, userLiquidityPositions }: ListItemGroupProps) => {
         <Flex alignItems="center">
           <DoubleCurrencyLogo currency0={currency0} currency1={currency1} size={20} />
           <Text fontSize="14px" fontWeight="500">
-            {poolData.token0.symbol} - {poolData.token1.symbol}
+            {currency0Symbol} - {currency1Symbol}
           </Text>
-          <FeeTag style={{ padding: '4px 6px' }}>AMP {formattedNum(amp.toSignificant(5))}</FeeTag>
+          <FeeTag style={{ padding: '4px 6px' }}>AMP {formatDisplayNumber(amp, { significantDigits: 5 })}</FeeTag>
           {isFarmingPool && (
             <MouseoverTooltip placement="top" text={t`Available for yield farming`}>
               <Link to={`${APP_PATHS.FARMS}/${networkInfo.route}?tab=classic&type=active&search=${poolData.id}`}>
@@ -135,7 +144,7 @@ const ListItem = ({ poolData, userLiquidityPositions }: ListItemGroupProps) => {
             </MouseoverTooltip>
           )}
           {isWarning && (
-            <MouseoverTooltip text={`One of the tokens in the pool is close to 0%. Pool might become inactive soon`}>
+            <MouseoverTooltip text={`One of the tokens in the pool is close to 0%. Pool might become inactive soon.`}>
               <IconWrapper style={{ background: theme.warning, marginLeft: '6px' }}>
                 <AlertTriangle color={theme.textReverse} size={12} />
               </IconWrapper>
@@ -185,8 +194,12 @@ const ListItem = ({ poolData, userLiquidityPositions }: ListItemGroupProps) => {
       >
         {renderAPR()}
       </DataText>
-      <DataText alignItems="flex-end">{!poolData ? <Loader /> : formattedNum(volume, true)}</DataText>
-      <DataText alignItems="flex-end">{!poolData ? <Loader /> : formattedNum(fee24H, true)}</DataText>
+      <DataText alignItems="flex-end">
+        {!poolData ? <Loader /> : formatDisplayNumber(volume, { style: 'currency', significantDigits: 6 })}
+      </DataText>
+      <DataText alignItems="flex-end">
+        {!poolData ? <Loader /> : formatDisplayNumber(fee24H, { style: 'currency', significantDigits: 6 })}
+      </DataText>
       <DataText alignItems="flex-end">{getMyLiquidity(myLiquidity)}</DataText>
       <ButtonWrapper style={{ marginRight: '-3px' }}>
         <ButtonEmpty
@@ -198,17 +211,13 @@ const ListItem = ({ poolData, userLiquidityPositions }: ListItemGroupProps) => {
             width: '28px',
             height: '28px',
           }}
+          as={Link}
+          to={`/${networkInfo.route}${APP_PATHS.CLASSIC_ADD_LIQ}/${currencyId(currency0, chainId)}/${currencyId(
+            currency1,
+            chainId,
+          )}/${poolData.id}`}
           onClick={(e: React.MouseEvent) => {
             e.stopPropagation()
-
-            const url = `/add/${currencyId(currency0, chainId)}/${currencyId(currency1, chainId)}/${poolData.id}`
-            setUrlOnEthPoWAck(url)
-
-            if (chainId === ChainId.ETHW) {
-              toggleEthPowAckModal()
-            } else {
-              navigate(url)
-            }
           }}
         >
           <Plus size={16} color={theme.primary} />
@@ -217,7 +226,10 @@ const ListItem = ({ poolData, userLiquidityPositions }: ListItemGroupProps) => {
           <ButtonEmpty
             padding="0"
             as={Link}
-            to={`/remove/${currencyId(currency0, chainId)}/${currencyId(currency1, chainId)}/${poolData.id}`}
+            to={`/${networkInfo.route}${APP_PATHS.CLASSIC_REMOVE_POOL}/${currencyId(currency0, chainId)}/${currencyId(
+              currency1,
+              chainId,
+            )}/${poolData.id}`}
             style={{
               background: rgba(theme.red, 0.2),
               minWidth: '28px',

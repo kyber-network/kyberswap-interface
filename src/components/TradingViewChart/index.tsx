@@ -10,9 +10,11 @@ import AnimatedLoader from 'components/Loader/AnimatedLoader'
 import { Z_INDEXS } from 'constants/styles'
 import useTheme from 'hooks/useTheme'
 import { useUserLocale } from 'state/user/hooks'
+import { openFullscreen } from 'utils/index'
 
-import { ChartingLibraryWidgetOptions, LanguageCode, ResolutionString, Timezone } from './charting_library'
+import { ChartingLibraryWidgetOptions, LanguageCode, ResolutionString } from './charting_library'
 import { useDatafeed } from './datafeed'
+import { getTradingViewTimeZone } from './utils'
 
 const ProLiveChartWrapper = styled.div<{ fullscreen: boolean }>`
   height: ${isMobile ? '100%' : 'calc(100% - 0px)'};
@@ -56,23 +58,6 @@ const MobileChart = styled.div<{ fullscreen: boolean; $loading: boolean }>`
 
 const LOCALSTORAGE_STATE_NAME = 'proChartSavedState'
 
-function openFullscreen(elem: any) {
-  if (elem.requestFullscreen) {
-    elem.requestFullscreen()
-  } else if (elem.webkitRequestFullScreen) {
-    /* Old webkit */
-    elem.webkitRequestFullScreen()
-  } else if (elem.webkitRequestFullscreen) {
-    /* New webkit */
-    elem.webkitRequestFullscreen()
-  } else if (elem.mozRequestFullScreen) {
-    elem.mozRequestFullScreen()
-  } else if (elem.msRequestFullscreen) {
-    /* IE11 */
-    elem.msRequestFullscreen()
-  }
-}
-
 interface FullScreenDocument extends Document {
   msExitFullscreen?: () => void
   mozCancelFullScreen?: () => void
@@ -100,13 +85,14 @@ function closeFullscreen() {
 
 function ProLiveChart({
   poolDetail,
-  tokenId,
+  isReverse,
   className,
+  label,
 }: {
   poolDetail: PoolResponse
-  // base token id
-  tokenId: string
+  isReverse: boolean
   className?: string
+  label: string
 }) {
   const [loading, setLoading] = useState(false)
   const theme = useTheme()
@@ -114,7 +100,7 @@ function ProLiveChart({
   const [ref, setRef] = useState<HTMLDivElement | null>(null)
   const [fullscreen, setFullscreen] = useState(false)
 
-  const datafeed = useDatafeed(poolDetail, tokenId)
+  const datafeed = useDatafeed(poolDetail, isReverse, label)
 
   useEffect(() => {
     if (!ref || !window.TradingView) {
@@ -150,27 +136,28 @@ function ProLiveChart({
       fullscreen: false,
       autosize: true,
       studies_overrides: {},
-      theme: theme.darkMode ? 'Dark' : 'Light',
+      theme: 'Dark',
       custom_css_url: '/charting_library/style.css',
       timeframe: '2w',
       time_frames: [
-        { text: '6m', resolution: '4H' as ResolutionString, description: '6 Months' },
+        { text: '6m', resolution: '12H' as ResolutionString, description: '6 Months' },
         { text: '1m', resolution: '1H' as ResolutionString, description: '1 Month' },
         { text: '2w', resolution: '1H' as ResolutionString, description: '2 Weeks' },
         { text: '1w', resolution: '1H' as ResolutionString, description: '1 Week' },
         { text: '1d', resolution: '15' as ResolutionString, description: '1 Day' },
       ],
-      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone as Timezone,
+      timezone: getTradingViewTimeZone(),
       auto_save_delay: 2,
       saved_data: localStorageState,
     }
+
     const tvWidget = new window.TradingView.widget(widgetOptions)
 
     tvWidget.onChartReady(() => {
       setLoading(false)
       tvWidget.applyOverrides({
         'paneProperties.backgroundType': 'solid',
-        'paneProperties.background': theme.darkMode ? theme.buttonBlack : theme.background,
+        'paneProperties.background': theme.buttonBlack,
         'mainSeriesProperties.candleStyle.upColor': theme.primary,
         'mainSeriesProperties.candleStyle.borderUpColor': theme.primary,
         'mainSeriesProperties.candleStyle.wickUpColor': theme.primary,

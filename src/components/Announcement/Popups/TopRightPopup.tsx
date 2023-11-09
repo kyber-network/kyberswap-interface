@@ -1,18 +1,24 @@
+import { motion } from 'framer-motion'
 import { rgba } from 'polished'
 import { useCallback, useEffect, useState } from 'react'
 import { X } from 'react-feather'
-import { animated, useSpring } from 'react-spring'
 import { Flex } from 'rebass'
 import styled, { DefaultTheme, keyframes } from 'styled-components'
 
-import { NotificationType, PopupContentSimple, PopupContentTxn, PopupType } from 'components/Announcement/type'
+import {
+  NotificationType,
+  PopupContentAnnouncement,
+  PopupContentSimple,
+  PopupContentTxn,
+  PopupItemType,
+  PopupType,
+} from 'components/Announcement/type'
 import useTheme from 'hooks/useTheme'
 import { useRemovePopup } from 'state/application/hooks'
-import { PopupItemType } from 'state/application/reducer'
 
+import getPopupTopRightDescriptionByType from './PopupTopRightDescriptions'
 import SimplePopup from './SimplePopup'
 import TransactionPopup from './TransactionPopup'
-import getPopupTopRightDescriptionByType from './getPopupTopRightDescriptionByType'
 
 const StyledClose = styled(X)`
   margin-left: 10px;
@@ -47,9 +53,9 @@ const ltr = keyframes`
 
 const getBackgroundColor = (theme: DefaultTheme, type: NotificationType = NotificationType.ERROR) => {
   const mapColor = {
-    [NotificationType.SUCCESS]: theme.bg21,
-    [NotificationType.ERROR]: theme.bg22,
-    [NotificationType.WARNING]: theme.bg23,
+    [NotificationType.SUCCESS]: theme.bgSuccess,
+    [NotificationType.ERROR]: theme.bgError,
+    [NotificationType.WARNING]: theme.bgWarning,
   }
   return mapColor[type]
 }
@@ -72,7 +78,7 @@ const Fader = styled.div`
   background-color: ${({ theme }) => theme.subText};
 `
 
-const AnimatedFader = animated(Fader)
+const AnimatedFader = motion(Fader)
 
 const PopupWrapper = styled.div<{ removeAfterMs?: number | null }>`
   position: relative;
@@ -100,13 +106,13 @@ const SolidBackgroundLayer = styled.div`
 `
 
 const WrappedAnimatedFader = ({ removeAfterMs }: { removeAfterMs: number | null }) => {
-  const faderStyle = useSpring({
-    from: { width: '100%' },
-    to: { width: '0%' },
-    config: { duration: removeAfterMs ?? undefined },
-  })
-
-  return <AnimatedFader style={faderStyle} />
+  return (
+    <AnimatedFader
+      initial={{ width: '100%' }}
+      animate={{ width: '0%' }}
+      transition={{ duration: removeAfterMs ?? undefined }}
+    />
+  )
 }
 
 const Overlay = styled.div`
@@ -117,10 +123,7 @@ const Overlay = styled.div`
   width: 100%;
   height: 100%;
   background: ${({ theme }) =>
-    `linear-gradient(180deg, ${rgba(theme.darkMode ? theme.black : theme.white, 0)} 40.1%, ${rgba(
-      theme.darkMode ? theme.black : theme.white,
-      0.8,
-    )} 100%)`};
+    `linear-gradient(180deg, ${rgba(theme.black, 0)} 40.1%, ${rgba(theme.black, 0.8)} 100%)`};
 `
 
 export default function PopupItem({ popup, hasOverlay }: { popup: PopupItemType; hasOverlay: boolean }) {
@@ -148,9 +151,9 @@ export default function PopupItem({ popup, hasOverlay }: { popup: PopupItemType;
   let popupContent
   switch (popupType) {
     case PopupType.SIMPLE: {
-      const { title, summary, type = NotificationType.ERROR, icon } = content as PopupContentSimple
+      const { type = NotificationType.ERROR } = content as PopupContentSimple
       notiType = type
-      popupContent = <SimplePopup title={title} type={type} summary={summary} icon={icon} />
+      popupContent = <SimplePopup {...(content as PopupContentSimple)} type={type} />
       break
     }
     case PopupType.TRANSACTION: {
@@ -160,12 +163,14 @@ export default function PopupItem({ popup, hasOverlay }: { popup: PopupItemType;
       break
     }
     case PopupType.TOP_RIGHT: {
-      const { title, summary, type, link } = getPopupTopRightDescriptionByType(popup)
-      notiType = type
-      popupContent = <SimplePopup title={title} type={notiType} summary={summary} link={link} />
+      const data = getPopupTopRightDescriptionByType(content as PopupContentAnnouncement)
+      if (!data) return null
+      notiType = data.type
+      popupContent = <SimplePopup {...data} onRemove={removeThisPopup} />
       break
     }
   }
+  if (!popupContent) return null
   return isRestartAnimation ? (
     <div />
   ) : (

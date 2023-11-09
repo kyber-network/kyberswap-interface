@@ -3,6 +3,7 @@ import styled from 'styled-components'
 
 import { RowBetween } from 'components/Row'
 import SubscribeNotificationButton from 'components/SubscribeButton'
+import { MIXPANEL_TYPE } from 'hooks/useMixpanel'
 
 import BridgeTransferHistory from '../BridgeTransferHistory'
 import TabSelector from './TabSelector'
@@ -17,7 +18,8 @@ const BridgeHistory: React.FC<Props> = ({ className }) => {
       <RowBetween>
         <TabSelector />
         <SubscribeNotificationButton
-          subscribeTooltip={t`Subscribe to receive notifications on your bridge transaction`}
+          subscribeTooltip={t`Subscribe to receive notifications on your bridge transaction.`}
+          trackingEvent={MIXPANEL_TYPE.BRIDGE_CLICK_SUBSCRIBE_BTN}
         />
       </RowBetween>
       <BridgeTransferHistory />

@@ -55,24 +55,28 @@ const Input = styled.input<{ error?: boolean }>`
   }
   padding: 0px;
   -webkit-appearance: textfield;
+  appearance: textfield;
 
   ::-webkit-search-decoration {
     -webkit-appearance: none;
+    appearance: none;
   }
 
   ::-webkit-outer-spin-button,
   ::-webkit-inner-spin-button {
     -webkit-appearance: none;
+    appearance: none;
   }
 `
 
-const DropdownIcon = styled(DropdownSVG)<{ open: boolean }>`
+const DropdownIcon = styled(DropdownSVG)<{ $rotated: boolean }>`
   cursor: pointer;
   transition: transform 300ms;
-  transform: rotate(${({ open }) => (open ? '-180deg' : 0)});
+  transform: rotate(${({ $rotated }) => ($rotated ? '-180deg' : 0)});
 `
 
 type Props = {
+  pattern?: string | null
   error?: boolean
   value: string | null
   placeholder?: string
@@ -80,12 +84,13 @@ type Props = {
   disabled?: boolean
   className?: string
   style?: CSSProperties
-} & Pick<DOMAttributes<HTMLInputElement>, 'onBlur' | 'onFocus' | 'onChange'>
+} & Pick<DOMAttributes<HTMLInputElement>, 'onBlur' | 'onFocus' | 'onChange' | 'onClick'>
 
-export const AddressInput = function AddressInput({
+const AddressInputComponent = function AddressInput({
   onChange,
   onFocus,
   onBlur,
+  onClick,
   value,
   error = false,
   placeholder,
@@ -93,9 +98,10 @@ export const AddressInput = function AddressInput({
   disabled = false,
   style = {},
   className,
+  pattern = '^(0x[a-fA-F0-9]{40})$',
 }: Props) {
   return (
-    <ContainerRow error={error} className={className}>
+    <ContainerRow error={error} className={className} onClick={onClick}>
       <InputContainer>
         <Row gap="5px">
           <Input
@@ -109,7 +115,7 @@ export const AddressInput = function AddressInput({
             spellCheck="false"
             placeholder={placeholder || t`Wallet Address or ENS name`}
             error={error}
-            pattern="^(0x[a-fA-F0-9]{40})$"
+            pattern={pattern || undefined}
             onBlur={onBlur}
             onFocus={onFocus}
             onChange={onChange}
@@ -121,6 +127,8 @@ export const AddressInput = function AddressInput({
     </ContainerRow>
   )
 }
+
+export const AddressInput = styled(AddressInputComponent)``
 
 export default function AddressInputPanel({
   id,
@@ -150,20 +158,34 @@ export default function AddressInputPanel({
   if (!isEVM) return null
   return (
     <AutoColumn gap="4px">
-      <Flex justifyContent="space-between" alignItems="center" marginTop="4px" color={theme.subText}>
-        <Text fontSize="12px" fontWeight="500">
+      <Flex
+        role="button"
+        onClick={() => onChange(value === null ? '' : null)}
+        sx={{
+          cursor: 'pointer',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          marginTop: '4px',
+          color: theme.subText,
+          padding: '0 8px',
+        }}
+      >
+        <Text fontSize="12px" fontWeight="400" color={theme.subText}>
           <Trans>Recipient (Optional)</Trans>
 
           {address && (
             <ExternalLink
               href={getEtherscanLink(chainId, name ?? address, 'address')}
               style={{ fontSize: '12px', marginLeft: '4px' }}
+              onClick={e => {
+                e.stopPropagation()
+              }}
             >
               ({networkInfo.etherscanName})
             </ExternalLink>
           )}
         </Text>
-        <DropdownIcon open={value !== null} onClick={() => onChange(value === null ? '' : null)} />
+        <DropdownIcon $rotated={value !== null} />
       </Flex>
 
       <InputPanel id={id} style={{ maxHeight: value === null ? 0 : '44px' }}>

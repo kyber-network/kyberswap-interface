@@ -8,14 +8,18 @@ import { Text } from 'rebass'
 import styled, { css } from 'styled-components'
 
 import { ButtonLight, ButtonPrimary } from 'components/Button'
+import Column from 'components/Column'
 import LaunchIcon from 'components/Icons/LaunchIcon'
-import Row, { RowBetween, RowFit, RowFixed } from 'components/Row'
+import Row, { RowBetween, RowFit } from 'components/Row'
 import { useActiveWeb3React } from 'hooks'
 import { useVotingInfo } from 'hooks/kyberdao'
 import { ProposalDetail, ProposalStatus, ProposalType } from 'hooks/kyberdao/types'
 import useTheme from 'hooks/useTheme'
 import { useSwitchToEthereum } from 'pages/KyberDAO/StakeKNC/SwitchToEthereumModal'
+import TimerCountdown from 'pages/KyberDAO/TimerCountdown'
+import { HARDCODED_OPTION_TITLE } from 'pages/KyberDAO/constants'
 import { useWalletModalToggle } from 'state/application/hooks'
+import { escapeScriptHtml } from 'utils/string'
 
 import VoteConfirmModal from '../VoteConfirmModal'
 import OptionButton from './OptionButton'
@@ -64,19 +68,17 @@ const Badged = css`
   align-items: center;
   justify-content: center;
   border-radius: 10px;
+  font-size: 12px;
+  padding: 2px 14px;
 `
 const IDBadged = styled.div`
   ${Badged}
-  font-size: 12px;
-  padding: 2px 14px;
   color: ${({ theme }) => theme.subText};
   background-color: ${({ theme }) => theme.buttonBlack};
 `
 
 const StatusBadged = styled.div<{ color?: string }>`
   ${Badged}
-  font-size: 12px;
-  padding: 2px 14px;
   cursor: pointer;
 
   :hover {
@@ -112,7 +114,7 @@ const OptionsWrapper = styled(RowBetween)<{ optionCount?: number }>`
         flex-wrap: wrap;
         justify-content: flex-start;
         > * {
-          width: calc(25% - 20px * 3 / 4);
+          width: calc(33.33% - 20px * 2 / 3);
         }
         ${theme.mediaWidth.upToMedium`
           > * {
@@ -176,7 +178,7 @@ const VoteButton = ({
           </ButtonPrimary>
         ) : (
           <ButtonLight width={isMobile ? '100%' : '200px'} onClick={toggleWalletModal}>
-            <Trans>Connect Wallet</Trans>
+            <Trans>Connect</Trans>
           </ButtonLight>
         )
       ) : (
@@ -185,6 +187,8 @@ const VoteButton = ({
     </>
   )
 }
+
+const FORCED_TO_BINARY_OPTION_PROPOSALS = [14, 15, 17, 18, 19, 20]
 
 function ProposalItem({
   proposal,
@@ -242,7 +246,7 @@ function ProposalItem({
   }
   const { switchToEthereum } = useSwitchToEthereum()
   const handleVote = useCallback(() => {
-    switchToEthereum().then(() => {
+    switchToEthereum(t`This action`).then(() => {
       selectedOptions.length > 0 && setShowConfirmModal(true)
     })
   }, [switchToEthereum, setShowConfirmModal, selectedOptions])
@@ -253,9 +257,13 @@ function ProposalItem({
       voteCallback?.(
         proposal.proposal_id,
         selectedOptions.map(i => i + 1).reduce((acc, item) => (acc += 1 << (item - 1)), 0),
-      ).then(() => {
-        setSelectedOptions([])
-      })
+      )
+        .then(() => {
+          setSelectedOptions([])
+        })
+        .catch(error => {
+          setErrorMessage(error.message)
+        })
   }, [selectedOptions, proposal.proposal_id, voteCallback])
 
   const votedOfCurrentProposal = useMemo(
@@ -266,12 +274,15 @@ function ProposalItem({
   useEffect(() => {
     setSelectedOptions([])
   }, [votedOfCurrentProposal])
+
+  // Proposals is Generic but force to be Binary option
+  const isForcedBinaryOption = FORCED_TO_BINARY_OPTION_PROPOSALS.includes(proposal.proposal_id)
+
   const handleOptionClick = useCallback(
     (option: number) => {
-      if (proposal.proposal_type === ProposalType.BinaryProposal) {
+      if (proposal.proposal_type === ProposalType.BinaryProposal || isForcedBinaryOption) {
         setSelectedOptions([option])
-      }
-      if (proposal.proposal_type === ProposalType.GenericProposal) {
+      } else if (proposal.proposal_type === ProposalType.GenericProposal) {
         if (selectedOptions.length === 0) {
           setSelectedOptions([option])
         } else {
@@ -286,7 +297,7 @@ function ProposalItem({
         }
       }
     },
-    [proposal.proposal_type, setSelectedOptions, selectedOptions],
+    [proposal.proposal_type, setSelectedOptions, selectedOptions, isForcedBinaryOption],
   )
   const isActive = proposal.status === ProposalStatus.Active
 
@@ -308,14 +319,24 @@ function ProposalItem({
               title={option}
               checked={selectedOptions?.includes(index) || voted}
               onOptionClick={() => handleOptionClick(index)}
-              type={selectedOptions?.includes(index) ? 'Choosing' : voted ? 'Active' : 'Finished'}
-              isCheckBox={proposal.proposal_type === ProposalType.GenericProposal}
+              type={
+                proposal.status === ProposalStatus.Pending
+                  ? 'Pending'
+                  : selectedOptions?.includes(index)
+                  ? 'Choosing'
+                  : voted
+                  ? 'Active'
+                  : 'Finished'
+              }
+              isCheckBox={proposal.proposal_type === ProposalType.GenericProposal && !isForcedBinaryOption}
+              proposalId={proposal.proposal_id}
+              id={index}
             />
           )
         })}
       </OptionsWrapper>
     )
-  }, [proposal, selectedOptions, votedOfCurrentProposal?.options, handleOptionClick, isActive])
+  }, [proposal, selectedOptions, votedOfCurrentProposal?.options, handleOptionClick, isActive, isForcedBinaryOption])
 
   return (
     <ProposalItemWrapper>
@@ -332,36 +353,63 @@ function ProposalItem({
           </ExpandButton>
         </RowBetween>
         {(show || isActive) && isMobile && (
-          <RowFit gap="8px">
-            <StatusBadged color={tagColor()} onClick={() => onBadgeClick?.(proposal.status)}>
-              {proposal.status}
-            </StatusBadged>
-            <IDBadged>ID #{proposal.proposal_id}</IDBadged>
-          </RowFit>
-        )}
-        {(show || isActive) && renderVotes}
-        <RowBetween>
-          {isActive ? (
-            <VoteButton
-              status={proposal.status}
-              onVoteClick={handleVote}
-              errorMessage={errorMessage}
-              voted={!!votedOfCurrentProposal?.options && votedOfCurrentProposal.options.length > 0}
-            />
-          ) : proposal.status !== ProposalStatus.Pending ? (
-            <Text color={theme.subText} fontSize={12}>
-              Ended {dayjs(proposal.end_timestamp * 1000).format('DD MMM YYYY')}
-            </Text>
-          ) : (
-            <div></div>
-          )}
-          {!((show || isActive) && isMobile) && (
-            <RowFixed gap="8px">
+          <RowBetween>
+            <RowFit gap="8px" flexWrap="wrap">
               <StatusBadged color={tagColor()} onClick={() => onBadgeClick?.(proposal.status)}>
                 {proposal.status}
               </StatusBadged>
               <IDBadged>ID #{proposal.proposal_id}</IDBadged>
-            </RowFixed>
+            </RowFit>
+            {isActive && (
+              <RowFit gap="4px" flexShrink={0}>
+                <Text color={theme.subText} fontSize={12}>
+                  <Trans>Voting ends in: </Trans>
+                </Text>
+                <TimerCountdown endTime={proposal.end_timestamp} />
+              </RowFit>
+            )}
+          </RowBetween>
+        )}
+        {(show || isActive) && renderVotes}
+        <RowBetween>
+          {isActive ? (
+            <Column gap="4px">
+              <VoteButton
+                status={proposal.status}
+                onVoteClick={handleVote}
+                errorMessage={errorMessage}
+                voted={!!votedOfCurrentProposal?.options && votedOfCurrentProposal.options.length > 0}
+              />
+            </Column>
+          ) : proposal.status === ProposalStatus.Pending ? (
+            <RowFit gap="4px">
+              <Text color={theme.subText} fontSize={12}>
+                <Trans>Voting starts in: </Trans>
+              </Text>
+              <TimerCountdown endTime={proposal.start_timestamp} />
+            </RowFit>
+          ) : (
+            <Text color={theme.subText} fontSize={12}>
+              Ended {dayjs(proposal.end_timestamp * 1000).format('DD MMM YYYY')}
+            </Text>
+          )}
+          {!((show || isActive) && isMobile) && (
+            <Column gap="8px">
+              <Row gap="8px" justify="flex-end">
+                <StatusBadged color={tagColor()} onClick={() => onBadgeClick?.(proposal.status)}>
+                  {proposal.status}
+                </StatusBadged>
+                <IDBadged>ID #{proposal.proposal_id}</IDBadged>
+              </Row>
+              {isActive && (
+                <Row gap="4px">
+                  <Text color={theme.subText} fontSize={12}>
+                    <Trans>Voting ends in: </Trans>
+                  </Text>
+                  <TimerCountdown endTime={proposal.end_timestamp} />
+                </Row>
+              )}
+            </Column>
           )}
         </RowBetween>
       </ProposalHeader>
@@ -389,7 +437,9 @@ function ProposalItem({
                 lineHeight={isMobile ? '18px' : '22px'}
                 color={theme.subText}
                 marginBottom="20px"
-                dangerouslySetInnerHTML={{ __html: proposal.desc.replaceAll('\\n', '').replaceAll('\\r', '') }}
+                dangerouslySetInnerHTML={{
+                  __html: escapeScriptHtml(proposal.desc.replaceAll('\\n', '').replaceAll('\\r', '')),
+                }}
                 style={{ wordBreak: 'break-word' }}
               ></Text>
               {isMobile && <VoteInformation proposal={proposal} />}
@@ -408,7 +458,13 @@ function ProposalItem({
           isShow={showConfirmModal}
           title={proposal.title}
           toggle={() => setShowConfirmModal(false)}
-          options={selectedOptions.length > 0 ? selectedOptions.map(option => proposal.options[option]).join(', ') : ''}
+          options={
+            selectedOptions.length > 0
+              ? selectedOptions
+                  .map(option => HARDCODED_OPTION_TITLE[proposal.proposal_id]?.[option] || proposal.options[option])
+                  .join(', ')
+              : ''
+          }
           onVoteConfirm={handleVoteConfirm}
         />
       )}

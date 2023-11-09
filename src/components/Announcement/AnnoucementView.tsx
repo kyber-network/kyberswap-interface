@@ -1,12 +1,12 @@
 import { Trans } from '@lingui/macro'
-import { useCallback } from 'react'
+import { RefObject, useEffect } from 'react'
 import { Info, X } from 'react-feather'
 import { useMedia } from 'react-use'
 import AutoSizer from 'react-virtualized-auto-sizer'
 import { FixedSizeList } from 'react-window'
 import InfiniteLoader from 'react-window-infinite-loader'
 import { Flex, Text } from 'rebass'
-import AnnouncementApi from 'services/announcement'
+import { useAckPrivateAnnouncementsMutation } from 'services/announcement'
 import styled, { CSSProperties, css } from 'styled-components'
 
 import AnnouncementItem from 'components/Announcement/AnnoucementItem'
@@ -18,8 +18,8 @@ import Column from 'components/Column'
 import NotificationIcon from 'components/Icons/NotificationIcon'
 import { RowBetween } from 'components/Row'
 import { useActiveWeb3React } from 'hooks'
+import useMixpanel, { MIXPANEL_TYPE } from 'hooks/useMixpanel'
 import useTheme from 'hooks/useTheme'
-import { useWalletModalToggle } from 'state/application/hooks'
 import { MEDIA_WIDTHS } from 'theme'
 
 const Wrapper = styled.div`
@@ -31,6 +31,7 @@ const Wrapper = styled.div`
   padding-top: 20px;
   ${({ theme }) => theme.mediaWidth.upToMedium`
     width: 100%;
+    min-width: 380px;
   `};
   ${({ theme }) => theme.mediaWidth.upToSmall`
     width: 100%;
@@ -127,6 +128,8 @@ type Props = {
   refreshAnnouncement: () => void
   loadMoreAnnouncements: () => void
   toggleNotificationCenter: () => void
+  showDetailAnnouncement: (index: number) => void
+  scrollRef: RefObject<HTMLDivElement>
 }
 
 export default function AnnouncementView({
@@ -138,23 +141,28 @@ export default function AnnouncementView({
   toggleNotificationCenter,
   isMyInboxTab,
   onSetTab,
+  showDetailAnnouncement,
+  scrollRef,
 }: Props) {
   const { account } = useActiveWeb3React()
 
   const theme = useTheme()
-  const toggleWalletModal = useWalletModalToggle()
 
-  const { useAckPrivateAnnouncementsMutation } = AnnouncementApi
   const [ackAnnouncement] = useAckPrivateAnnouncementsMutation()
   const isMobile = useMedia(`(max-width: ${MEDIA_WIDTHS.upToMedium}px)`)
+  const { mixpanelHandler } = useMixpanel()
 
-  const onReadAnnouncement = (item: PrivateAnnouncement) => {
+  const onReadPrivateAnnouncement = (item: PrivateAnnouncement, statusMessage: string) => {
     if (!account) return
+    mixpanelHandler(MIXPANEL_TYPE.ANNOUNCEMENT_CLICK_INBOX_MESSAGE, {
+      message_status: statusMessage,
+      message_type: item.templateType,
+    })
     if (item.isRead) {
       toggleNotificationCenter()
       return
     }
-    ackAnnouncement({ account, action: 'read', ids: [item.id] })
+    ackAnnouncement({ action: 'read', ids: [item.id] })
       .then(() => {
         refreshAnnouncement()
         toggleNotificationCenter()
@@ -164,15 +172,27 @@ export default function AnnouncementView({
       })
   }
 
+  const onReadAnnouncement = (item: Announcement, index: number) => {
+    toggleNotificationCenter()
+    const { templateBody } = item
+    showDetailAnnouncement(index)
+    mixpanelHandler(MIXPANEL_TYPE.ANNOUNCEMENT_CLICK_ANNOUNCEMENT_MESSAGE, {
+      message_title: templateBody.name,
+    })
+  }
+
   const clearAll = () => {
     if (!announcements.length || !account) return
-    ackAnnouncement({ account, action: 'clear-all' })
+    ackAnnouncement({ action: 'clear-all' })
       .then(() => {
         refreshAnnouncement()
       })
       .catch(err => {
         console.error('ack noti error', err)
       })
+    mixpanelHandler(MIXPANEL_TYPE.ANNOUNCEMENT_CLICK_CLEAR_ALL_INBOXES, {
+      total_message_count: totalAnnouncement,
+    })
   }
 
   const hasMore = announcements.length !== totalAnnouncement
@@ -193,11 +213,12 @@ export default function AnnouncementView({
 
   const showClearAll = account && isMyInboxTab && announcements.length > 0
 
-  const onRefChange = useCallback((node: HTMLDivElement) => {
+  const node = scrollRef?.current
+  useEffect(() => {
     if (!node?.classList.contains('scrollbar')) {
       node?.classList.add('scrollbar')
     }
-  }, [])
+  }, [node])
 
   return (
     <Wrapper>
@@ -208,7 +229,11 @@ export default function AnnouncementView({
             <Trans>Notifications</Trans>
           </Title>
           <Flex style={{ gap: '20px', alignItems: 'center' }}>
-            {showClearAll && <MenuMoreAction showClearAll={Boolean(showClearAll)} clearAll={clearAll} />}
+            <MenuMoreAction
+              showClearAll={Boolean(showClearAll)}
+              clearAll={clearAll}
+              toggleModal={toggleNotificationCenter}
+            />
             {isMobile && <X color={theme.subText} onClick={toggleNotificationCenter} cursor="pointer" />}
           </Flex>
         </RowBetween>
@@ -223,11 +248,11 @@ export default function AnnouncementView({
               <InfiniteLoader isItemLoaded={isItemLoaded} itemCount={itemCount} loadMoreItems={loadMoreAnnouncements}>
                 {({ onItemsRendered, ref }) => (
                   <FixedSizeList
-                    outerRef={onRefChange}
+                    outerRef={scrollRef}
                     height={height}
                     width={width}
                     itemCount={itemCount}
-                    itemSize={isMyInboxTab ? 116 : 126}
+                    itemSize={isMyInboxTab ? 120 : 126}
                     onItemsRendered={onItemsRendered}
                     ref={ref}
                   >
@@ -241,14 +266,14 @@ export default function AnnouncementView({
                           style={style}
                           key={item.id}
                           announcement={item as PrivateAnnouncement}
-                          onRead={() => onReadAnnouncement(item as PrivateAnnouncement)}
+                          onRead={onReadPrivateAnnouncement}
                         />
                       ) : (
                         <AnnouncementItem
                           key={item.id}
                           style={style}
                           announcement={item as Announcement}
-                          onRead={toggleNotificationCenter}
+                          onRead={() => onReadAnnouncement(item as Announcement, index)}
                         />
                       )
                     }}
@@ -261,20 +286,9 @@ export default function AnnouncementView({
       ) : (
         <Column style={{ alignItems: 'center', margin: '24px 0px 32px 0px' }} gap="8px">
           <Info color={theme.subText} size={27} />
-          {!account && isMyInboxTab ? (
-            <>
-              <Text color={theme.primary} sx={{ cursor: 'pointer' }} textAlign="center" onClick={toggleWalletModal}>
-                <Trans>Connect Wallet</Trans>
-              </Text>
-              <Text color={theme.subText} textAlign="center">
-                <Trans>to view My inbox</Trans>
-              </Text>
-            </>
-          ) : (
-            <Text color={theme.subText} textAlign="center">
-              <Trans>No notifications found</Trans>
-            </Text>
-          )}
+          <Text color={theme.subText} textAlign="center">
+            <Trans>No notifications found</Trans>
+          </Text>
         </Column>
       )}
     </Wrapper>

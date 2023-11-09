@@ -44,7 +44,7 @@ export default function CurrencyInputForStake({
   const kncPrice = useKNCPrice()
   const kncValueInUsd = useMemo(() => {
     if (!kncPrice || !value) return 0
-    return (parseFloat(kncPrice) * parseFloat(value)).toFixed(2)
+    return (kncPrice * parseFloat(value)).toFixed(2)
   }, [kncPrice, value])
   return (
     <InnerCard>
@@ -52,11 +52,19 @@ export default function CurrencyInputForStake({
         <AutoRow gap="2px">
           {!disabled && (
             <>
-              <SmallButton onClick={() => setValue(getFullDisplayBalance(tokenBalance.value, tokenBalance.decimals))}>
+              <SmallButton
+                onClick={() =>
+                  setValue(getFullDisplayBalance(tokenBalance.value, tokenBalance.decimals, tokenBalance.decimals))
+                }
+              >
                 Max
               </SmallButton>
               <SmallButton
-                onClick={() => setValue(getFullDisplayBalance(tokenBalance.value.div(2), tokenBalance.decimals))}
+                onClick={() =>
+                  setValue(
+                    getFullDisplayBalance(tokenBalance.value.div(2), tokenBalance.decimals, tokenBalance.decimals),
+                  )
+                }
               >
                 Half
               </SmallButton>

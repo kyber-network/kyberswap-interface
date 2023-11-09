@@ -1,7 +1,9 @@
+import { ChainId } from '@kyberswap/ks-sdk-core'
 import {
   AddressLookupTableAccount,
   AddressLookupTableProgram,
   Commitment,
+  Connection,
   Message,
   PublicKey,
   Transaction,
@@ -10,12 +12,15 @@ import {
   VersionedTransaction,
 } from '@solana/web3.js'
 
-import connection from 'state/connection/connection'
+import { SUPPORTED_NETWORKS } from 'constants/networks'
+import solanaInfo from 'constants/networks/solana'
 import { filterTruthy } from 'utils'
 
 import { wait } from './retry'
 
+const connection = new Connection(solanaInfo.defaultRpcUrl, { commitment: 'confirmed' })
 const lookupTablesByPoolPromise = (async () => {
+  if (!SUPPORTED_NETWORKS.includes(ChainId.SOLANA)) return
   let fetchCount = 0
   const authority = new PublicKey('9YqphVt2hdE7RaL3YBCCP49thJbSovwgZQhyHjvgi1L3') // Kyber's lookuptable account owner
   const fetch = async (): Promise<{ [tableAddress: string]: PublicKey }> => {
@@ -63,6 +68,7 @@ const lookupTablesByPoolPromise = (async () => {
  * @return {Promise<VersionedTransaction>} The converted VersionedTransaction
  */
 export async function convertToVersionedTx(
+  connection: Connection,
   commitment: Commitment,
   recentBlockhash: string,
   message: Message,
@@ -74,7 +80,7 @@ export async function convertToVersionedTx(
   // get tables that can be used in this message
   const lookupTableAddrs: Array<PublicKey> = []
   for (const pubkey of message.accountKeys) {
-    if (lookupTablesByPool[pubkey.toBase58()]) {
+    if (lookupTablesByPool?.[pubkey.toBase58()]) {
       lookupTableAddrs.push(lookupTablesByPool[pubkey.toBase58()])
     }
   }

@@ -1,21 +1,18 @@
-import { parseUnits } from '@ethersproject/units'
 import { Trade } from '@kyberswap/ks-sdk-classic'
 import { ChainId, Currency, CurrencyAmount, TradeType } from '@kyberswap/ks-sdk-core'
 import { t } from '@lingui/macro'
-import JSBI from 'jsbi'
 import { ParsedUrlQuery } from 'querystring'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
-import { useLocation } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 
 import { APP_PATHS, BAD_RECIPIENT_ADDRESSES } from 'constants/index'
 import { DEFAULT_OUTPUT_TOKEN_BY_CHAIN, NativeCurrencies } from 'constants/tokens'
 import { useActiveWeb3React } from 'hooks'
-import { useCurrencyV2 } from 'hooks/Tokens'
+import { useCurrencyV2, useStableCoins } from 'hooks/Tokens'
 import { useTradeExactIn } from 'hooks/Trades'
 import useENS from 'hooks/useENS'
 import useParsedQueryString from 'hooks/useParsedQueryString'
-import { FeeConfig } from 'hooks/useSwapV2Callback'
 import { AppDispatch, AppState } from 'state/index'
 import {
   Field,
@@ -31,13 +28,13 @@ import {
   typeInput,
 } from 'state/swap/actions'
 import { SwapState } from 'state/swap/reducer'
-import { useExpertModeManager, useUserSlippageTolerance } from 'state/user/hooks'
+import { SolanaEncode } from 'state/swap/types'
+import { useDegenModeManager, useUserSlippageTolerance } from 'state/user/hooks'
 import { useCurrencyBalances } from 'state/wallet/hooks'
 import { isAddress } from 'utils'
 import { Aggregator } from 'utils/aggregator'
+import { parseFraction } from 'utils/numbers'
 import { computeSlippageAdjustedAmounts } from 'utils/prices'
-
-import { SolanaEncode } from './types'
 
 export function useSwapState(): AppState['swap'] {
   return useSelector<AppState, AppState['swap']>(state => state.swap)
@@ -81,11 +78,12 @@ export function useSwapActionHandlers(): {
     },
     [dispatch, chainId],
   )
-  const [expertMode] = useExpertModeManager()
+
+  const [isDegenMode] = useDegenModeManager()
 
   useEffect(() => {
-    if (expertMode) dispatch(setRecipient({ recipient: null }))
-  }, [expertMode, dispatch])
+    if (isDegenMode) dispatch(setRecipient({ recipient: null }))
+  }, [isDegenMode, dispatch])
 
   const onResetSelectCurrency = useCallback(
     (field: Field) => {
@@ -150,20 +148,22 @@ export function useSwapActionHandlers(): {
 export function tryParseAmount<T extends Currency>(
   value?: string,
   currency?: T,
-  shouldParse = true,
+  scaleDecimals = true,
 ): CurrencyAmount<T> | undefined {
   if (!value || !currency) {
     return undefined
   }
   try {
-    const typedValueParsed = shouldParse ? parseUnits(value, currency.decimals).toString() : value
-    if (typedValueParsed !== '0') {
-      return CurrencyAmount.fromRawAmount(currency, JSBI.BigInt(typedValueParsed))
-    }
+    const typedValueParsed = parseFraction(value)
+      .multiply(scaleDecimals ? 10 ** currency.decimals : 1)
+      .toFixed(0)
+
+    if (typedValueParsed === '0') return undefined
+    const result = CurrencyAmount.fromRawAmount(currency, typedValueParsed)
+    return result
   } catch (error) {
-    if (error.message.includes('fractional component exceeds decimals')) return undefined
     // should fail if the user specifies too many decimal places of precision (or maybe exceed max uint?)
-    console.debug(`Failed to parse input amount: "${value}"`, error)
+    console.debug(`Failed to parse input amount: "%s"`, value, error)
   }
   // necessary for all paths to return a value
   return undefined
@@ -182,7 +182,7 @@ function involvesAddress(trade: Trade<Currency, Currency, TradeType>, checksumme
 }
 
 // from the current swap inputs, compute the best trade and return it.
-export function useDerivedSwapInfo(): {
+function useDerivedSwapInfo(): {
   currencies: { [field in Field]?: Currency }
   currencyBalances: { [field in Field]?: CurrencyAmount<Currency> }
   parsedAmount: CurrencyAmount<Currency> | undefined
@@ -251,7 +251,7 @@ export function useDerivedSwapInfo(): {
     inputError = inputError ?? t`Enter a recipient`
   } else {
     if (
-      BAD_RECIPIENT_ADDRESSES.indexOf(formattedTo) !== -1 ||
+      BAD_RECIPIENT_ADDRESSES.has(formattedTo) ||
       (bestTradeExactIn && involvesAddress(bestTradeExactIn, formattedTo))
     ) {
       inputError = inputError ?? t`Invalid recipient`
@@ -269,7 +269,7 @@ export function useDerivedSwapInfo(): {
   ]
 
   if (balanceIn && amountIn && balanceIn.lessThan(amountIn)) {
-    inputError = t`Insufficient ${amountIn.currency.symbol} balance`
+    inputError = t`Insufficient ${amountIn.currency.symbol} balance.`
   }
 
   return {
@@ -309,7 +309,7 @@ export function queryParametersToSwapState(
   parsedQs: ParsedUrlQuery,
   chainId: ChainId,
   isMatchPath: boolean,
-): Omit<SwapState, 'saveGas' | 'typedValue'> {
+): Omit<SwapState, 'saveGas'> {
   let inputCurrency = parseCurrencyFromURLParameter(isMatchPath ? parsedQs.inputCurrency : null, chainId)
   let outputCurrency = parseCurrencyFromURLParameter(isMatchPath ? parsedQs.outputCurrency : null, chainId)
   if (inputCurrency === outputCurrency) {
@@ -321,16 +321,7 @@ export function queryParametersToSwapState(
   }
 
   const recipient = validatedRecipient(parsedQs.recipient, chainId)
-  const feePercent = parseInt(parsedQs?.['fee_bip']?.toString() || '0')
-  const feeConfig: FeeConfig | undefined =
-    parsedQs.referral && isAddress(chainId, parsedQs.referral) && parsedQs['fee_bip'] && !isNaN(feePercent)
-      ? {
-          chargeFeeBy: 'currency_in',
-          feeReceiver: parsedQs.referral.toString(),
-          isInBps: true,
-          feeAmount: feePercent < 1 ? '1' : feePercent > 10 ? '10' : feePercent.toString(),
-        }
-      : undefined
+  const typedValue = (parsedQs.amountIn ?? '') as string
   return {
     [Field.INPUT]: {
       currencyId: inputCurrency,
@@ -340,12 +331,13 @@ export function queryParametersToSwapState(
     },
     independentField: parseIndependentFieldURLParameter(parsedQs.exactField),
     recipient,
-    feeConfig,
     showConfirm: false,
     tradeToConfirm: undefined,
     attemptingTxn: false,
     swapErrorMessage: undefined,
     txHash: undefined,
+    isSelectTokenManually: false,
+    typedValue,
   }
 }
 
@@ -387,7 +379,11 @@ export const useDefaultsFromURLSearch = ():
       return
     }
 
-    const parsed = queryParametersToSwapState(parsedQs, chainId, refPathname.current.startsWith(APP_PATHS.SWAP))
+    const parsed = queryParametersToSwapState(
+      parsedQs,
+      chainId,
+      refPathname.current.startsWith(APP_PATHS.SWAP) || refPathname.current.startsWith(APP_PATHS.PARTNER_SWAP),
+    )
 
     const outputCurrencyAddress = DEFAULT_OUTPUT_TOKEN_BY_CHAIN[chainId]?.address || ''
 
@@ -417,7 +413,7 @@ export const useDefaultsFromURLSearch = ():
         inputCurrencyId,
         outputCurrencyId,
         recipient: parsed.recipient,
-        feeConfig: parsed.feeConfig,
+        typedValue: parsed.typedValue,
       }),
     )
 
@@ -429,4 +425,41 @@ export const useDefaultsFromURLSearch = ():
   }, [dispatch, chainId, parsedQs])
 
   return result
+}
+
+export const useInputCurrency = () => {
+  const inputCurrencyId = useSelector((state: AppState) => state.swap[Field.INPUT].currencyId)
+  const inputCurrency = useCurrencyV2(inputCurrencyId)
+  return inputCurrency || undefined
+}
+export const useOutputCurrency = () => {
+  const outputCurrencyId = useSelector((state: AppState) => state.swap[Field.OUTPUT].currencyId)
+  const outputCurrency = useCurrencyV2(outputCurrencyId)
+  return outputCurrency || undefined
+}
+
+export const useCheckStablePairSwap = () => {
+  const { chainId } = useActiveWeb3React()
+  const { isStableCoin } = useStableCoins(chainId)
+  const inputCurrencyId = useSelector((state: AppState) => state.swap[Field.INPUT].currencyId)
+  const outputCurrencyId = useSelector((state: AppState) => state.swap[Field.OUTPUT].currencyId)
+
+  const isStablePairSwap = isStableCoin(inputCurrencyId) && isStableCoin(outputCurrencyId)
+
+  return isStablePairSwap
+}
+
+export const useSwitchPairToLimitOrder = () => {
+  const navigate = useNavigate()
+  const inputCurrencyId = useSelector((state: AppState) => state.swap[Field.INPUT].currencyId)
+  const outputCurrencyId = useSelector((state: AppState) => state.swap[Field.OUTPUT].currencyId)
+  const { networkInfo } = useActiveWeb3React()
+
+  return useCallback(
+    () =>
+      navigate(
+        `${APP_PATHS.LIMIT}/${networkInfo.route}?inputCurrency=${inputCurrencyId}&outputCurrency=${outputCurrencyId}`,
+      ),
+    [networkInfo, inputCurrencyId, outputCurrencyId, navigate],
+  )
 }

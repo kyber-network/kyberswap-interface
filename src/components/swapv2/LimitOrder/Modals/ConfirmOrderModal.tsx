@@ -1,21 +1,24 @@
 import { Currency } from '@kyberswap/ks-sdk-core'
 import { Trans, t } from '@lingui/macro'
 import dayjs from 'dayjs'
-import { ReactNode, memo, useCallback, useMemo } from 'react'
+import { ReactNode, memo, useMemo, useState } from 'react'
 import { Flex, Text } from 'rebass'
 
 import { ButtonPrimary, ButtonWarning } from 'components/Button'
 import Column from 'components/Column'
 import CurrencyLogo from 'components/CurrencyLogo'
 import TransactionConfirmationModal, { TransactionErrorContent } from 'components/TransactionConfirmationModal'
-import { BaseTradeInfo } from 'components/swapv2/LimitOrder/useBaseTradeInfo'
+import { WORSE_PRICE_DIFF_THRESHOLD } from 'components/swapv2/LimitOrder/const'
 import { useActiveWeb3React } from 'hooks'
+import { BaseTradeInfo } from 'hooks/useBaseTradeInfo'
+import useTheme from 'hooks/useTheme'
 import ErrorWarningPanel from 'pages/Bridge/ErrorWarning'
-import { TransactionFlowState } from 'types'
+import { TransactionFlowState } from 'types/TransactionFlowState'
+import { formatDisplayNumber } from 'utils/numbers'
 
 import { formatAmountOrder } from '../helpers'
-import { RateInfo } from '../type'
-import { Container, Header, ListInfo, MarketInfo, Note, Rate, Value } from './styled'
+import { CancelOrderType, EditOrderInfo, RateInfo } from '../type'
+import { Container, Header, ListInfo, Note, Rate, Value } from './styled'
 
 const styleLogo = { width: 20, height: 20 }
 
@@ -32,6 +35,9 @@ export default memo(function ConfirmOrderModal({
   rateInfo,
   note,
   warningMessage,
+  percentDiff,
+  editOrderInfo,
+  showConfirmContent,
 }: {
   onSubmit: () => void
   onDismiss: () => void
@@ -45,17 +51,24 @@ export default memo(function ConfirmOrderModal({
   rateInfo: RateInfo
   note?: string
   warningMessage: ReactNode[]
+  percentDiff: number
+  editOrderInfo?: EditOrderInfo
+  showConfirmContent: boolean
 }) {
   const { account } = useActiveWeb3React()
-
+  const [confirmed, setConfirmed] = useState(false)
+  const shouldShowConfirmFlow = percentDiff < WORSE_PRICE_DIFF_THRESHOLD
+  const theme = useTheme()
   const displayCurrencyOut = useMemo(() => {
     return currencyOut?.isNative ? currencyOut.wrapped : currencyOut
   }, [currencyOut])
 
+  const { cancelType, gasFee, isEdit } = editOrderInfo || {}
+
   const listData = useMemo(() => {
-    return [
+    const nodes = [
       {
-        label: t`I want to pay`,
+        label: t`I pay`,
         content: currencyIn && inputAmount && (
           <Value>
             <CurrencyLogo currency={currencyIn} style={styleLogo} />
@@ -66,7 +79,7 @@ export default memo(function ConfirmOrderModal({
         ),
       },
       {
-        label: t`and receive at least`,
+        label: t`and receive`,
         content: displayCurrencyOut && outputAmount && (
           <Value>
             <CurrencyLogo currency={displayCurrencyOut} style={styleLogo} />
@@ -89,67 +102,156 @@ export default memo(function ConfirmOrderModal({
         ),
       },
     ]
-  }, [account, currencyIn, displayCurrencyOut, inputAmount, rateInfo, outputAmount, expireAt])
+    if (isEdit)
+      nodes.push({
+        label: t`Edit Type`,
+        content: (
+          <Value>
+            <Text>
+              {cancelType === CancelOrderType.GAS_LESS_CANCEL ? (
+                <Trans>Gasless Edit</Trans>
+              ) : (
+                <Trans>
+                  Hard Edit (
+                  <Text as="span" color={theme.red}>
+                    ~{formatDisplayNumber(gasFee, { style: 'currency', fractionDigits: 4 })}
+                  </Text>{' '}
+                  gas fees)
+                </Trans>
+              )}
+            </Text>
+          </Value>
+        ),
+      })
+    return nodes
+  }, [
+    account,
+    currencyIn,
+    displayCurrencyOut,
+    inputAmount,
+    rateInfo,
+    outputAmount,
+    expireAt,
+    isEdit,
+    gasFee,
+    cancelType,
+    theme,
+  ])
 
-  const confirmationContent = useCallback(() => {
+  const handleDismiss = () => {
+    onDismiss()
+
+    // delay till the animation's done
+    setTimeout(() => {
+      setConfirmed(false)
+    }, 200)
+  }
+
+  const renderConfirmPriceButton = () => {
+    if (!shouldShowConfirmFlow) {
+      return null
+    }
+
+    if (confirmed) {
+      return (
+        <ButtonPrimary disabled>
+          <Trans>Confirm Price</Trans>
+        </ButtonPrimary>
+      )
+    }
+
+    return (
+      <ButtonWarning onClick={() => setConfirmed(true)}>
+        <Trans>Confirm Price</Trans>
+      </ButtonWarning>
+    )
+  }
+
+  const renderPlaceOrderButton = () => {
+    const shouldDisable = shouldShowConfirmFlow && !confirmed
+
+    if (shouldDisable) {
+      return (
+        <ButtonPrimary id="place-order-button" disabled>
+          <Trans>Place Order</Trans>
+        </ButtonPrimary>
+      )
+    }
+
+    if (warningMessage?.length) {
+      return (
+        <ButtonWarning id="place-order-button" onClick={onSubmit}>
+          <Trans>Place Order</Trans>
+        </ButtonWarning>
+      )
+    }
+
+    return (
+      <ButtonPrimary id="place-order-button" onClick={onSubmit}>
+        <Trans>Place Order</Trans>
+      </ButtonPrimary>
+    )
+  }
+
+  const renderConfirmData = () => (
+    <>
+      <ListInfo
+        listData={listData}
+        marketPrice={marketPrice}
+        symbolIn={currencyIn?.symbol}
+        symbolOut={displayCurrencyOut?.symbol}
+      />
+      <Note note={note} />
+
+      {warningMessage?.length > 0 && (
+        <Column gap="16px">
+          {warningMessage?.map((mess, i) => (
+            <ErrorWarningPanel key={i} type="warn" title={mess} />
+          ))}
+        </Column>
+      )}
+
+      {isEdit ? null : (
+        <Flex
+          sx={{
+            gap: '12px',
+          }}
+        >
+          {renderConfirmPriceButton()}
+          {renderPlaceOrderButton()}
+        </Flex>
+      )}
+    </>
+  )
+
+  if (showConfirmContent) return renderConfirmData()
+
+  const renderConfirmationContent = (): ReactNode => {
     return (
       <Flex flexDirection={'column'} width="100%">
         <div>
-          {flowState.errorMessage ? (
+          {flowState.errorMessage && !isEdit ? (
             <TransactionErrorContent onDismiss={onDismiss} message={flowState.errorMessage} />
           ) : (
             <Container>
-              <Header title={t`Review your order`} onDismiss={onDismiss} />
-              <ListInfo listData={listData} />
-              <MarketInfo
-                marketPrice={marketPrice}
-                symbolIn={currencyIn?.symbol}
-                symbolOut={displayCurrencyOut?.symbol}
-              />
-              <Note note={note} />
-
-              {warningMessage?.length > 0 && (
-                <Column gap="16px">
-                  {warningMessage?.map((mess, i) => (
-                    <ErrorWarningPanel key={i} type="warn" title={mess} />
-                  ))}
-                </Column>
-              )}
-
-              {warningMessage?.length ? (
-                <ButtonWarning onClick={onSubmit}>
-                  <Trans>Place Order</Trans>
-                </ButtonWarning>
-              ) : (
-                <ButtonPrimary onClick={onSubmit}>
-                  <Trans>Place Order</Trans>
-                </ButtonPrimary>
-              )}
+              <Header title={t`Review your order`} onDismiss={handleDismiss} />
+              {renderConfirmData()}
             </Container>
           )}
         </div>
       </Flex>
     )
-  }, [
-    onDismiss,
-    flowState.errorMessage,
-    listData,
-    onSubmit,
-    marketPrice,
-    note,
-    currencyIn,
-    displayCurrencyOut,
-    warningMessage,
-  ])
+  }
 
   return (
     <TransactionConfirmationModal
       maxWidth={450}
       hash={flowState.txHash}
       isOpen={flowState.showConfirm}
-      onDismiss={onDismiss}
+      onDismiss={handleDismiss}
       attemptingTxn={flowState.attemptingTxn}
-      content={confirmationContent}
+      attemptingTxnContent={isEdit ? renderConfirmationContent : undefined}
+      content={renderConfirmationContent}
       pendingText={flowState.pendingText || t`Placing order`}
     />
   )

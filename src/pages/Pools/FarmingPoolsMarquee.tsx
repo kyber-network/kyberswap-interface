@@ -16,8 +16,8 @@ import { useToken } from 'hooks/Tokens'
 import useMarquee from 'hooks/useMarquee'
 import useParsedQueryString from 'hooks/useParsedQueryString'
 import useTheme from 'hooks/useTheme'
+import { useActiveAndUniqueFarmsData } from 'state/farms/classic/hooks'
 import { useElasticFarms } from 'state/farms/elastic/hooks'
-import { useActiveAndUniqueFarmsData } from 'state/farms/hooks'
 
 const StyledLink = styled(Link)`
   display: flex;
@@ -94,7 +94,7 @@ const FarmingPoolsMarquee = ({ tab }: { tab: string }) => {
     <FadeInAnimation>
       <Container>
         <Title>
-          <MouseoverTooltip text="Available for yield farming">
+          <MouseoverTooltip text="Available for yield farming.">
             <MoneyBag size={16} color={theme.apr} />
           </MouseoverTooltip>
 
@@ -109,8 +109,8 @@ const FarmingPoolsMarquee = ({ tab }: { tab: string }) => {
                 ? uniqueAndActiveFarms.map(farm => (
                     <MarqueeItem
                       key={`${farm.token0?.symbol}-${farm.token1?.symbol}`}
-                      token0={farm.token0.id}
-                      token1={farm.token1.id}
+                      token0={farm.token0.address}
+                      token1={farm.token1.address}
                     />
                   ))
                 : activePrommFarm.map(farm => (

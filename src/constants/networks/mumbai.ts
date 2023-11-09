@@ -1,9 +1,6 @@
 import { ChainId } from '@kyberswap/ks-sdk-core'
 
-import Polygon from 'assets/networks/polygon-network.png'
-import { KS_SETTING_API } from 'constants/env'
 import { EVMNetworkInfo } from 'constants/networks/type'
-import { createClient } from 'utils/client'
 
 const EMPTY = ''
 const EMPTY_ARRAY: any[] = []
@@ -15,28 +12,27 @@ const mumbaiInfo: EVMNetworkInfo = {
   ksSettingRoute: 'mumbai',
   priceRoute: 'mumbai',
   poolFarmRoute: EMPTY,
+  aggregatorRoute: 'mumbai',
   name: 'Mumbai',
-  icon: Polygon,
-  iconDark: NOT_SUPPORT,
+  icon: 'https://storage.googleapis.com/ks-setting-a3aa20b7/78dfb4fb-089b-431d-8725-b5de2cea0bfc.svg',
+
   iconSelected: NOT_SUPPORT,
-  iconDarkSelected: NOT_SUPPORT,
-  blockClient: createClient('https://api.thegraph.com/subgraphs/name/piavgh/mumbai-blocks'),
+
+  defaultBlockSubgraph: 'https://api.thegraph.com/subgraphs/name/piavgh/mumbai-blocks',
   etherscanUrl: 'https://mumbai.polygonscan.com/',
   etherscanName: 'Polygonscan',
-  tokenListUrl: `${KS_SETTING_API}/v1/tokens?chainIds=${ChainId.MUMBAI}&isWhitelisted=${true}`,
   bridgeURL: EMPTY,
   nativeToken: {
     symbol: 'MATIC',
     name: 'Polygon',
-    logo: Polygon,
+    logo: 'https://storage.googleapis.com/ks-setting-a3aa20b7/78dfb4fb-089b-431d-8725-b5de2cea0bfc.svg',
     decimal: 18,
     minForGas: 10 ** 16,
   },
-  rpcUrl: 'https://rpc-mumbai.maticvigil.com',
-  routerUri: EMPTY,
+  defaultRpcUrl: 'https://rpc-mumbai.maticvigil.com',
   multicall: '0xc535D6463D5Bf9843aFa73bBF49bF4644a3988bA',
   classic: {
-    client: createClient('https://api.thegraph.com/subgraphs/name/piavgh/dmm-exchange-mumbai'),
+    defaultSubgraph: 'https://api.thegraph.com/subgraphs/name/piavgh/dmm-exchange-mumbai',
     static: {
       zap: EMPTY,
       router: EMPTY,
@@ -53,7 +49,7 @@ const mumbaiInfo: EVMNetworkInfo = {
     fairlaunchV2: EMPTY_ARRAY,
   },
   elastic: {
-    client: createClient('https://api.thegraph.com/subgraphs/name/kybernetwork/kyberswap-elastic-matic'), //todo: not exits yet
+    defaultSubgraph: 'https://api.thegraph.com/subgraphs/name/kybernetwork/kyberswap-elastic-matic', //todo: not exits yet
     startBlock: 29347468,
     coreFactory: '0x5F1dddbf348aC2fbe22a163e30F99F9ECE3DD50a',
     nonfungiblePositionManager: '0x2B1c7b41f6A8F2b2bc45C3233a5d5FB3cD6dC9A8',
@@ -63,13 +59,13 @@ const mumbaiInfo: EVMNetworkInfo = {
     routers: '0xC1e7dFE73E1598E3910EF4C7845B68A9Ab6F4c83',
     farms: [],
   },
-  limitOrder: { development: NOT_SUPPORT, production: NOT_SUPPORT },
+  limitOrder: NOT_SUPPORT,
   averageBlockTimeInSeconds: 2.6,
   coingeckoNetworkId: 'polygon-pos',
   coingeckoNativeTokenId: 'matic-network',
   deBankSlug: EMPTY,
-  trueSightId: NOT_SUPPORT,
   dexToCompare: NOT_SUPPORT,
+  geckoTermialId: NOT_SUPPORT,
 }
 
 export default mumbaiInfo

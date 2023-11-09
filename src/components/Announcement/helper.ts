@@ -1,62 +1,44 @@
 import { ChainId } from '@kyberswap/ks-sdk-core'
-import { useCallback } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { useLocalStorage } from 'react-use'
 
-import { AnnouncementTemplatePopup, PopupContentAnnouncement } from 'components/Announcement/type'
-import { PopupItemType } from 'state/application/reducer'
+import { AnnouncementTemplatePopup, PopupContentAnnouncement, PopupItemType } from 'components/Announcement/type'
+import { APP_PATHS, TIMES_IN_SECS } from 'constants/index'
 
-export const useAckAnnouncement = () => {
-  const [announcementsMap, setAnnouncementsMap] = useLocalStorage<{ [id: string]: string }>('ack-announcements', {})
-  const ackAnnouncement = useCallback(
-    (id: string | number) =>
-      setAnnouncementsMap({
-        ...announcementsMap,
-        [id]: '1',
-      }),
-    [announcementsMap, setAnnouncementsMap],
+const LsKey = 'ack-announcements'
+export const getAnnouncementsAckMap = () => JSON.parse(localStorage[LsKey] || '{}')
+
+export const ackAnnouncementPopup = (id: string | number) => {
+  const announcementsMap = getAnnouncementsAckMap()
+  const entries = Object.entries(announcementsMap).filter(
+    // keep only ids that was added in the last 30 days
+    ([_, value]) => typeof value === 'number' && Date.now() - value < TIMES_IN_SECS.ONE_DAY * 30 * 1000,
   )
-  return { announcementsAckMap: announcementsMap ?? {}, ackAnnouncement }
+  localStorage.setItem(
+    LsKey,
+    JSON.stringify({
+      ...Object.fromEntries(entries),
+      [id]: Date.now(),
+    }),
+  )
 }
 
-export const formatNumberOfUnread = (num: number) => (num > 10 ? '10+' : num + '')
+export const formatNumberOfUnread = (num: number | undefined) => (num ? (num > 10 ? '10+' : num + '') : null)
 
 export const isPopupCanShow = (
-  popupInfo: PopupItemType,
-  announcementsAckMap: { [id: string]: string },
+  popupInfo: PopupItemType<PopupContentAnnouncement>,
   chainId: ChainId,
+  account: string | undefined,
 ) => {
-  const { templateBody = {}, metaMessageId } = popupInfo.content as PopupContentAnnouncement
+  if ([APP_PATHS.IAM_CONSENT, APP_PATHS.IAM_LOGIN, APP_PATHS.IAM_LOGOUT].includes(window.location.pathname))
+    return false
+
+  const { templateBody = {}, metaMessageId } = popupInfo.content
   const { endAt, startAt, chainIds = [] } = templateBody as AnnouncementTemplatePopup
   const isRightChain = chainIds.includes(chainId + '')
+  const announcementsAckMap = getAnnouncementsAckMap()
   const isRead = announcementsAckMap[metaMessageId]
+
+  const isOwn = popupInfo.account ? account === popupInfo.account : true
+
   const isExpired = Date.now() < startAt * 1000 || Date.now() > endAt * 1000
-  return !isRead && !isExpired && isRightChain
-}
-
-export const formatTime = (time: number) => {
-  const delta = (Date.now() - time * 1000) / 1000
-  const min = Math.floor(delta / 60)
-  if (min < 1) return `< 1 minute ago`
-  if (min < 60) return `${min} minutes ago`
-  const hour = Math.floor(delta / 3600)
-  if (hour < 24) return `${hour} hours ago`
-  const day = Math.floor(delta / (24 * 3600))
-  return `${day} days ago`
-}
-
-export const useNavigateCtaPopup = () => {
-  const navigate = useNavigate()
-  const onNavigate = (actionURL: string) => {
-    try {
-      if (!actionURL) return
-      const { pathname, host } = new URL(actionURL)
-      if (window.location.host === host) {
-        navigate(pathname)
-      } else {
-        window.open(actionURL)
-      }
-    } catch (error) {}
-  }
-  return onNavigate
+  return !isRead && !isExpired && isRightChain && isOwn
 }

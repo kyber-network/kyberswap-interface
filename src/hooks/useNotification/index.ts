@@ -1,17 +1,22 @@
-import { uuid4 } from '@sentry/utils'
-import axios from 'axios'
 import { useCallback, useEffect } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
-import useSWR, { mutate } from 'swr'
+import {
+  useCreateWatchWalletMutation,
+  useGetSubscriptionTopicsQuery,
+  useSubscribeTopicsMutation,
+} from 'services/identity'
 
-import { KS_SETTING_API, NOTIFICATION_API } from 'constants/env'
+import { ELASTIC_POOL_TOPIC_ID, KYBER_AI_TOPIC_ID, PRICE_ALERT_TOPIC_ID } from 'constants/env'
 import { useActiveWeb3React } from 'hooks'
 import { AppState } from 'state'
 import { setLoadingNotification, setSubscribedNotificationTopic } from 'state/application/actions'
-import { useNotificationModalToggle } from 'state/application/hooks'
+import { useSessionInfo } from 'state/authen/hooks'
+import { pushUnique } from 'utils'
 
-const getAllTopicUrl = (account: string | null | undefined) =>
-  `${KS_SETTING_API}/v1/topic-groups${account ? `?walletAddress=${account}` : ''}`
+export enum TopicType {
+  RESTRICT = 'restricted',
+  NORMAL = 'common',
+}
 
 export type Topic = {
   id: number
@@ -20,27 +25,23 @@ export type Topic = {
   name: string
   isSubscribed: boolean
   topics: Topic[]
-}
-
-export const NOTIFICATION_TOPICS = {
-  TRENDING_SOON: 2,
-  POSITION_POOL: 1,
+  priority: number
+  type: TopicType
+  isKyberAI: boolean
+  isPriceAlert: boolean
+  isPriceElasticPool: boolean
 }
 
 type SaveNotificationParam = {
   subscribeIds: number[]
   unsubscribeIds: number[]
-  email: string
-  isChangeEmailOnly: boolean
-  isEmail: boolean
-  isTelegram: boolean
 }
 
 const useNotification = () => {
-  const { isLoading, topicGroups, userInfo } = useSelector((state: AppState) => state.application.notification)
+  const { isLoading, topicGroups } = useSelector((state: AppState) => state.application.notification)
+  const { userInfo } = useSessionInfo()
 
-  const { account, chainId } = useActiveWeb3React()
-  const toggleSubscribeModal = useNotificationModalToggle()
+  const { account } = useActiveWeb3React()
   const dispatch = useDispatch()
 
   const setLoading = useCallback(
@@ -50,89 +51,88 @@ const useNotification = () => {
     [dispatch],
   )
 
-  const { data: resp } = useSWR(
-    getAllTopicUrl(account),
-    (url: string) => {
-      try {
-        if (url) {
-          return axios.get(url).then(({ data }) => data.data)
-        }
-      } catch (error) {}
-      return
-    },
-    {
-      shouldRetryOnError: false,
-      revalidateOnFocus: false,
-      revalidateIfStale: false,
-    },
-  )
+  const { data: resp, refetch } = useGetSubscriptionTopicsQuery(undefined, { skip: !userInfo })
 
   useEffect(() => {
     if (!resp) return
-    const topicGroups: Topic[] = (resp?.topicGroups ?? []).map((e: Topic) => ({
+    const topicGroups: Topic[] = (resp?.topicGroups ?? []).map((e: Topic, i: number) => ({
       ...e,
-      id: uuid4(),
+      id: Date.now() + i,
       isSubscribed: e?.topics?.every(e => e.isSubscribed),
+      // special topic ids
+      isKyberAI: e?.topics?.some(e => KYBER_AI_TOPIC_ID.includes(e.id + '')),
+      isPriceAlert: e?.topics?.some(e => e.id + '' === PRICE_ALERT_TOPIC_ID),
+      isPriceElasticPool: e?.topics?.some(e => e.id + '' === ELASTIC_POOL_TOPIC_ID),
     }))
-    dispatch(setSubscribedNotificationTopic({ topicGroups, userInfo: resp?.user ?? { email: '', telegram: '' } }))
+    dispatch(setSubscribedNotificationTopic({ topicGroups }))
   }, [resp, dispatch])
 
-  const refreshTopics = useCallback(() => account && mutate(getAllTopicUrl(account)), [account])
+  useEffect(() => {
+    try {
+      refetch()
+    } catch (error) {}
+  }, [userInfo?.identityId, refetch])
+
+  const [requestWatchWallet] = useCreateWatchWalletMutation()
+  const [callSubscribeTopic] = useSubscribeTopicsMutation()
 
   const saveNotification = useCallback(
-    async ({ subscribeIds, unsubscribeIds, email, isEmail, isChangeEmailOnly, isTelegram }: SaveNotificationParam) => {
+    async ({ subscribeIds, unsubscribeIds }: SaveNotificationParam) => {
       try {
         setLoading(true)
-        if (isEmail) {
-          if (unsubscribeIds.length) {
-            await axios.post(`${NOTIFICATION_API}/v1/topics/unsubscribe?userType=EMAIL`, {
-              walletAddress: account,
-              topicIDs: unsubscribeIds,
-            })
-          }
-          if (subscribeIds.length || isChangeEmailOnly) {
-            const allTopicSubscribed = topicGroups.reduce(
-              (topics: number[], item) => [...topics, ...item.topics.filter(e => e.isSubscribed).map(e => e.id)],
-              [],
-            )
-            await axios.post(`${NOTIFICATION_API}/v1/topics/subscribe?userType=EMAIL`, {
-              email,
-              walletAddress: account,
-              topicIDs: isChangeEmailOnly ? allTopicSubscribed : subscribeIds,
-            })
-          }
-          return
+        let topicIds = topicGroups.reduce(
+          (topics: number[], item) => [...topics, ...item.topics.filter(e => e.isSubscribed).map(e => e.id)],
+          [],
+        )
+        if (unsubscribeIds.length) {
+          topicIds = topicIds.filter(id => !unsubscribeIds.includes(id))
         }
-        if (isTelegram) {
-          const response = await axios.post(`${NOTIFICATION_API}/v1/topics/build-verification/telegram`, {
-            chainId: chainId + '',
-            wallet: account,
-            subscribe: subscribeIds,
-            unsubscribe: unsubscribeIds,
-          })
-          return response?.data?.data
+        if (subscribeIds.length) {
+          topicIds = topicIds.concat(subscribeIds)
         }
+        const hasElasticBool = (() => {
+          const topicPools = ELASTIC_POOL_TOPIC_ID.split(',').map(Number)
+          return subscribeIds.some(id => topicPools.includes(id))
+        })()
+        if (hasElasticBool && account) {
+          await requestWatchWallet({ walletAddress: account }).unwrap()
+        }
+        await callSubscribeTopic({ topicIds: [...new Set(topicIds)] }).unwrap()
+        return
       } catch (e) {
         return Promise.reject(e)
       } finally {
         setLoading(false)
       }
     },
-    [setLoading, account, chainId, topicGroups],
+    [setLoading, account, topicGroups, callSubscribeTopic, requestWatchWallet],
   )
 
-  const showNotificationModal = useCallback(() => {
-    refreshTopics()
-    toggleSubscribeModal()
-  }, [refreshTopics, toggleSubscribeModal])
+  const subscribeOne = useCallback(
+    (topic: number) => {
+      saveNotification({ subscribeIds: [topic], unsubscribeIds: [] })
+    },
+    [saveNotification],
+  )
+
+  const unsubscribeAll = useCallback(() => {
+    let unsubscribeIds: number[] = []
+    topicGroups.forEach(topic => {
+      if (!topic.isSubscribed) return
+      topic.topics.forEach(topic => {
+        unsubscribeIds = pushUnique(unsubscribeIds, topic.id)
+      })
+    })
+    if (!unsubscribeIds.length) return
+    saveNotification({ unsubscribeIds, subscribeIds: [] })
+  }, [topicGroups, saveNotification])
 
   return {
     topicGroups,
     isLoading,
-    userInfo,
     saveNotification,
-    showNotificationModal,
-    refreshTopics,
+    unsubscribeAll,
+    subscribeOne,
   }
 }
 

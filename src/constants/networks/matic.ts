@@ -1,11 +1,8 @@
 import { ChainId } from '@kyberswap/ks-sdk-core'
 
-import Polygon from 'assets/networks/polygon-network.png'
-import { AGGREGATOR_API, KS_SETTING_API } from 'constants/env'
+import polygonIcon from 'assets/networks/polygon.svg'
 import { EVMNetworkInfo } from 'constants/networks/type'
-import { createClient } from 'utils/client'
 
-const EMPTY = ''
 const NOT_SUPPORT = null
 
 const maticInfo: EVMNetworkInfo = {
@@ -14,31 +11,26 @@ const maticInfo: EVMNetworkInfo = {
   ksSettingRoute: 'polygon',
   priceRoute: 'polygon',
   poolFarmRoute: 'polygon',
-  name: 'Polygon',
-  icon: Polygon,
-  iconDark: NOT_SUPPORT,
+  aggregatorRoute: 'polygon',
+  name: 'Polygon PoS',
+  icon: polygonIcon,
   iconSelected: NOT_SUPPORT,
-  iconDarkSelected: NOT_SUPPORT,
-  blockClient: createClient('https://api.thegraph.com/subgraphs/name/dynamic-amm/ethereum-blocks-polygon'),
+
+  defaultBlockSubgraph: 'https://api.thegraph.com/subgraphs/name/dynamic-amm/ethereum-blocks-polygon',
   etherscanUrl: 'https://polygonscan.com',
   etherscanName: 'Polygonscan',
-  tokenListUrl: `${KS_SETTING_API}/v1/tokens?chainIds=${ChainId.MATIC}&isWhitelisted=${true}`,
-  bridgeURL: EMPTY,
+  bridgeURL: 'https://wallet.polygon.technology/',
   nativeToken: {
     symbol: 'MATIC',
     name: 'Polygon',
-    logo: Polygon,
+    logo: 'https://storage.googleapis.com/ks-setting-1d682dca/10d6d017-945d-470d-87eb-6a6f89ce8b7e.png',
     decimal: 18,
     minForGas: 10 ** 17,
   },
-  rpcUrl: 'https://polygon.kyberengineering.io',
-  routerUri: `${AGGREGATOR_API}/polygon/route/encode`,
+  defaultRpcUrl: 'https://polygon.kyberengineering.io',
   multicall: '0xed386Fe855C1EFf2f843B910923Dd8846E45C5A4',
   classic: {
-    client: createClient('https://api.thegraph.com/subgraphs/name/kybernetwork/kyberswap-exchange-polygon'),
-    // client: createClient(
-    //   'https://polygon-graph.kyberengineering.io/subgraphs/name/kybernetwork/kyberswap-exchange-polygon',
-    // ),
+    defaultSubgraph: 'https://api.thegraph.com/subgraphs/name/kybernetwork/kyberswap-exchange-polygon',
     static: {
       zap: '0x2abE8750e4a65584d7452316356128C936273e0D',
       router: '0x5649B4DD00780e99Bab7Abb4A3d581Ea1aEB23D0',
@@ -59,32 +51,39 @@ const maticInfo: EVMNetworkInfo = {
       '0x829c27fd3013b944cbE76E92c3D6c45767c0C789',
       '0x3aDd3034Fcf921F20c74c6149FB44921709595B1',
     ],
-    fairlaunchV2: ['0xFFD22921947D75342BFE1f8efAcEE4B8B3b5183F'],
+    fairlaunchV2: ['0xFFD22921947D75342BFE1f8efAcEE4B8B3b5183F', '0x0bAF410dcfCf168f659f46bF1e28D29f68a25E77'],
   },
   elastic: {
-    // client: createClient('https://api.thegraph.com/subgraphs/name/kybernetwork/kyberswap-elastic-matic'),
-    client: createClient(
-      'https://polygon-graph.kyberengineering.io/subgraphs/name/kybernetwork/kyberswap-elastic-polygon',
-    ),
-    startBlock: 29347468,
-    coreFactory: '0x5F1dddbf348aC2fbe22a163e30F99F9ECE3DD50a',
-    nonfungiblePositionManager: '0x2B1c7b41f6A8F2b2bc45C3233a5d5FB3cD6dC9A8',
-    tickReader: '0x165c68077ac06c83800d19200e6E2B08D02dE75D',
-    initCodeHash: '0xc597aba1bb02db42ba24a8878837965718c032f8b46be94a6e46452a9f89ca01',
-    quoter: '0x0D125c15D54cA1F8a813C74A81aEe34ebB508C1f',
-    routers: '0xC1e7dFE73E1598E3910EF4C7845B68A9Ab6F4c83',
-    farms: ['0xBdEc4a045446F583dc564C0A227FFd475b329bf0', '0x5C503D4b7DE0633f031229bbAA6A5e4A31cc35d8'],
+    defaultSubgraph: 'https://api.thegraph.com/subgraphs/name/kybernetwork/kyberswap-elastic-matic',
+    startBlock: 42880805,
+    coreFactory: '0xC7a590291e07B9fe9E64b86c58fD8fC764308C4A',
+    nonfungiblePositionManager: '0xe222fBE074A436145b255442D919E4E3A6c6a480',
+    tickReader: '0x8Fd8Cb948965d9305999D767A02bf79833EADbB3',
+    initCodeHash: '0x00e263aaa3a2c06a89b53217a9e7aad7e15613490a72e0f95f303c4de2dc7045',
+    quoter: '0x4d47fd5a29904Dae0Ef51b1c450C9750F15D7856',
+    routers: '0xF9c2b5746c946EF883ab2660BbbB1f10A5bdeAb4',
+    farms: ['0x7D5ba536ab244aAA1EA42aB88428847F25E3E676'],
+    farmv2Quoter: '0x6AFeb9EDd6Cf44fA8E89b1eee28284e6dD7705C8',
+    farmV2S: [
+      '0xA70a1Ad0F91c52c79e177c5A18a7C9E1C4360e0e',
+      '0x3D6AfE2fB73fFEd2E3dD00c501A174554e147a43',
+      '0xf2BcDf38baA52F6b0C1Db5B025DfFf01Ae1d6dBd',
+    ],
+    zap: {
+      router: '0x30C5322E4e08AD500c348007f92f120ab4E2b79e',
+      validator: '0xf0096e5B4AAfeEA1DF557264091569ba125c1172',
+      executor: '0x4f097F7074D52952006a0763312724929Ff95Cf0',
+      helper: '0x4E8419EFa0b0A149Dad77b689D37AF17f762f20A',
+    },
+    'farmV2.1S': [],
   },
-  limitOrder: {
-    development: '0x3C2E9227A6d3779e5b469E425CAa7067b40Ff124',
-    production: '0x227B0c196eA8db17A665EA6824D972A64202E936',
-  },
+  limitOrder: '*',
   averageBlockTimeInSeconds: 2.6,
   coingeckoNetworkId: 'polygon-pos',
   coingeckoNativeTokenId: 'matic-network',
   deBankSlug: 'matic',
-  trueSightId: 'polygon',
   dexToCompare: 'quickswap',
+  geckoTermialId: 'polygon_pos',
 }
 
 export default maticInfo

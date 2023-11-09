@@ -1,24 +1,26 @@
 import { Trans } from '@lingui/macro'
+import { ChevronRight, Eye, EyeOff, Star } from 'react-feather'
 import { Flex, Text } from 'rebass'
-import styled from 'styled-components'
+import styled, { css } from 'styled-components'
 
-import CopyHelper from 'components/Copy'
 import Loader from 'components/Loader'
 import ActionButtonGroup from 'components/WalletPopup/AccountInfo/ActionButtonGroup'
 import CardBackground from 'components/WalletPopup/AccountInfo/CardBackground'
 import MinimalActionButtonGroup from 'components/WalletPopup/AccountInfo/MinimalActionButtonGroup'
-import Settings from 'components/WalletPopup/AccountInfo/Settings'
-import { SUPPORTED_WALLETS } from 'constants/wallets'
-import { useActiveWeb3React } from 'hooks'
+import { useRewards } from 'hooks/useRewards'
 import useTheme from 'hooks/useTheme'
-import { useIsDarkMode } from 'state/user/hooks'
-import { ExternalLinkIcon } from 'theme'
-import { formatNumberWithPrecisionRange, getEtherscanLink, shortenAddress } from 'utils'
+import { formatNumberWithPrecisionRange } from 'utils'
+
+import { View } from '../type'
 
 const ContentWrapper = styled.div`
   position: relative;
   width: 100%;
-  height: 160px;
+`
+
+const RewardWrapper = styled.div`
+  position: relative;
+  width: 100%;
 `
 
 const Content = styled.div`
@@ -27,9 +29,10 @@ const Content = styled.div`
 
   width: 100%;
   height: 100%;
-  padding: 20px;
+  padding: 12px 16px;
 
   display: flex;
+  gap: 4px;
   flex-direction: column;
   justify-content: space-between;
 `
@@ -37,6 +40,7 @@ const Content = styled.div`
 const BalanceTitle = styled.span`
   font-size: 12px;
   font-weight: 500;
+  line-height: 16px;
   color: ${({ theme }) => theme.subText};
 `
 
@@ -66,37 +70,33 @@ const Wrapper = styled.div.attrs<WrapperProps>(props => ({
     display: none;
   }
 
-  &[data-minimal='true'] {
-    ${MinimalActionButtonGroup} {
-      display: flex;
-      align-self: flex-end;
-    }
-    ${ActionButtonGroup} {
-      display: none;
-    }
-    ${ContentWrapper} {
-      height: 120px;
-    }
-    ${Content} {
-      padding: 12px;
-    }
-    ${BalanceValue} {
-      font-size: 20px;
-    }
-  }
-`
-
-const IconWrapper = styled.div`
-  display: flex;
-  width: 20px;
-  height: 20px;
-  justify-content: center;
-  align-items: center;
+  ${({ $minimal }) =>
+    $minimal &&
+    css`
+      & {
+        ${MinimalActionButtonGroup} {
+          display: flex;
+          align-self: flex-end;
+        }
+        ${ActionButtonGroup} {
+          display: none;
+        }
+        ${Content} {
+          padding: 12px;
+        }
+        ${BalanceValue} {
+          font-size: 20px;
+        }
+      }
+    `}
 `
 
 type Props = {
-  totalBalanceInUsd: number | null
+  totalBalanceInUsd: number | null | string
   isMinimal: boolean
+  toggleShowBalance: () => void
+  showBalance: boolean
+  setView: React.Dispatch<React.SetStateAction<string>>
 } & ClickHandlerProps
 
 export type ClickHandlerProps = {
@@ -113,37 +113,20 @@ export default function AccountInfo({
   onClickReceive,
   onClickSend,
   isMinimal,
+  showBalance,
+  toggleShowBalance,
+  setView,
 }: Props) {
-  const { chainId, account = '', walletKey } = useActiveWeb3React()
   const theme = useTheme()
-  const isDarkMode = useIsDarkMode()
+  const {
+    totalReward: { usd },
+  } = useRewards()
 
   return (
     <Wrapper $minimal={isMinimal}>
       <ContentWrapper>
         <CardBackground noLogo={isMinimal} />
         <Content>
-          <Flex alignItems="center" justifyContent={'space-between'}>
-            <Flex alignItems={'center'} style={{ gap: 5 }} color={theme.subText}>
-              {walletKey && (
-                <IconWrapper>
-                  <img
-                    height={18}
-                    src={isDarkMode ? SUPPORTED_WALLETS[walletKey].icon : SUPPORTED_WALLETS[walletKey].iconLight}
-                    alt={SUPPORTED_WALLETS[walletKey].name + ' icon'}
-                  />
-                </IconWrapper>
-              )}
-              <Text as="span" fontWeight="500">
-                {shortenAddress(chainId, account, 5, false)}
-              </Text>
-              <CopyHelper toCopy={account} />
-              <ExternalLinkIcon href={getEtherscanLink(chainId, account, 'address')} color={theme.subText} />
-            </Flex>
-
-            <Settings />
-          </Flex>
-
           <Flex
             sx={{
               justifyContent: 'space-between',
@@ -156,13 +139,22 @@ export default function AccountInfo({
                 gap: '4px',
               }}
             >
-              <BalanceTitle>
-                <Trans>Total Balance</Trans>
-              </BalanceTitle>
+              <Flex width="fit-content" sx={{ gap: '4px', cursor: 'pointer' }} onClick={toggleShowBalance}>
+                <BalanceTitle>
+                  <Trans>Total Balance</Trans>
+                </BalanceTitle>
+                {showBalance ? <EyeOff size={14} color={theme.subText} /> : <Eye size={14} color={theme.subText} />}
+              </Flex>
 
               <BalanceValue>
-                {totalBalanceInUsd !== null ? (
-                  `$${formatNumberWithPrecisionRange(totalBalanceInUsd, 0, 8)}`
+                {typeof totalBalanceInUsd === 'number' ? (
+                  showBalance ? (
+                    `$${formatNumberWithPrecisionRange(totalBalanceInUsd, 0, 8)}`
+                  ) : (
+                    '******'
+                  )
+                ) : typeof totalBalanceInUsd === 'string' ? (
+                  totalBalanceInUsd
                 ) : (
                   <Loader size="30px" />
                 )}
@@ -178,7 +170,31 @@ export default function AccountInfo({
           </Flex>
         </Content>
       </ContentWrapper>
-
+      <RewardWrapper>
+        <Flex flexDirection="row" alignContent="center">
+          <CardBackground noLogo />
+          <Content style={{ padding: '10px 12px' }}>
+            <Flex justifyContent="space-between" alignItems="center">
+              <Flex sx={{ gap: '4px' }}>
+                <Star size={16} color={theme.subText} fill={theme.subText} />
+                <Text color={theme.subText} fontSize={12} fontWeight={500} lineHeight="16px">
+                  <Trans>Total Available Rewards</Trans>
+                </Text>
+              </Flex>
+              <Flex
+                sx={{ gap: '4px', cursor: 'pointer' }}
+                alignItems="center"
+                onClick={() => setView(View.REWARD_CENTER)}
+              >
+                <Text color={theme.text} fontSize={12} fontWeight={500} lineHeight="16px">
+                  ${formatNumberWithPrecisionRange(usd, 0, 8)}
+                </Text>
+                <ChevronRight size={20} color={theme.subText} />
+              </Flex>
+            </Flex>
+          </Content>
+        </Flex>
+      </RewardWrapper>
       <ActionButtonGroup
         disabledSend={disabledSend}
         onClickBuy={onClickBuy}

@@ -20,7 +20,7 @@ import useTheme from 'hooks/useTheme'
 import { ApplicationModal } from 'state/application/actions'
 import { useModalOpen, useNotify, useToggleModal, useWalletModalToggle } from 'state/application/hooks'
 import { CloseIcon } from 'theme'
-import { getTokenLogoURL, isAddress, shortenAddress } from 'utils'
+import { getNativeTokenLogo, getTokenLogoURL, isAddress, shortenAddress } from 'utils'
 import { filterTokens } from 'utils/filtering'
 
 const AddressWrapper = styled.div`
@@ -47,7 +47,7 @@ const getFullDisplayBalance = (balance: BigNumber, decimals = 18, significant = 
 }
 
 function FaucetModal() {
-  const { chainId, account, networkInfo } = useActiveWeb3React()
+  const { chainId, account } = useActiveWeb3React()
   const open = useModalOpen(ApplicationModal.FAUCET_POPUP)
   const toggle = useToggleModal(ApplicationModal.FAUCET_POPUP)
   const theme = useTheme()
@@ -57,7 +57,7 @@ function FaucetModal() {
   const { mixpanelHandler } = useMixpanel()
   const allTokens = useAllTokens()
   const token = useMemo(() => {
-    if (!chainId || !account) return
+    if (!account) return
     const nativeToken = NativeCurrencies[chainId]
     if (rewardData) {
       if (rewardData.tokenAddress === '0') return nativeToken
@@ -66,11 +66,13 @@ function FaucetModal() {
     }
     return nativeToken
   }, [rewardData, chainId, account, allTokens])
+
+  const nativeLogo = getNativeTokenLogo(chainId)
   const tokenLogo = useMemo(() => {
-    if (!chainId || !token) return
-    if (token.isNative) return networkInfo.nativeToken.logo
+    if (!token) return
+    if (token.isNative) return nativeLogo
     return getTokenLogoURL(token.address, chainId)
-  }, [chainId, token, networkInfo])
+  }, [chainId, token, nativeLogo])
   const tokenSymbol = useMemo(() => {
     if (token?.isNative && chainId) return WETH[chainId].name
     return token?.symbol
@@ -107,7 +109,7 @@ function FaucetModal() {
   }, [account, notify, rewardData, token?.decimals, tokenSymbol])
 
   useEffect(() => {
-    if (!chainId || !account) return
+    if (!account) return
     const getRewardAmount = async () => {
       try {
         const { data } = await fetch(`${REWARD_SERVICE_API}/faucets?wallet=${account}&chainId=${chainId}`).then(res =>
@@ -147,20 +149,14 @@ function FaucetModal() {
             wallet can only request for the tokens once. You can claim:
           </Trans>
         </Text>
-        <Text fontSize={32} lineHeight="38px" fontWeight={500}>
-          {token && (
-            <>
-              {tokenLogo && (
-                <Logo
-                  srcs={[tokenLogo]}
-                  alt={`${tokenSymbol ?? 'token'} logo`}
-                  style={{ width: '28px', paddingRight: '8px' }}
-                />
-              )}{' '}
-              {rewardData?.amount ? getFullDisplayBalance(rewardData?.amount, token?.decimals) : 0} {tokenSymbol}
-            </>
-          )}
-        </Text>
+
+        {token && (
+          <Flex alignItems={'center'} sx={{ gap: '6px' }} fontSize={28} lineHeight="38px" fontWeight={500}>
+            {tokenLogo && <Logo srcs={[tokenLogo]} alt={`${tokenSymbol ?? 'token'} logo`} style={{ width: '28px' }} />}{' '}
+            {rewardData?.amount ? getFullDisplayBalance(rewardData?.amount, token?.decimals) : 0} {tokenSymbol}
+          </Flex>
+        )}
+
         {account ? (
           <ButtonPrimary
             disabled={!rewardData?.amount || rewardData?.amount.eq(0)}
@@ -180,7 +176,7 @@ function FaucetModal() {
             }}
             style={{ borderRadius: '24px', height: '44px' }}
           >
-            <Trans>Connect Wallet</Trans>
+            <Trans>Connect</Trans>
           </ButtonPrimary>
         )}
       </Flex>

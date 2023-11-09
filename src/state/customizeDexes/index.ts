@@ -5,9 +5,10 @@ export interface Dex {
   name: string
   logoURL: string
   id: string
+  sortId: number
 }
 
-export interface CustomizeDexeState {
+interface CustomizeDexeState {
   excludeDexes: Partial<Record<ChainId, string[]>>
   allDexes: Partial<Record<ChainId, Dex[]>>
 }

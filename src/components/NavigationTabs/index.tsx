@@ -1,18 +1,21 @@
 import { Trans, t } from '@lingui/macro'
 import { ArrowLeft, ChevronLeft, Trash } from 'react-feather'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { useMedia } from 'react-use'
-import { Flex } from 'rebass'
+import { Flex, Text } from 'rebass'
 import styled, { css } from 'styled-components'
 
 import { ReactComponent as TutorialIcon } from 'assets/svg/play_circle_outline.svg'
 import { ButtonEmpty } from 'components/Button'
+import Copy from 'components/Copy'
 import QuestionHelper from 'components/QuestionHelper'
 import { RowBetween } from 'components/Row'
 import { ShareButtonWithModal } from 'components/ShareModal'
 import TransactionSettings from 'components/TransactionSettings'
 import Tutorial, { TutorialType } from 'components/Tutorial'
+import { useActiveWeb3React } from 'hooks'
 import useTheme from 'hooks/useTheme'
+import { shortenAddress } from 'utils'
 
 const Tabs = styled.div`
   ${({ theme }) => theme.flexRowNoWrap}
@@ -86,9 +89,11 @@ export const StyledMenuButton = styled.button<{ active?: boolean }>`
 
 export function FindPoolTabs() {
   const navigate = useNavigate()
-
+  const location = useLocation()
   const goBack = () => {
-    navigate(-1)
+    // https://github.com/remix-run/react-router/discussions/9922
+    if (location.key === 'default') navigate('/')
+    else navigate(-1)
   }
 
   return (
@@ -123,6 +128,8 @@ export function AddRemoveTabs({
   onBack,
   tooltip,
   tutorialType,
+  owner,
+  showOwner,
 }: {
   action: LiquidityAction
   alignTitle?: 'center' | 'left'
@@ -132,12 +139,18 @@ export function AddRemoveTabs({
   onCleared?: () => void
   onBack?: () => void
   tooltip?: string
+  owner?: string
+  showOwner?: boolean
   tutorialType?: TutorialType
 }) {
+  const { chainId } = useActiveWeb3React()
   const navigate = useNavigate()
+  const location = useLocation()
   const below768 = useMedia('(max-width: 768px)')
   const goBack = () => {
-    navigate(-1)
+    // https://github.com/remix-run/react-router/discussions/9922
+    if (location.key === 'default') navigate('/')
+    else navigate(-1)
   }
 
   const theme = useTheme()
@@ -163,13 +176,13 @@ export function AddRemoveTabs({
           text={
             tooltip ||
             (action === LiquidityAction.CREATE
-              ? t`Create a new liquidity pool and earn fees on trades for this token pair`
+              ? t`Create a new liquidity pool and earn fees on trades for this token pair.`
               : action === LiquidityAction.ADD
-              ? t`Add liquidity for a token pair and earn fees on the trades that are in your selected price range`
+              ? t`Add liquidity for a token pair and earn fees on the trades that are in your selected price range.`
               : action === LiquidityAction.INCREASE
               ? ''
               : action === LiquidityAction.REMOVE
-              ? t`Removing pool tokens converts your position back into underlying tokens at the current rate, proportional to your share of the pool. Accrued fees are included in the amounts you receive`
+              ? t`Removing pool tokens converts your position back into underlying tokens at the current rate, proportional to your share of the pool. Accrued fees are included in the amounts you receive.`
               : '')
           }
         />
@@ -191,6 +204,20 @@ export function AddRemoveTabs({
           </>
         )}
         <Flex style={{ gap: '0px' }}>
+          {showOwner && owner && (
+            <Text
+              fontSize="12px"
+              fontWeight="500"
+              color={theme.subText}
+              display="flex"
+              alignItems="center"
+              marginRight="8px"
+            >
+              <Trans>The owner of this liquidity position is {shortenAddress(chainId, owner)}</Trans>
+              <Copy toCopy={owner}></Copy>
+            </Text>
+          )}
+
           {tutorialType && (
             <Tutorial
               type={tutorialType}

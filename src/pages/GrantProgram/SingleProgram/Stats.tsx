@@ -6,6 +6,7 @@ import { ReactComponent as CampaignParticipants } from 'assets/svg/campaign_part
 import { ReactComponent as CampaignTrades } from 'assets/svg/campaign_trades.svg'
 import { ReactComponent as CampaignVolume } from 'assets/svg/campaign_volume.svg'
 import Loader from 'components/Loader'
+import { formatDisplayNumber } from 'utils/numbers'
 
 const StatsCardWrapper = styled.div`
   display: flex;
@@ -77,23 +78,11 @@ type Props = {
   trades?: number
 }
 
-export const formatTradingVolume = (v: string) => {
-  const formatter = Intl.NumberFormat('en-US', {
-    notation: 'compact',
-    style: 'currency',
-    currency: 'USD',
-    minimumFractionDigits: 0,
-    maximumSignificantDigits: 2,
-  })
-
-  return formatter.format(Number(v))
-}
-
-export const formatNumber = (v: number) => {
+const formatNumber = (v: number) => {
   const formatter = Intl.NumberFormat('en-US', {
     notation: 'compact',
     minimumFractionDigits: 0,
-    maximumSignificantDigits: 2,
+    maximumFractionDigits: 1,
   })
 
   return formatter.format(v)
@@ -134,7 +123,9 @@ const Stats: React.FC<Props> = ({ participants, trades, volume }) => {
     <StatsWrapper>
       <StatsCard
         icon={<CampaignVolume />}
-        value={volume ? formatTradingVolume(volume) : volume}
+        value={
+          volume ? formatDisplayNumber(volume, { style: 'currency', fractionDigits: 2, significantDigits: 6 }) : volume
+        }
         title="Total Trading Volume"
       />
       <StatsCard

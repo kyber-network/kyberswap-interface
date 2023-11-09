@@ -17,25 +17,35 @@ import {
   PROMM_GET_POOL_VALUES_AFTER_BURNS_SUCCESS,
   PROMM_GET_POOL_VALUES_AFTER_MINTS_SUCCESS,
 } from 'apollo/queries/promm'
-import { ELASTIC_BASE_FEE_UNIT } from 'constants/index'
+import { APP_PATHS, ELASTIC_BASE_FEE_UNIT } from 'constants/index'
 import { NETWORKS_INFO } from 'constants/networks'
-import { EVMNetworkInfo } from 'constants/networks/type'
 import { useActiveWeb3React } from 'hooks'
 import { AppDispatch, AppState } from 'state'
-import { useETHPrice } from 'state/application/hooks'
+import { useETHPrice, useKyberSwapConfig } from 'state/application/hooks'
+import { RANGE } from 'state/mint/proamm/type'
 import { Field } from 'state/swap/actions'
-import { useSwapState } from 'state/swap/hooks'
+import { useInputCurrency, useOutputCurrency, useSwapState } from 'state/swap/hooks'
 import { modifyTransaction } from 'state/transactions/actions'
 import { TRANSACTION_TYPE, TransactionDetails, TransactionExtraInfo2Token } from 'state/transactions/type'
-import { useUserSlippageTolerance } from 'state/user/hooks'
+import { useIsWhiteListKyberAI, useUserSlippageTolerance } from 'state/user/hooks'
 
 export enum MIXPANEL_TYPE {
   PAGE_VIEWED,
   WALLET_CONNECTED,
+  WALLET_CONNECT_CLICK,
+  WALLET_CONNECT_ACCEPT_TERM_CLICK,
+  WALLET_CONNECT_WALLET_CLICK,
   SWAP_INITIATED,
   SWAP_CONFIRMED,
   SWAP_COMPLETED,
-  ADVANCED_MODE_ON,
+  SWAP_TYPED_ON_THE_TEXT_BOX,
+  SWAP_INPUT_AMOUNT,
+  SWAP_SETTINGS_CLICK,
+  SWAP_TUTORIAL_CLICK,
+  SWAP_TOKEN_INFO_CLICK,
+  SWAP_MORE_INFO_CLICK,
+  SWAP_DISPLAY_SETTING_CLICK,
+  DEGEN_MODE_TOGGLE,
   ADD_RECIPIENT_CLICKED,
   SLIPPAGE_CHANGED,
   LIVE_CHART_ON_OFF,
@@ -47,6 +57,8 @@ export enum MIXPANEL_TYPE {
   TOKEN_INFO_CHECKED,
   TOKEN_SWAP_LINK_SHARED,
   CHAIN_SWITCHED,
+  ADD_FAVORITE_CHAIN,
+  REMOVE_FAVORITE_CHAIN,
   CREATE_POOL_INITITATED,
   CREATE_POOL_COMPLETED,
   CREATE_POOL_LINK_SHARED,
@@ -59,6 +71,8 @@ export enum MIXPANEL_TYPE {
   IMPORT_POOL_INITIATED,
   MYPOOLS_STAKED_VIEWED,
   MYPOOLS_POOLS_VIEWED,
+  MYPOOLS_CLICK_SUBSCRIBE_BTN,
+
   FARMS_ACTIVE_VIEWED,
   FARMS_ENDING_VIEWED,
   FARMS_UPCOMING_VIEWED,
@@ -74,7 +88,6 @@ export enum MIXPANEL_TYPE {
   ABOUT_STAKE_KNC_CLICKED,
   ANALYTICS_MENU_CLICKED,
   BLOG_MENU_CLICKED,
-  CREATE_REFERRAL_CLICKED,
   DISCOVER_TRENDING_SOON_CLICKED,
   DISCOVER_TRENDING_CLICKED,
   DISCOVER_SWAP_INITIATED,
@@ -90,6 +103,12 @@ export enum MIXPANEL_TYPE {
   ELASTIC_ADD_LIQUIDITY_INITIATED,
   ELASTIC_ADD_LIQUIDITY_IN_LIST_INITIATED,
   ELASTIC_ADD_LIQUIDITY_COMPLETED,
+  ELASTIC_ADD_LIQUIDITY_ADD_NEW_POSITION,
+  ELASTIC_ADD_LIQUIDITY_CLICK_TO_REMOVE_POSITION,
+  ELASTIC_ADD_LIQUIDITY_SELECT_RANGE_FOR_POOL,
+  ELASTIC_ADD_LIQUIDITY_CLICK_SWAP,
+  ELASTIC_ADD_LIQUIDITY_CLICK_PRICE_CHART,
+  ELASTIC_ADD_LIQUIDITY_CLICK_POOL_ANALYTIC,
   ELASTIC_REMOVE_LIQUIDITY_INITIATED,
   ELASTIC_REMOVE_LIQUIDITY_COMPLETED,
   ELASTIC_INCREASE_LIQUIDITY_INITIATED,
@@ -124,6 +143,11 @@ export enum MIXPANEL_TYPE {
   TUTORIAL_CLICK_DENY,
   TUTORIAL_VIEW_VIDEO_SWAP,
 
+  // MEV Protection
+  MEV_CLICK_ADD_MEV,
+  MEV_ADD_CLICK_MODAL,
+  MEV_ADD_RESULT,
+
   // type and swap
   TAS_TYPING_KEYWORD,
   TAS_SELECT_PAIR,
@@ -141,6 +165,9 @@ export enum MIXPANEL_TYPE {
   BRIDGE_CLICK_TRANSFER,
   BRIDGE_TRANSACTION_SUBMIT,
   BRIDGE_CLICK_HISTORY_TRANSFER_TAB,
+  BRIDGE_CLICK_SUBSCRIBE_BTN,
+  BRIDGE_CLICK_DISCLAIMER,
+  BRIDGE_CLICK_UNDERSTAND_IN_FIRST_TIME_VISIT,
 
   //Kyber DAO
   KYBER_DAO_STAKE_CLICK,
@@ -149,11 +176,22 @@ export enum MIXPANEL_TYPE {
   KYBER_DAO_VOTE_CLICK,
   KYBER_DAO_CLAIM_CLICK,
   KYBER_DAO_FEATURE_REQUEST_CLICK,
+  GAS_REFUND_CLAIM_CLICK,
+  GAS_REFUND_SOURCE_CLICK,
 
   // notification
   NOTIFICATION_CLICK_MENU,
   NOTIFICATION_SELECT_TOPIC,
   NOTIFICATION_DESELECT_TOPIC,
+
+  ANNOUNCEMENT_CLICK_BELL_ICON_OPEN_POPUP,
+  ANNOUNCEMENT_CLICK_TAB_INBOX,
+  ANNOUNCEMENT_CLICK_TAB_ANNOUNCEMENT,
+  ANNOUNCEMENT_CLICK_ANNOUNCEMENT_MESSAGE,
+  ANNOUNCEMENT_CLICK_INBOX_MESSAGE,
+  ANNOUNCEMENT_CLICK_CLOSE_POPUP,
+  ANNOUNCEMENT_CLICK_CTA_POPUP,
+  ANNOUNCEMENT_CLICK_CLEAR_ALL_INBOXES,
 
   // limit order
   LO_CLICK_PLACE_ORDER,
@@ -163,6 +201,12 @@ export enum MIXPANEL_TYPE {
   LO_CANCEL_ORDER_SUBMITTED,
   LO_CLICK_REVIEW_PLACE_ORDER,
   LO_CLICK_EDIT_ORDER,
+  LO_DISPLAY_SETTING_CLICK,
+  LO_CLICK_SUBSCRIBE_BTN,
+  LO_CLICK_CANCEL_TYPE,
+  LO_CLICK_UPDATE_TYPE,
+  LO_CLICK_GET_STARTED,
+  LO_CLICK_WARNING_IN_SWAP,
 
   // Wallet UI
   WUI_WALLET_CLICK,
@@ -172,6 +216,71 @@ export enum MIXPANEL_TYPE {
   WUI_IMPORT_TOKEN_CLICK,
   WUI_TRANSACTION_CLICK,
   WUI_IMPORT_TOKEN_BUTTON_CLICK,
+
+  // Menu header
+  MENU_MENU_CLICK,
+  MENU_PREFERENCE_CLICK,
+  MENU_CLAIM_REWARDS_CLICK,
+  SUPPORT_CLICK,
+
+  // price alert
+  PA_CLICK_TAB_IN_NOTI_CENTER,
+  PA_CREATE_SUCCESS,
+
+  // Permit
+  PERMIT_CLICK,
+  INFINITE_APPROVE_CLICK,
+  CUSTOM_APPROVE_CLICK,
+  PERMIT_FAILED_TOO_MANY_TIMES,
+
+  ACCEPT_NEW_AMOUNT,
+
+  // KyberAI
+  KYBERAI_SHARE_TOKEN_CLICK,
+  KYBERAI_GET_STARTED_CLICK,
+  KYBERAI_RANKING_SWITCH_CHAIN_CLICK,
+  KYBERAI_SEARCH_TOKEN_SUCCESS,
+  KYBERAI_SUBSCRIBE_CLICK,
+  KYBERAI_RANKING_ACTION_CLICK,
+  KYBERAI_ADD_TOKEN_TO_WATCHLIST,
+  KYBERAI_RANKING_CATEGORY_CLICK,
+  KYBERAI_EXPLORING_SWAP_TOKEN_CLICK,
+  KYBERAI_EXPLORING_VIEW_ALL_CLICK,
+  KYBERAI_EXPLORING_ANALYSIS_TYPE_CLICK,
+  KYBERAI_EXPLORING_DISPLAY_SETTING_CLICK,
+  KYBERAI_EXPLORING_CHANGE_DISPLAY_SETTING,
+  KYBERAI_EXPLORING_FULL_SCREEN_CLICK,
+  KYBERAI_EXPLORING_SHARE_CHART_CLICK,
+  KYBERAI_EXPLORING_SWITCH_TRADE_TYPE_CLICK,
+  KYBERAI_EXPLORING_SWITCH_TIMEFRAME_CLICK,
+  KYBERAI_SWAP_INSIGHT_CLICK,
+  KYBERAI_POOL_INSIGHT_CLICK,
+  KYBERAI_POOL_EXPLORE_TOKEN_IN_POPUP_INSIGHT,
+  KYBERAI_EXPAND_WIDGET_CLICK,
+  KYBERAI_TAB_VIEW,
+  KYBERAI_JOIN_KYBER_WAITLIST_CLICK,
+  KYBERAI_AWESOME_CLICK,
+  KYBERAI_SWAP_CLICK,
+
+  // cross chain
+  CROSS_CHAIN_CLICK_DISCLAIMER,
+  CROSS_CHAIN_SWAP_INIT,
+  CROSS_CHAIN_SWAP_CONFIRMED,
+  CROSS_CHAIN_CLICK_DISCLAIMER_CHECKBOX,
+  CROSS_CHAIN_TXS_SUBMITTED,
+  CROSS_CHAIN_CLICK_SUBSCRIBE,
+
+  // earning dashboard
+  EARNING_DASHBOARD_CLICK_TOP_LEVEL_SHARE_BUTTON,
+  EARNING_DASHBOARD_SHARE_SUCCESSFULLY,
+  EARNING_DASHBOARD_CLICK_POOL_EXPAND,
+  EARNING_DASHBOARD_CLICK_ALL_CHAINS_BUTTON,
+  EARNING_DASHBOARD_CLICK_REFRESH_BUTTON,
+  EARNING_DASHBOARD_CLICK_CHANGE_TIMEFRAME_EARNING_CHART,
+  EARNING_DASHBOARD_CLICK_ADD_LIQUIDITY_BUTTON,
+  EARNING_DASHBOARD_CLICK_CURRENT_CHAIN_BUTTON,
+  EARNING_DASHBOARD_VIEW_PAGE,
+  EARNING_DASHBOARD_CLICK_SUBSCRIBE,
 }
 
 export const NEED_CHECK_SUBGRAPH_TRANSACTION_TYPES: readonly TRANSACTION_TYPE[] = [
@@ -183,76 +292,155 @@ export const NEED_CHECK_SUBGRAPH_TRANSACTION_TYPES: readonly TRANSACTION_TYPE[] 
   TRANSACTION_TYPE.ELASTIC_CREATE_POOL,
 ] as const
 
+type FeeInfo = {
+  chargeTokenIn: boolean
+  tokenSymbol: string
+  feeUsd: string
+  feeAmount: string
+}
+
 export default function useMixpanel(currencies?: { [field in Field]?: Currency }) {
   const { chainId, account, isEVM, networkInfo } = useActiveWeb3React()
   const { saveGas } = useSwapState()
   const network = networkInfo.name
-  const inputCurrency = currencies && currencies[Field.INPUT]
-  const outputCurrency = currencies && currencies[Field.OUTPUT]
-  const inputSymbol = inputCurrency && inputCurrency.isNative ? networkInfo.nativeToken.name : inputCurrency?.symbol
-  const outputSymbol = outputCurrency && outputCurrency.isNative ? networkInfo.nativeToken.name : outputCurrency?.symbol
+
+  const inputCurrencyFromHook = useInputCurrency()
+  const outputCurrencyFromHook = useOutputCurrency()
+  const inputCurrency = currencies ? currencies[Field.INPUT] : inputCurrencyFromHook
+  const outputCurrency = currencies ? currencies[Field.OUTPUT] : outputCurrencyFromHook
+
+  const inputSymbol = inputCurrency && inputCurrency.isNative ? networkInfo.nativeToken.symbol : inputCurrency?.symbol
+  const outputSymbol =
+    outputCurrency && outputCurrency.isNative ? networkInfo.nativeToken.symbol : outputCurrency?.symbol
   const ethPrice = useETHPrice()
   const dispatch = useDispatch<AppDispatch>()
   const selectedCampaign = useSelector((state: AppState) => state.campaigns.selectedCampaign)
   const [allowedSlippage] = useUserSlippageTolerance()
+  const { elasticClient, classicClient } = useKyberSwapConfig()
 
   const mixpanelHandler = useCallback(
     (type: MIXPANEL_TYPE, payload?: any) => {
-      if (!account) {
-        return
-      }
+      // Anonymous events
       switch (type) {
         case MIXPANEL_TYPE.PAGE_VIEWED: {
           const { page } = payload
           page && mixpanel.track(page + ' Page Viewed')
           break
         }
+        case MIXPANEL_TYPE.WALLET_CONNECT_CLICK: {
+          mixpanel.track('Wallet Connect - Connect Wallet Button Click')
+          break
+        }
+        case MIXPANEL_TYPE.WALLET_CONNECT_ACCEPT_TERM_CLICK: {
+          mixpanel.track('Wallet Connect - Accept term button click')
+          break
+        }
+        case MIXPANEL_TYPE.WALLET_CONNECT_WALLET_CLICK: {
+          mixpanel.track('Wallet Connect - Wallet click', payload)
+          break
+        }
+        case MIXPANEL_TYPE.CHAIN_SWITCHED: {
+          const { old_network, new_network } = payload
+          mixpanel.track('Chain Switched', {
+            old_network,
+            new_network,
+          })
+          break
+        }
+      }
+      if (!account) {
+        return
+      }
+      // Need connect wallet events
+      switch (type) {
         case MIXPANEL_TYPE.WALLET_CONNECTED:
           mixpanel.register({ wallet_address: account, platform: isMobile ? 'Mobile' : 'Web', network })
-          mixpanel.track('Wallet Connected')
+          mixpanel.track('Wallet Connected', { source: location.pathname })
+          break
+        case MIXPANEL_TYPE.ADD_FAVORITE_CHAIN:
+          mixpanel.track('Favourite Chain - Add chain over favourite list success', payload)
+          break
+        case MIXPANEL_TYPE.REMOVE_FAVORITE_CHAIN:
+          mixpanel.track('Favourite Chain - Remove chain from favourite list success', payload)
           break
         case MIXPANEL_TYPE.SWAP_INITIATED: {
-          const { gasUsd, inputAmount, priceImpact } = (payload || {}) as {
-            gasUsd: number | undefined
+          const { gasUsd, inputAmount, priceImpact, feeInfo } = (payload || {}) as {
+            gasUsd: number | string | undefined
             inputAmount: CurrencyAmount<Currency> | undefined
             priceImpact: number | undefined
+            feeInfo?: FeeInfo
           }
 
-          mixpanel.track('Swap Initiated', {
+          const body: Record<string, any> = {
             input_token: inputSymbol,
             output_token: outputSymbol,
-            estimated_gas: gasUsd?.toFixed(4),
+            estimated_gas: gasUsd ? Number(gasUsd).toFixed(4) : undefined,
             max_return_or_low_gas: saveGas ? 'Lowest Gas' : 'Maximum Return',
             trade_qty: inputAmount?.toExact(),
             slippage_setting: allowedSlippage ? allowedSlippage / 100 : 0,
             price_impact: priceImpact && priceImpact > 0.01 ? priceImpact.toFixed(2) : '<0.01',
-          })
+          }
 
+          if (feeInfo) {
+            if (feeInfo.chargeTokenIn) {
+              body.charged_token_type = 'input'
+            } else {
+              body.charged_token_type = 'output'
+            }
+
+            body.charged_token_symbol = feeInfo.tokenSymbol
+            body.amount_fee_usd = feeInfo.feeUsd
+            body.amount_fee_token = feeInfo.feeAmount
+          }
+
+          mixpanel.track('Swap Initiated', body)
           break
         }
         case MIXPANEL_TYPE.SWAP_CONFIRMED: {
-          const { gasUsd, inputAmount, priceImpact } = (payload || {}) as {
-            gasUsd: number | undefined
+          const { gasUsd, inputAmount, priceImpact, outputAmountDescription, currentPrice, feeInfo } = (payload ||
+            {}) as {
+            gasUsd: string | undefined
             inputAmount: CurrencyAmount<Currency> | undefined
             priceImpact: number | undefined
+            outputAmountDescription: string | undefined
+            currentPrice: string | undefined
+            feeInfo?: FeeInfo
           }
 
-          mixpanel.track('Swap Confirmed', {
+          const body: Record<string, any> = {
             input_token: inputSymbol,
             output_token: outputSymbol,
-            estimated_gas: gasUsd?.toFixed(4),
+            estimated_gas: gasUsd,
             max_return_or_low_gas: saveGas ? 'Lowest Gas' : 'Maximum Return',
             trade_qty: inputAmount?.toExact(),
             slippage_setting: allowedSlippage ? allowedSlippage / 100 : 0,
             price_impact: priceImpact && priceImpact > 0.01 ? priceImpact.toFixed(2) : '<0.01',
-          })
+            initial_output_amt_type: outputAmountDescription,
+            current_price: currentPrice, // price in swap confirmation step
+          }
+
+          if (feeInfo) {
+            if (feeInfo.chargeTokenIn) {
+              body.charged_token_type = 'input'
+            } else {
+              body.charged_token_type = 'output'
+            }
+
+            body.charged_token_symbol = feeInfo.tokenSymbol
+            body.amount_fee_usd = feeInfo.feeUsd
+            body.amount_fee_token = feeInfo.feeAmount
+          }
+
+          mixpanel.track('Swap Confirmed', body)
 
           break
         }
         case MIXPANEL_TYPE.SWAP_COMPLETED: {
           const { arbitrary, actual_gas, gas_price, tx_hash } = payload
+          const feeInfo = payload.feeInfo as FeeInfo
           const formattedGas = gas_price ? formatUnits(gas_price, networkInfo.nativeToken.decimal) : '0'
-          mixpanel.track('Swap Completed', {
+
+          const body: Record<string, any> = {
             input_token: arbitrary.inputSymbol,
             output_token: arbitrary.outputSymbol,
             actual_gas:
@@ -267,13 +455,48 @@ export default function useMixpanel(currencies?: { [field in Field]?: Currency }
             gas_price: formattedGas,
             eth_price: ethPrice?.currentPrice,
             actual_gas_native: actual_gas?.toNumber(),
-          })
+          }
+
+          if (feeInfo) {
+            if (feeInfo.chargeTokenIn) {
+              body.charged_token_type = 'input'
+            } else {
+              body.charged_token_type = 'output'
+            }
+
+            body.charged_token_symbol = feeInfo.tokenSymbol
+            body.amount_fee_usd = feeInfo.feeUsd
+            body.amount_fee_token = feeInfo.feeAmount
+          }
+
+          mixpanel.track('Swap Completed', body)
           break
         }
-        case MIXPANEL_TYPE.ADVANCED_MODE_ON: {
-          mixpanel.track('Advanced Mode Switched On', {
+        case MIXPANEL_TYPE.SWAP_SETTINGS_CLICK: {
+          mixpanel.track('Swap - Swap settings')
+          break
+        }
+        case MIXPANEL_TYPE.SWAP_TUTORIAL_CLICK: {
+          mixpanel.track('Swap - Tutorial Click in swap box')
+          break
+        }
+        case MIXPANEL_TYPE.SWAP_TOKEN_INFO_CLICK: {
+          mixpanel.track('Swap - Token Info Click in swap box')
+          break
+        }
+        case MIXPANEL_TYPE.SWAP_MORE_INFO_CLICK: {
+          mixpanel.track('Swap - More information Click in swap box', payload)
+          break
+        }
+        case MIXPANEL_TYPE.SWAP_DISPLAY_SETTING_CLICK: {
+          mixpanel.track('Swap - Display settings on Swap settings', payload)
+          break
+        }
+        case MIXPANEL_TYPE.DEGEN_MODE_TOGGLE: {
+          mixpanel.track('Degen Mode Toggle', {
             input_token: inputSymbol,
             output_token: outputSymbol,
+            type: payload.type,
           })
           break
         }
@@ -337,12 +560,16 @@ export default function useMixpanel(currencies?: { [field in Field]?: Currency }
           })
           break
         }
-        case MIXPANEL_TYPE.CHAIN_SWITCHED: {
-          const { old_network, new_network } = payload
-          mixpanel.track('Chain Switched', {
-            old_network,
-            new_network,
-          })
+        case MIXPANEL_TYPE.MEV_CLICK_ADD_MEV: {
+          mixpanel.track('MEV Protection - Click add MEV protection')
+          break
+        }
+        case MIXPANEL_TYPE.MEV_ADD_CLICK_MODAL: {
+          mixpanel.track('MEV Protection -  MEV protection type click', payload)
+          break
+        }
+        case MIXPANEL_TYPE.MEV_ADD_RESULT: {
+          mixpanel.track('MEV Protection -  Add MEV protection result', payload)
           break
         }
         case MIXPANEL_TYPE.CREATE_POOL_INITITATED: {
@@ -416,6 +643,11 @@ export default function useMixpanel(currencies?: { [field in Field]?: Currency }
 
           break
         }
+        case MIXPANEL_TYPE.MYPOOLS_CLICK_SUBSCRIBE_BTN: {
+          mixpanel.track('My Pools - User click to Subscribe button')
+          break
+        }
+
         case MIXPANEL_TYPE.FARMS_ACTIVE_VIEWED: {
           mixpanel.track(`Farms - 'Active' Tab Viewed`)
 
@@ -484,16 +716,6 @@ export default function useMixpanel(currencies?: { [field in Field]?: Currency }
         }
         case MIXPANEL_TYPE.ANALYTICS_MENU_CLICKED: {
           mixpanel.track('Analytics Page Clicked')
-          break
-        }
-        case MIXPANEL_TYPE.CREATE_REFERRAL_CLICKED: {
-          const { referral_commission, input_token, output_token } = payload
-          mixpanel.track('Create Referral Link Clicked', {
-            referral_commission,
-            input_token,
-            output_token,
-            chain: network,
-          })
           break
         }
         case MIXPANEL_TYPE.DISCOVER_TRENDING_SOON_CLICKED: {
@@ -770,6 +992,25 @@ export default function useMixpanel(currencies?: { [field in Field]?: Currency }
           })
           break
         }
+        case MIXPANEL_TYPE.BRIDGE_CLICK_SUBSCRIBE_BTN: {
+          mixpanel.track('Bridge - User click to Subscribe button')
+          break
+        }
+        case MIXPANEL_TYPE.BRIDGE_CLICK_DISCLAIMER: {
+          if (typeof payload !== 'boolean') {
+            throw new Error(`Wrong payload type for Mixpanel event: ${MIXPANEL_TYPE.BRIDGE_CLICK_DISCLAIMER}`)
+          }
+
+          mixpanel.track('Bridge - User click to Checkbox Disclaimer in Confirmation popup', {
+            checkbox: payload ? 'checked' : 'unchecked',
+          })
+          break
+        }
+        case MIXPANEL_TYPE.BRIDGE_CLICK_UNDERSTAND_IN_FIRST_TIME_VISIT: {
+          mixpanel.track('Bridge - User click to I understand button the first time visit Bridge page')
+          break
+        }
+
         case MIXPANEL_TYPE.NOTIFICATION_CLICK_MENU: {
           mixpanel.track('Notification Clicked')
           break
@@ -782,6 +1023,39 @@ export default function useMixpanel(currencies?: { [field in Field]?: Currency }
           mixpanel.track('Notification Features unselected and save', payload)
           break
         }
+        case MIXPANEL_TYPE.ANNOUNCEMENT_CLICK_BELL_ICON_OPEN_POPUP: {
+          mixpanel.track('Notifications - Open Notification Pop Up')
+          break
+        }
+        case MIXPANEL_TYPE.ANNOUNCEMENT_CLICK_TAB_INBOX: {
+          mixpanel.track('Notifications - Click on My Inbox', payload)
+          break
+        }
+        case MIXPANEL_TYPE.ANNOUNCEMENT_CLICK_TAB_ANNOUNCEMENT: {
+          mixpanel.track('Notifications - Click on General', payload)
+          break
+        }
+        case MIXPANEL_TYPE.ANNOUNCEMENT_CLICK_INBOX_MESSAGE: {
+          mixpanel.track('Notifications - Click on inbox messages', payload)
+          break
+        }
+        case MIXPANEL_TYPE.ANNOUNCEMENT_CLICK_ANNOUNCEMENT_MESSAGE: {
+          mixpanel.track('Notifications - Click on announcement messages', payload)
+          break
+        }
+        case MIXPANEL_TYPE.ANNOUNCEMENT_CLICK_CLOSE_POPUP: {
+          mixpanel.track('Notifications - Click to close pop up', payload)
+          break
+        }
+        case MIXPANEL_TYPE.ANNOUNCEMENT_CLICK_CTA_POPUP: {
+          mixpanel.track('Notifications - Click on Announcement Pop Up CTA', payload)
+          break
+        }
+        case MIXPANEL_TYPE.ANNOUNCEMENT_CLICK_CLEAR_ALL_INBOXES: {
+          mixpanel.track('Notifications - Clear All Messages', payload)
+          break
+        }
+
         case MIXPANEL_TYPE.KYBER_DAO_STAKE_CLICK: {
           mixpanel.track('KyberDAO - Stake Click', payload)
           break
@@ -804,6 +1078,16 @@ export default function useMixpanel(currencies?: { [field in Field]?: Currency }
         }
         case MIXPANEL_TYPE.KYBER_DAO_FEATURE_REQUEST_CLICK: {
           mixpanel.track('KyberDAO - Feature Request Click', payload)
+          break
+        }
+        case MIXPANEL_TYPE.GAS_REFUND_CLAIM_CLICK: {
+          const { token_amount, source } = payload
+          mixpanel.track('Gas refund - Click claim reward', { token_amount, source })
+          break
+        }
+        case MIXPANEL_TYPE.GAS_REFUND_SOURCE_CLICK: {
+          const { source } = payload
+          mixpanel.track('Gas refund - KNC Utility source click', { source })
           break
         }
         case MIXPANEL_TYPE.LO_CLICK_PLACE_ORDER: {
@@ -835,6 +1119,31 @@ export default function useMixpanel(currencies?: { [field in Field]?: Currency }
           mixpanel.track('Limit Order -  Update Order Click', payload)
           break
         }
+        case MIXPANEL_TYPE.LO_DISPLAY_SETTING_CLICK: {
+          mixpanel.track('Limit Order - Display settings on Limit settings', payload)
+          break
+        }
+        case MIXPANEL_TYPE.LO_CLICK_SUBSCRIBE_BTN: {
+          mixpanel.track('Limit Order - User click to Subscribe button')
+          break
+        }
+        case MIXPANEL_TYPE.LO_CLICK_CANCEL_TYPE: {
+          mixpanel.track('Limit Order - Cancel Order Double Signature Click', payload)
+          break
+        }
+        case MIXPANEL_TYPE.LO_CLICK_UPDATE_TYPE: {
+          mixpanel.track('Limit Order - Update Order Double Signature Click', payload)
+          break
+        }
+        case MIXPANEL_TYPE.LO_CLICK_GET_STARTED: {
+          mixpanel.track('Limit Order - Get Started Click', payload)
+          break
+        }
+        case MIXPANEL_TYPE.LO_CLICK_WARNING_IN_SWAP: {
+          mixpanel.track('Limit Order - Warning in Swap Click', payload)
+          break
+        }
+
         case MIXPANEL_TYPE.WUI_WALLET_CLICK: {
           mixpanel.track('Wallet UI - Wallet Click')
           break
@@ -863,23 +1172,212 @@ export default function useMixpanel(currencies?: { [field in Field]?: Currency }
           mixpanel.track('Wallet UI - Import Token - Import button click', payload)
           break
         }
+        case MIXPANEL_TYPE.MENU_MENU_CLICK: {
+          mixpanel.track('Menu - Menu Click', payload)
+          break
+        }
+        case MIXPANEL_TYPE.MENU_PREFERENCE_CLICK: {
+          mixpanel.track('Menu - Preference Click', payload)
+          break
+        }
+        case MIXPANEL_TYPE.ELASTIC_ADD_LIQUIDITY_ADD_NEW_POSITION: {
+          const { token_1, token_2 } = payload as {
+            token_1: string
+            token_2: string
+          }
+          mixpanel.track('Elastic - Add Liquidity page - Add new position', { token_1, token_2 })
+          break
+        }
+        case MIXPANEL_TYPE.ELASTIC_ADD_LIQUIDITY_CLICK_TO_REMOVE_POSITION: {
+          const { token_1, token_2 } = payload as {
+            token_1: string
+            token_2: string
+          }
+          mixpanel.track('Elastic - Add Liquidity page - Click to remove position', { token_1, token_2 })
+          break
+        }
+        case MIXPANEL_TYPE.ELASTIC_ADD_LIQUIDITY_SELECT_RANGE_FOR_POOL: {
+          const { token_1, token_2, range } = payload as {
+            token_1: string
+            token_2: string
+            range: RANGE
+          }
+          mixpanel.track('Elastic - Add Liquidity page - Select range for pool', {
+            token_1,
+            token_2,
+            range: range.toLowerCase().replace('_', ' '),
+          })
+          break
+        }
+        case MIXPANEL_TYPE.ELASTIC_ADD_LIQUIDITY_CLICK_SWAP: {
+          const { token_1, token_2 } = payload as {
+            token_1: string
+            token_2: string
+          }
+          mixpanel.track('Elastic - Add Liquidity page - Click Swap', { token_1, token_2 })
+          break
+        }
+        case MIXPANEL_TYPE.ELASTIC_ADD_LIQUIDITY_CLICK_PRICE_CHART: {
+          const { token_1, token_2 } = payload as {
+            token_1: string
+            token_2: string
+          }
+          mixpanel.track('Elastic - Add Liquidity page - Click Price chart', { token_1, token_2 })
+          break
+        }
+        case MIXPANEL_TYPE.ELASTIC_ADD_LIQUIDITY_CLICK_POOL_ANALYTIC: {
+          const { token_1, token_2 } = payload as {
+            token_1: string
+            token_2: string
+          }
+          mixpanel.track('Elastic - Add Liquidity page - Click Pool analytic', { token_1, token_2 })
+          break
+        }
+
+        case MIXPANEL_TYPE.PA_CLICK_TAB_IN_NOTI_CENTER: {
+          mixpanel.track('Price Alert Click')
+          break
+        }
+        case MIXPANEL_TYPE.PA_CREATE_SUCCESS: {
+          mixpanel.track('Create Alert', payload)
+          break
+        }
+        case MIXPANEL_TYPE.PERMIT_CLICK: {
+          mixpanel.track('Permit Click', payload)
+          break
+        }
+        case MIXPANEL_TYPE.INFINITE_APPROVE_CLICK: {
+          mixpanel.track('Infinite Allowance Click', payload)
+          break
+        }
+        case MIXPANEL_TYPE.CUSTOM_APPROVE_CLICK: {
+          mixpanel.track('Custom Allowance Click', payload)
+          break
+        }
+        case MIXPANEL_TYPE.PERMIT_FAILED_TOO_MANY_TIMES: {
+          mixpanel.track('Permit Failed Too Many Times', payload)
+          break
+        }
+        case MIXPANEL_TYPE.ACCEPT_NEW_AMOUNT: {
+          mixpanel.track('Accept New Amount Button Click', payload)
+          break
+        }
+
+        case MIXPANEL_TYPE.CROSS_CHAIN_CLICK_DISCLAIMER: {
+          mixpanel.track('Cross-chain - Disclaimer click')
+          break
+        }
+        case MIXPANEL_TYPE.CROSS_CHAIN_CLICK_DISCLAIMER_CHECKBOX: {
+          mixpanel.track('Cross chain - Disclaimer checkbox click')
+          break
+        }
+        case MIXPANEL_TYPE.CROSS_CHAIN_CLICK_SUBSCRIBE: {
+          mixpanel.track('Cross chain - Subscribe click')
+          break
+        }
+        case MIXPANEL_TYPE.CROSS_CHAIN_SWAP_INIT: {
+          mixpanel.track('Cross chain - Swap Initiated', payload)
+          break
+        }
+        case MIXPANEL_TYPE.CROSS_CHAIN_SWAP_CONFIRMED: {
+          mixpanel.track('Cross chain - Swap Confirmed', payload)
+          break
+        }
+        case MIXPANEL_TYPE.CROSS_CHAIN_TXS_SUBMITTED: {
+          mixpanel.track('Cross chain - Transaction Submitted', payload)
+          break
+        }
+
+        case MIXPANEL_TYPE.KYBERAI_SWAP_INSIGHT_CLICK: {
+          mixpanel.track('KyberAI - Swap insight click', payload)
+          break
+        }
+
+        case MIXPANEL_TYPE.KYBERAI_TAB_VIEW: {
+          mixpanel.track('KyberAI Tab View', payload)
+          break
+        }
+        case MIXPANEL_TYPE.KYBERAI_JOIN_KYBER_WAITLIST_CLICK: {
+          mixpanel.track('KyberAI - Click Join Kyber Waitlist Button', payload)
+          break
+        }
+        case MIXPANEL_TYPE.KYBERAI_AWESOME_CLICK: {
+          mixpanel.track('KyberAI - Click Awesome Button', payload)
+          break
+        }
+
+        case MIXPANEL_TYPE.EARNING_DASHBOARD_CLICK_TOP_LEVEL_SHARE_BUTTON: {
+          mixpanel.track('Earning Dashboard - Share button click')
+          break
+        }
+
+        case MIXPANEL_TYPE.EARNING_DASHBOARD_SHARE_SUCCESSFULLY: {
+          mixpanel.track('Earning Dashboard - Share success', {
+            option: payload,
+          })
+          break
+        }
+
+        case MIXPANEL_TYPE.EARNING_DASHBOARD_CLICK_POOL_EXPAND: {
+          const { pool_name, pool_address } = payload as {
+            pool_name: string
+            pool_address: string
+          }
+
+          mixpanel.track('Earning Dashboard - Pool expand click', { pool_name, pool_address })
+          break
+        }
+
+        case MIXPANEL_TYPE.EARNING_DASHBOARD_CLICK_ALL_CHAINS_BUTTON: {
+          mixpanel.track('Earning Dashboard - All Chain button click')
+          break
+        }
+
+        case MIXPANEL_TYPE.EARNING_DASHBOARD_CLICK_REFRESH_BUTTON: {
+          mixpanel.track('Earning Dashboard - Refresh button click')
+          break
+        }
+
+        case MIXPANEL_TYPE.EARNING_DASHBOARD_CLICK_CHANGE_TIMEFRAME_EARNING_CHART: {
+          mixpanel.track('Earning Dashboard - Multi chain earning chart - Change timeframe')
+          break
+        }
+
+        case MIXPANEL_TYPE.EARNING_DASHBOARD_CLICK_ADD_LIQUIDITY_BUTTON: {
+          mixpanel.track('Earning Dashboard - Add liquidity button click')
+          break
+        }
+
+        case MIXPANEL_TYPE.EARNING_DASHBOARD_CLICK_CURRENT_CHAIN_BUTTON: {
+          mixpanel.track('Earning Dashboard - Current chain button click')
+          break
+        }
+
+        case MIXPANEL_TYPE.EARNING_DASHBOARD_VIEW_PAGE: {
+          mixpanel.track('Earning Dashboard - Page View')
+          break
+        }
+
+        case MIXPANEL_TYPE.EARNING_DASHBOARD_CLICK_SUBSCRIBE: {
+          mixpanel.track('Earning Dashboard - Subscribe Click')
+          break
+        }
       }
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    /* eslint-disable */
     [currencies, network, saveGas, account, mixpanel.hasOwnProperty('get_distinct_id'), ethPrice?.currentPrice],
+    /* eslint-enable */
   )
   const subgraphMixpanelHandler = useCallback(
     async (transaction: TransactionDetails) => {
-      if (!isEVM || !chainId) return
-      const apolloClient = (networkInfo as EVMNetworkInfo).classic.client
-      const apolloProMMClient = (networkInfo as EVMNetworkInfo).elastic.client
+      if (!isEVM) return
 
       const hash = transaction.hash
       const arbitrary = transaction.extraInfo?.arbitrary
       switch (transaction.type) {
         case TRANSACTION_TYPE.CLASSIC_ADD_LIQUIDITY: {
           const { poolAddress, token_1, token_2, add_liquidity_method, amp } = arbitrary || {}
-          const res = await apolloClient.query({
+          const res = await classicClient.query({
             query: GET_POOL_VALUES_AFTER_MINTS_SUCCESS,
             variables: {
               poolAddress: poolAddress.toLowerCase(),
@@ -917,7 +1415,7 @@ export default function useMixpanel(currencies?: { [field in Field]?: Currency }
             tokenSymbolIn: token_1,
             tokenSymbolOut: token_2,
           } = (transaction.extraInfo || {}) as TransactionExtraInfo2Token
-          const res = await apolloProMMClient.query({
+          const res = await elasticClient.query({
             query: PROMM_GET_POOL_VALUES_AFTER_MINTS_SUCCESS,
             variables: {
               poolAddress: poolAddress.toLowerCase(),
@@ -950,7 +1448,7 @@ export default function useMixpanel(currencies?: { [field in Field]?: Currency }
         }
         case TRANSACTION_TYPE.CLASSIC_REMOVE_LIQUIDITY: {
           const { poolAddress, token_1, token_2, amp, remove_liquidity_method } = arbitrary || {}
-          const res = await apolloClient.query({
+          const res = await classicClient.query({
             query: GET_POOL_VALUES_AFTER_BURNS_SUCCESS,
             variables: {
               poolAddress: poolAddress.toLowerCase(),
@@ -989,7 +1487,7 @@ export default function useMixpanel(currencies?: { [field in Field]?: Currency }
             tokenSymbolIn,
             tokenSymbolOut,
           } = (transaction.extraInfo || {}) as TransactionExtraInfo2Token
-          const res = await apolloProMMClient.query({
+          const res = await elasticClient.query({
             query: PROMM_GET_POOL_VALUES_AFTER_BURNS_SUCCESS,
             variables: {
               poolAddress: poolAddress.toLowerCase(),
@@ -1003,8 +1501,8 @@ export default function useMixpanel(currencies?: { [field in Field]?: Currency }
             )
               break
           }
-          const { totalValueLockedToken0, totalValueLockedToken1, totalValueLockedUSD, feeTier } = res.data.pool
-          const burn = res.data.pool.burns.find((burn: { id: string }) => burn.id.startsWith(transaction.hash))
+          const { totalValueLockedToken0, totalValueLockedToken1, totalValueLockedUSD, feeTier } = res?.data?.pool || {}
+          const burn = res.data?.pool?.burns?.find((burn: { id: string }) => burn.id.startsWith(transaction.hash))
           mixpanelHandler(MIXPANEL_TYPE.ELASTIC_REMOVE_LIQUIDITY_COMPLETED, {
             token_1_pool_qty: totalValueLockedToken0,
             token_2_pool_qty: totalValueLockedToken1,
@@ -1022,7 +1520,7 @@ export default function useMixpanel(currencies?: { [field in Field]?: Currency }
         }
         case TRANSACTION_TYPE.CLASSIC_CREATE_POOL: {
           const { amp, token_1, token_2 } = arbitrary || {}
-          const res = await apolloClient.query({
+          const res = await classicClient.query({
             query: GET_MINT_VALUES_AFTER_CREATE_POOL_SUCCESS,
             variables: {
               transactionHash: hash,
@@ -1045,7 +1543,7 @@ export default function useMixpanel(currencies?: { [field in Field]?: Currency }
           break
         }
         case TRANSACTION_TYPE.ELASTIC_CREATE_POOL: {
-          const res = await apolloProMMClient.query({
+          const res = await elasticClient.query({
             query: PROMM_GET_MINT_VALUES_AFTER_CREATE_POOL_SUCCESS,
             variables: {
               transactionHash: hash,
@@ -1071,14 +1569,112 @@ export default function useMixpanel(currencies?: { [field in Field]?: Currency }
           break
       }
     },
-    [chainId, dispatch, mixpanelHandler, isEVM, networkInfo],
+    [chainId, dispatch, mixpanelHandler, isEVM, classicClient, elasticClient],
   )
   return { mixpanelHandler, subgraphMixpanelHandler }
 }
 
+export const useMixpanelKyberAI = () => {
+  const { isWhiteList } = useIsWhiteListKyberAI()
+  const mixpanelHandler = useCallback(
+    (type: MIXPANEL_TYPE, payload?: any) => {
+      // Whitelist protected events
+      if (isWhiteList) {
+        switch (type) {
+          case MIXPANEL_TYPE.KYBERAI_SHARE_TOKEN_CLICK: {
+            mixpanel.track('KyberAI - Share token click', payload)
+            break
+          }
+          case MIXPANEL_TYPE.KYBERAI_GET_STARTED_CLICK: {
+            mixpanel.track('KyberAI - Click Get Started', payload)
+            break
+          }
+          case MIXPANEL_TYPE.KYBERAI_RANKING_SWITCH_CHAIN_CLICK: {
+            mixpanel.track('KyberAI - Ranking - Switch chain click', payload)
+            break
+          }
+          case MIXPANEL_TYPE.KYBERAI_SEARCH_TOKEN_SUCCESS: {
+            mixpanel.track('KyberAI - Search token success', payload)
+            break
+          }
+          case MIXPANEL_TYPE.KYBERAI_SUBSCRIBE_CLICK: {
+            mixpanel.track('KyberAI - Subscribe', payload)
+            break
+          }
+          case MIXPANEL_TYPE.KYBERAI_RANKING_ACTION_CLICK: {
+            mixpanel.track('KyberAI - Ranking - Action click', payload)
+            break
+          }
+          case MIXPANEL_TYPE.KYBERAI_ADD_TOKEN_TO_WATCHLIST: {
+            mixpanel.track('KyberAI - Add token to watchlist', payload)
+            break
+          }
+          case MIXPANEL_TYPE.KYBERAI_RANKING_CATEGORY_CLICK: {
+            mixpanel.track('KyberAI - Ranking - Category click', payload)
+            break
+          }
+          case MIXPANEL_TYPE.KYBERAI_EXPLORING_SWAP_TOKEN_CLICK: {
+            mixpanel.track('KyberAI - Exploring - Swap token click', payload)
+            break
+          }
+          case MIXPANEL_TYPE.KYBERAI_EXPLORING_VIEW_ALL_CLICK: {
+            mixpanel.track('KyberAI - Exploring - View all click', payload)
+            break
+          }
+          case MIXPANEL_TYPE.KYBERAI_EXPLORING_ANALYSIS_TYPE_CLICK: {
+            mixpanel.track('KyberAI - Exploring - Analysis type click', payload)
+            break
+          }
+          case MIXPANEL_TYPE.KYBERAI_EXPLORING_DISPLAY_SETTING_CLICK: {
+            mixpanel.track('KyberAI - Exploring - Display setting click', payload)
+            break
+          }
+          case MIXPANEL_TYPE.KYBERAI_EXPLORING_CHANGE_DISPLAY_SETTING: {
+            mixpanel.track('KyberAI - Exploring - Change display setting', payload)
+            break
+          }
+          case MIXPANEL_TYPE.KYBERAI_EXPLORING_FULL_SCREEN_CLICK: {
+            mixpanel.track('KyberAI - Exploring - Full screen click', payload)
+            break
+          }
+          case MIXPANEL_TYPE.KYBERAI_EXPLORING_SHARE_CHART_CLICK: {
+            mixpanel.track('KyberAI - Exploring - Share chart click', payload)
+            break
+          }
+          case MIXPANEL_TYPE.KYBERAI_EXPLORING_SWITCH_TRADE_TYPE_CLICK: {
+            mixpanel.track('KyberAI - Exploring - Switch trade type click', payload)
+            break
+          }
+          case MIXPANEL_TYPE.KYBERAI_EXPLORING_SWITCH_TIMEFRAME_CLICK: {
+            mixpanel.track('KyberAI - Exploring - Switch timeframe click', payload)
+            break
+          }
+          case MIXPANEL_TYPE.KYBERAI_POOL_INSIGHT_CLICK: {
+            mixpanel.track('KyberAI - Pool insight click', payload)
+            break
+          }
+          case MIXPANEL_TYPE.KYBERAI_POOL_EXPLORE_TOKEN_IN_POPUP_INSIGHT: {
+            mixpanel.track('KyberAI - Pool - Explore token on popup insight', payload)
+            break
+          }
+          case MIXPANEL_TYPE.KYBERAI_EXPAND_WIDGET_CLICK: {
+            mixpanel.track('KyberAI - Expand widget click', payload)
+            break
+          }
+          default:
+            break
+        }
+      }
+    },
+    [isWhiteList],
+  )
+  return mixpanelHandler
+}
+
 export const useGlobalMixpanelEvents = () => {
-  const { account, chainId } = useActiveWeb3React()
+  const { account, chainId, isEVM } = useActiveWeb3React()
   const { mixpanelHandler } = useMixpanel()
+  const { isWhiteList } = useIsWhiteListKyberAI()
   const oldNetwork = usePrevious(chainId)
   const location = useLocation()
   const pathName = useMemo(() => {
@@ -1087,7 +1683,7 @@ export const useGlobalMixpanelEvents = () => {
   }, [location])
 
   useEffect(() => {
-    if (account && isAddress(account)) {
+    if (isEVM ? account && isAddress(account) : account) {
       mixpanel.identify(account)
 
       const getQueryParam = (url: string, param: string) => {
@@ -1126,7 +1722,7 @@ export const useGlobalMixpanelEvents = () => {
       mixpanelHandler(MIXPANEL_TYPE.WALLET_CONNECTED)
     }
     return () => {
-      if (mixpanel.hasOwnProperty('persistence')) {
+      if (account) {
         mixpanel.reset()
       }
     }
@@ -1157,7 +1753,6 @@ export const useGlobalMixpanelEvents = () => {
         add: 'Add Liquidity',
         remove: 'Remove Liquidity',
         about: 'About',
-        referral: 'Referral',
         discover: 'Discover',
         campaigns: 'Campaign',
         'elastic/remove': 'Elastic - Remove Liquidity',
@@ -1165,13 +1760,24 @@ export const useGlobalMixpanelEvents = () => {
         'elastic/increase': 'Elastic - Increase Liquidity',
         'buy-crypto': 'Buy Crypto',
         bridge: 'Bridge',
-        'kyberdao/stake-knc': 'KyberDAO Stake',
-        'kyberdao/vote': 'KyberDAO Vote',
+        '/kyberdao/stake-knc': 'KyberDAO Stake',
+        '/kyberdao/vote': 'KyberDAO Vote',
         limit: 'Limit Order',
+        'cross-chain': 'Cross Chain',
+        'notification-center': 'Notification',
+        [APP_PATHS.KYBERAI_ABOUT]: 'KyberAI About',
+        [APP_PATHS.KYBERDAO_KNC_UTILITY]: 'Gas refund - KNC Utility',
+        [APP_PATHS.MY_EARNINGS]: 'Earning Dashboard',
       }
-      const pageName = map[pathName]
+      const protectedPaths: { [key: string]: string } = {
+        [APP_PATHS.KYBERAI_RANKINGS]: 'KyberAI Rankings',
+        [APP_PATHS.KYBERAI_EXPLORE]: 'KyberAI Explore',
+      }
+      const pageName = map[pathName] || map[location.pathname]
+      const protectedPageName = protectedPaths[pathName] || protectedPaths[location.pathname]
       pageName && mixpanelHandler(MIXPANEL_TYPE.PAGE_VIEWED, { page: pageName })
+      protectedPageName && isWhiteList && mixpanelHandler(MIXPANEL_TYPE.PAGE_VIEWED, { page: protectedPageName })
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pathName, account, chainId])
+  }, [pathName, account, chainId, location.pathname])
 }

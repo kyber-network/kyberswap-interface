@@ -39,10 +39,11 @@ export default function ModalRegisterCampaignSuccess() {
             <Trans>You have successfully registered for this trading campaign. Start trading now and good luck!</Trans>
           </Content>
           <ResponsiveButtonPrimary
+            id="swap-now-modal-button"
             maxWidth="69%"
             style={{ fontSize: '14px' }}
             onClick={() => {
-              if (!selectedCampaign || !chainId) return
+              if (!selectedCampaign) return
               const listChain: ChainId[] = selectedCampaign.chainIds.split(',').map(Number)
               handleSwapNow(listChain.includes(chainId) ? chainId : listChain[0])
               toggleRegisterCampaignSuccessModal()

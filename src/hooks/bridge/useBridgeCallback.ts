@@ -1,20 +1,32 @@
 import { ChainId } from '@kyberswap/ks-sdk-core'
 import { captureException } from '@sentry/react'
-import axios from 'axios'
 import { useCallback, useMemo } from 'react'
-import { mutate } from 'swr'
+import { useSaveBridgeTxsMutation } from 'services/crossChain'
 
-import { KS_SETTING_API } from 'constants/env'
 import { NETWORKS_INFO } from 'constants/networks'
 import { useActiveWeb3React, useWeb3React } from 'hooks'
-import { useBridgeContract, useSwapBTCContract, useSwapETHContract } from 'hooks/useContract'
-import { useBridgeOutputValue, useBridgeState } from 'state/bridge/hooks'
-import { useAppSelector } from 'state/hooks'
+import { useBridgeContract, useSwapETHContract } from 'hooks/useContract'
+import { useBridgeOutputValue, useBridgeState } from 'state/crossChain/hooks'
 import { tryParseAmount } from 'state/swap/hooks'
 import { useTransactionAdder } from 'state/transactions/hooks'
 import { TRANSACTION_TYPE } from 'state/transactions/type'
-import { useCurrencyBalance, useETHBalance } from 'state/wallet/hooks'
+import { useCurrencyBalance, useNativeBalance } from 'state/wallet/hooks'
 import { formatNumberWithPrecisionRange, isAddress } from 'utils'
+
+export const captureExceptionCrossChain = (body: any, err: any, errName: string) => {
+  const extraData = {
+    body,
+    status: undefined,
+    response: undefined,
+  }
+  if (err?.response?.data) {
+    extraData.status = err.response.status
+    extraData.response = err.response.data
+  }
+  const error = new Error(`SendTxToKsSetting fail, srcTxHash = ${extraData.body.srcTxHash}`, { cause: err })
+  error.name = errName
+  captureException(error, { level: 'fatal', extra: { args: JSON.stringify(extraData, null, 2) } })
+}
 
 const NOT_APPLICABLE = {
   execute: async () => {
@@ -25,11 +37,7 @@ const NOT_APPLICABLE = {
 
 function useSendTxToKsSettingCallback() {
   const { account } = useActiveWeb3React()
-  const historyURL = useAppSelector(state => state.bridge.historyURL)
-
-  const onSuccess = useCallback(() => {
-    mutate(historyURL)
-  }, [historyURL])
+  const [saveTxs] = useSaveBridgeTxsMutation()
 
   return useCallback(
     async (
@@ -41,9 +49,8 @@ function useSendTxToKsSettingCallback() {
       srcAmount: string,
       dstAmount: string,
     ) => {
-      const url = `${KS_SETTING_API}/v1/multichain-transfers`
       const body = {
-        userAddress: account,
+        walletAddress: account,
         srcChainId: srcChainId.toString(),
         dstChainId: dstChainId.toString(),
         srcTxHash,
@@ -55,24 +62,12 @@ function useSendTxToKsSettingCallback() {
         status: 0,
       }
       try {
-        await axios.post(url, body)
-        onSuccess()
+        await saveTxs(body).unwrap()
       } catch (err) {
-        const extraData = {
-          body,
-          status: undefined,
-          response: undefined,
-        }
-        if (err?.response?.data) {
-          extraData.status = err.response.status
-          extraData.response = err.response.data
-        }
-        const error = new Error(`SendTxToKsSetting fail, srcTxHash = ${extraData.body.srcTxHash}`, { cause: err })
-        error.name = 'PostBridge'
-        captureException(error, { level: 'fatal', extra: { args: JSON.stringify(extraData, null, 2) } })
+        captureExceptionCrossChain(body, err, 'PostBridge')
       }
     },
-    [account, onSuccess],
+    [account, saveTxs],
   )
 }
 
@@ -156,9 +151,9 @@ function useRouterSwap(
   const [{ tokenInfoIn, chainIdOut, currencyIn, currencyOut }] = useBridgeState()
   const outputInfo = useBridgeOutputValue(typedValue ?? '0')
   const { account, chainId } = useActiveWeb3React()
-  const bridgeContract = useBridgeContract(isAddress(chainId, routerToken), chainIdOut && isNaN(chainIdOut) ? 'V2' : '')
+  const bridgeContract = useBridgeContract(isAddress(chainId, routerToken))
 
-  const ethBalance = useETHBalance()
+  const ethBalance = useNativeBalance()
   const anyBalance = useCurrencyBalance(currencyIn)
   const balance = isNative ? ethBalance : anyBalance
 
@@ -167,7 +162,7 @@ function useRouterSwap(
   const sendTxToKsSetting = useSendTxToKsSettingCallback()
 
   return useMemo(() => {
-    if (!bridgeContract || !chainId || !tokenInfoIn || !account || !chainIdOut) return NOT_APPLICABLE
+    if (!bridgeContract || !tokenInfoIn || !account || !chainIdOut) return NOT_APPLICABLE
 
     const sufficientBalance = inputAmount && balance && !balance.lessThan(inputAmount)
     return {
@@ -267,16 +262,15 @@ function useBridgeSwap(
   const { library } = useWeb3React()
 
   const tokenBalance = useCurrencyBalance(currencyIn)
-  const ethBalance = useETHBalance()
+  const ethBalance = useNativeBalance()
   const balance = tokenInfoIn && tokenInfoIn?.tokenType !== 'NATIVE' ? tokenBalance : ethBalance
 
   const inputAmount = useMemo(() => tryParseAmount(typedValue, currencyIn), [currencyIn, typedValue])
-  const contractBTC = useSwapBTCContract(isAddress(chainId, inputToken) ? inputToken : undefined)
   const contractETH = useSwapETHContract(isAddress(chainId, inputToken) ? inputToken : undefined)
   const sendTxToKsSetting = useSendTxToKsSettingCallback()
 
   return useMemo(() => {
-    if (!chainId || !toAddress || !chainIdOut || !library || !account) return NOT_APPLICABLE
+    if (!toAddress || !chainIdOut || !library || !account) return NOT_APPLICABLE
 
     const sufficientBalance = inputAmount && balance && !balance.lessThan(inputAmount)
 
@@ -302,18 +296,10 @@ function useBridgeSwap(
               txReceipt = hash && hash.toString().indexOf('0x') === 0 ? { hash } : ''
             }
           } else {
-            if (chainIdOut && isNaN(chainIdOut)) {
-              if (contractBTC) {
-                txReceipt = await contractBTC.Swapout(`0x${inputAmount.quotient.toString(16)}`, toAddress)
-              } else {
-                return Promise.reject('not found contractBTC')
-              }
+            if (contractETH) {
+              txReceipt = await contractETH.Swapout(`0x${inputAmount.quotient.toString(16)}`, toAddress)
             } else {
-              if (contractETH) {
-                txReceipt = await contractETH.Swapout(`0x${inputAmount.quotient.toString(16)}`, toAddress)
-              } else {
-                return Promise.reject('not found contractETH')
-              }
+              return Promise.reject('not found contractETH')
             }
           }
           const txHash = txReceipt?.hash
@@ -367,7 +353,6 @@ function useBridgeSwap(
     inputToken,
     tokenInfoIn?.tokenType,
     contractETH,
-    contractBTC,
     outputInfo.outputAmount,
     outputInfo.fee,
     currencyOut,

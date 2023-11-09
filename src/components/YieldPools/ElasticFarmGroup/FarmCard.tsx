@@ -1,12 +1,10 @@
-import { ChainId, Currency, CurrencyAmount } from '@kyberswap/ks-sdk-core'
+import { Currency, CurrencyAmount } from '@kyberswap/ks-sdk-core'
 import { Trans } from '@lingui/macro'
 import dayjs from 'dayjs'
-import { rgba } from 'polished'
 import { useState } from 'react'
 import { Info, Minus, Plus, Share2 } from 'react-feather'
 import { Link } from 'react-router-dom'
 import { Flex, Text } from 'rebass'
-import styled from 'styled-components'
 
 import { ReactComponent as DropIcon } from 'assets/svg/drop.svg'
 import { ButtonEmpty } from 'components/Button'
@@ -19,33 +17,23 @@ import { Swap as SwapIcon } from 'components/Icons'
 import Harvest from 'components/Icons/Harvest'
 import InfoHelper from 'components/InfoHelper'
 import { MouseoverTooltip } from 'components/Tooltip'
+import { PartnerFarmTag } from 'components/YieldPools/PartnerFarmTag'
 import { APP_PATHS, ELASTIC_BASE_FEE_UNIT } from 'constants/index'
 import { TOBE_EXTENDED_FARMING_POOLS } from 'constants/v2'
 import { useActiveWeb3React } from 'hooks'
+import { useAllTokens } from 'hooks/Tokens'
 import useTheme from 'hooks/useTheme'
+import { useShareFarmAddress } from 'state/farms/classic/hooks'
 import { FarmingPool, NFTPosition } from 'state/farms/elastic/types'
 import { shortenAddress } from 'utils'
 import { getFormattedTimeFromSecond } from 'utils/formatTime'
 import { formatDollarAmount } from 'utils/numbers'
+import { getTokenSymbolWithHardcode } from 'utils/tokenInfo'
 
 import { APRTooltipContent } from '../FarmingPoolAPRCell'
-import { useSharePoolContext } from '../SharePoolContext'
 import FeeTarget from './FeeTarget'
 import PositionDetail from './PostionDetail'
-import { Button, FeeTag, FlipCard, FlipCardBack, FlipCardFront } from './styleds'
-
-const Range = styled.div<{ inrange?: boolean }>`
-  align-self: flex-end;
-  align-items: center;
-  color: ${({ theme, inrange }) => (inrange ? theme.primary : theme.warning)};
-  padding: 3px 4px;
-  gap: 4px;
-  font-size: 12px;
-  font-weight: 500;
-  display: flex;
-  border-radius: 999px;
-  background: ${({ theme, inrange }) => rgba(inrange ? theme.primary : theme.warning, 0.3)};
-`
+import { Button, FeeTag, FlipCard, FlipCardBack, FlipCardFront, Range } from './styleds'
 
 interface Pool extends FarmingPool {
   tvl: number
@@ -86,7 +74,8 @@ const FarmCard = ({
   targetPercent,
   targetPercentByNFT,
 }: Props) => {
-  const { chainId } = useActiveWeb3React()
+  const allTokens = useAllTokens()
+  const { chainId, networkInfo } = useActiveWeb3React()
   const [isRevertPrice, setIsRevertPrice] = useState(false)
   const theme = useTheme()
   const currentTimestamp = Math.floor(Date.now() / 1000)
@@ -95,10 +84,10 @@ const FarmCard = ({
   const canHarvest = rewardPendings.some(amount => amount.greaterThan(0))
 
   const amountCanStaked = isFarmEnded ? 0 : pool.depositedUsd - pool.stakedUsd
-  const setSharePoolAddress = useSharePoolContext()
+  const [, setFarmAddress] = useShareFarmAddress()
   const [showPosition, setShowPosition] = useState(false)
 
-  const addliquidityElasticPool = `${APP_PATHS.ELASTIC_CREATE_POOL}/${
+  const addLiquidityElasticPoolUrl = `/${networkInfo.route}${APP_PATHS.ELASTIC_CREATE_POOL}/${
     pool.token0.isNative ? pool.token0.symbol : pool.token0.address
   }/${pool.token1.isNative ? pool.token1.symbol : pool.token1.address}/${pool.pool.fee}`
 
@@ -116,27 +105,27 @@ const FarmCard = ({
   const numberInRangePos = depositedPositions.filter(
     pos => pos.pool.tickCurrent >= pos.tickLower && pos.pool.tickCurrent < pos.tickUpper,
   ).length
-  //TODO namgold/vietnv: remove this hardcode
-  const token0Symbol =
-    chainId === ChainId.OPTIMISM &&
-    pool?.token0?.wrapped?.address.toLowerCase() === '0x4518231a8fdf6ac553b9bbd51bbb86825b583263'.toLowerCase()
-      ? 'mKNC'
-      : pool.token0.symbol
-  const token1Symbol =
-    chainId === ChainId.OPTIMISM &&
-    pool?.token1?.wrapped?.address.toLowerCase() === '0x4518231a8fdf6ac553b9bbd51bbb86825b583263'.toLowerCase()
-      ? 'mKNC'
-      : pool.token1.symbol
+
+  const token0Symbol = getTokenSymbolWithHardcode(
+    chainId,
+    pool?.token0?.wrapped?.address,
+    pool.token0.isNative ? pool.token0.symbol : allTokens[pool.token0.wrapped.address]?.symbol || pool.token0.symbol,
+  )
+  const token1Symbol = getTokenSymbolWithHardcode(
+    chainId,
+    pool?.token1?.wrapped?.address,
+    pool.token1.isNative ? pool.token1.symbol : allTokens[pool.token1.wrapped.address]?.symbol || pool.token1.symbol,
+  )
 
   return (
-    <FlipCard flip={showPosition} joined={!!depositedPositions.length}>
+    <FlipCard flip={showPosition} joined={!!depositedPositions.length} data-testid={pool.id}>
       {!showPosition && (
         <FlipCardFront>
           <Flex alignItems="center" justifyContent="space-between">
             <Flex alignItems="center">
               <DoubleCurrencyLogo currency0={pool.token0} currency1={pool.token1} size={20} />
               <Link
-                to={addliquidityElasticPool}
+                to={addLiquidityElasticPoolUrl}
                 style={{
                   textDecoration: 'none',
                 }}
@@ -147,6 +136,7 @@ const FarmCard = ({
               </Link>
 
               <FeeTag style={{ fontSize: '12px' }}>FEE {(pool.pool.fee * 100) / ELASTIC_BASE_FEE_UNIT}%</FeeTag>
+              <PartnerFarmTag farmPoolAddress={pool.poolAddress} />
             </Flex>
 
             <Flex sx={{ gap: '4px' }}>
@@ -154,7 +144,7 @@ const FarmCard = ({
                 <MouseoverTooltip
                   text={
                     <Text fontSize="12px" fontStyle="italic">
-                      <Trans>You have {numberOutRangePos} out-of-range position(s)</Trans>
+                      <Trans>You have {numberOutRangePos} out-of-range position(s).</Trans>
                     </Text>
                   }
                 >
@@ -168,7 +158,7 @@ const FarmCard = ({
                 <MouseoverTooltip
                   text={
                     <Text fontSize="12px" fontStyle="italic">
-                      <Trans>You have {numberInRangePos} in-range position(s)</Trans>
+                      <Trans>You have {numberInRangePos} in-range position(s).</Trans>
                     </Text>
                   }
                 >
@@ -197,7 +187,7 @@ const FarmCard = ({
             <Flex
               marginLeft="12px"
               onClick={() => {
-                setSharePoolAddress(pool.poolAddress)
+                setFarmAddress(pool.poolAddress)
               }}
               sx={{
                 cursor: 'pointer',
@@ -229,7 +219,7 @@ const FarmCard = ({
             </MouseoverTooltip>
           </Text>
 
-          <Text fontSize="28px" fontWeight="500" color={theme.apr}>
+          <Text fontSize="28px" fontWeight="500" color={theme.apr} data-testid="apr-value">
             {(pool.farmAPR + pool.poolAPR).toFixed(2)}%
           </Text>
 
@@ -252,7 +242,9 @@ const FarmCard = ({
           </Flex>
 
           <Flex justifyContent="space-between" marginTop="4px" fontSize="16px" fontWeight="500" marginBottom="16px">
-            <Text fontWeight="500">{formatDollarAmount(pool.tvl)}</Text>
+            <Text fontWeight="500" data-testid="tvl-value">
+              {formatDollarAmount(pool.tvl)}
+            </Text>
             {pool.startTime > currentTimestamp ? (
               <Text color={theme.warning}>{getFormattedTimeFromSecond(pool.startTime - currentTimestamp)}</Text>
             ) : pool.endTime > currentTimestamp ? (
@@ -344,7 +336,7 @@ const FarmCard = ({
 
           <Flex marginTop="20px" justifyContent="space-between">
             <Flex sx={{ gap: '12px' }}>
-              <Button color={theme.primary} disabled={disableStake} onClick={onStake}>
+              <Button id="stake-button" color={theme.primary} disabled={disableStake} onClick={onStake}>
                 <Plus size={16} /> Stake
               </Button>
               <Button color={theme.red} disabled={disableUnstake} onClick={onUnstake}>
@@ -384,7 +376,7 @@ const FarmCard = ({
           <Flex alignItems="center" height="36px">
             <DoubleCurrencyLogo currency0={pool.token0} currency1={pool.token1} size={20} />
             <Link
-              to={`${APP_PATHS.ELASTIC_CREATE_POOL}/${
+              to={`/${networkInfo.route}${APP_PATHS.ELASTIC_CREATE_POOL}/${
                 pool.token0.isNative ? pool.token0.symbol : pool.token0.address
               }/${pool.token1.isNative ? pool.token1.symbol : pool.token1.address}/${pool.pool.fee}`}
               style={{

@@ -14,6 +14,7 @@ import DoubleCurrencyLogo from 'components/DoubleLogo'
 import HoverDropdown from 'components/HoverDropdown'
 import Modal from 'components/Modal'
 import { MouseoverTooltip } from 'components/Tooltip'
+import { FARM_TAB } from 'constants/index'
 import { NETWORKS_INFO, isEVM } from 'constants/networks'
 import { useActiveWeb3React } from 'hooks'
 import { useToken } from 'hooks/Tokens'
@@ -22,7 +23,13 @@ import { useOnClickOutside } from 'hooks/useOnClickOutside'
 import useParsedQueryString from 'hooks/useParsedQueryString'
 import { usePool } from 'hooks/usePools'
 import useTheme from 'hooks/useTheme'
-import { useElasticFarms, useFailedNFTs, useFarmAction, usePositionFilter } from 'state/farms/elastic/hooks'
+import {
+  useDepositedNftsByFarm,
+  useElasticFarms,
+  useFarmAction,
+  useJoinedPositions,
+  usePositionFilter,
+} from 'state/farms/elastic/hooks'
 import { UserPositionFarm } from 'state/farms/elastic/types'
 import { useTokenPrices } from 'state/tokenPrices/hooks'
 import { PositionDetails } from 'types/position'
@@ -55,11 +62,11 @@ const PositionRow = ({
   farmAddress: string
 }) => {
   const { token0: token0Address, token1: token1Address, fee: feeAmount, liquidity, tickLower, tickUpper } = position
-
   const { unstake } = useFarmAction(farmAddress)
-  const { userFarmInfo } = useElasticFarms()
+  const userFarmInfo = useJoinedPositions()
 
   const joinedPositions = userFarmInfo?.[farmAddress]?.joinedPositions
+
   let pid: null | string = null
   if (joinedPositions) {
     Object.keys(joinedPositions).forEach(key => {
@@ -124,7 +131,7 @@ const PositionRow = ({
           checked={selected}
         />
       ) : (
-        <MouseoverTooltip text="You will need to unstake this position first before you can withdraw it">
+        <MouseoverTooltip text="You will need to unstake this position first before you can withdraw it.">
           {disableCheckbox}
         </MouseoverTooltip>
       )}
@@ -152,7 +159,7 @@ const PositionRow = ({
               style={{ height: '28px' }}
               disabled={position.stakedLiquidity.eq(BigNumber.from(0))}
               onClick={() => {
-                if (!!pid && positionSDK)
+                if (!!pid && positionSDK) {
                   unstake(BigNumber.from(pid), [
                     {
                       nftId: position.tokenId,
@@ -161,6 +168,7 @@ const PositionRow = ({
                       position: positionSDK,
                     },
                   ])
+                }
               }}
             >
               <Minus size={16} /> Unstake
@@ -214,18 +222,23 @@ function WithdrawModal({
   const { type: tab = 'active' } = useParsedQueryString<{ type: string }>()
 
   const checkboxGroupRef = useRef<any>()
-  const { farms, userFarmInfo } = useElasticFarms()
+  const { farms } = useElasticFarms()
+  const userFarmInfo = useJoinedPositions()
 
   const selectedFarm = farms?.find(farm => farm.id.toLowerCase() === selectedFarmAddress.toLowerCase())
 
   const poolAddresses =
     selectedFarm?.pools
-      .filter(pool => (tab === 'active' ? pool.endTime > +new Date() / 1000 : pool.endTime < +new Date() / 1000))
+      .filter(pool =>
+        forced
+          ? true
+          : tab === FARM_TAB.MY_FARMS ||
+            (tab === FARM_TAB.ACTIVE ? pool.endTime > +new Date() / 1000 : pool.endTime < +new Date() / 1000),
+      )
       .map(pool => pool.poolAddress.toLowerCase()) || []
 
-  const failedNFTs = useFailedNFTs()
-
-  const { depositedPositions = [], joinedPositions = {} } = userFarmInfo?.[selectedFarm?.id || ''] || {}
+  const depositedPositions = useDepositedNftsByFarm(selectedFarmAddress)
+  const { joinedPositions = {} } = userFarmInfo?.[selectedFarm?.id || ''] || {}
 
   const userDepositedNFTs: PositionDetails[] = useMemo(
     () =>
@@ -266,6 +279,7 @@ function WithdrawModal({
   const { filterOptions, activeFilter, setActiveFilter, eligiblePositions } = usePositionFilter(
     userDepositedNFTs,
     poolAddresses,
+    true,
   )
 
   const withDrawableNFTs = useMemo(() => {
@@ -306,7 +320,7 @@ function WithdrawModal({
 
   const handleWithdraw = async () => {
     if (forced) {
-      await emergencyWithdraw(failedNFTs.map(BigNumber.from))
+      await emergencyWithdraw(eligiblePositions.map(item => item.tokenId))
       onDismiss()
       return
     }
@@ -333,7 +347,7 @@ function WithdrawModal({
     <Select role="button" onClick={() => setShowMenu(prev => !prev)}>
       {filterOptions.find(item => item.code === activeFilter)?.value}
 
-      <DropdownIcon rotate={showMenu} />
+      <DropdownIcon isRotate={showMenu} />
 
       {showMenu && (
         <SelectMenu ref={ref}>
@@ -410,31 +424,23 @@ function WithdrawModal({
         </TableHeader>
 
         <div style={{ overflowY: 'auto' }}>
-          {(eligiblePositions as UserPositionFarm[])
-            .filter(pos => {
-              if (forced) {
-                return failedNFTs.includes(pos.tokenId.toString())
-              }
-
-              return true
-            })
-            .map(pos => (
-              <PositionRow
-                selected={selectedNFTs.some(e => e.tokenId.toString() === pos.tokenId.toString())}
-                key={pos.tokenId.toString()}
-                position={pos}
-                farmAddress={selectedFarmAddress}
-                forced={forced}
-                onChange={(selected: boolean, position: Position | undefined) => {
-                  const tokenId = pos.tokenId.toString()
-                  if (position) mapPositionInfo.current[tokenId] = position
-                  if (selected) setSeletedNFTs(prev => [...prev, pos])
-                  else {
-                    setSeletedNFTs(prev => prev.filter(item => item.tokenId.toString() !== tokenId))
-                  }
-                }}
-              />
-            ))}
+          {(eligiblePositions as UserPositionFarm[]).map(pos => (
+            <PositionRow
+              selected={selectedNFTs.some(e => e.tokenId.toString() === pos.tokenId.toString())}
+              key={pos.tokenId.toString()}
+              position={pos}
+              farmAddress={selectedFarmAddress}
+              forced={forced}
+              onChange={(selected: boolean, position: Position | undefined) => {
+                const tokenId = pos.tokenId.toString()
+                if (position) mapPositionInfo.current[tokenId] = position
+                if (selected) setSeletedNFTs(prev => [...prev, pos])
+                else {
+                  setSeletedNFTs(prev => prev.filter(item => item.tokenId.toString() !== tokenId))
+                }
+              }}
+            />
+          ))}
         </div>
         <Flex justifyContent="space-between" marginTop="24px">
           <div></div>

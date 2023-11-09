@@ -18,10 +18,13 @@ export const TableRow = styled.div`
     border-bottom-right-radius: 20px;
     border-bottom-left-radius: 20px;
   }
+  ${({ theme }) => theme.mediaWidth.upToLarge`
+    grid-template-columns: 3fr 120px 1fr 1fr 1fr 1fr 1fr;
+  `};
 `
 
 export const DataText = styled(Flex)`
-  color: ${({ theme }) => theme.text7};
+  color: ${({ theme }) => theme.text5};
   flex-direction: column;
 `
 
@@ -41,32 +44,6 @@ export const AMPLiquidityAndTVLContainer = styled.div`
 export const TextTVL = styled.div`
   font-size: 12px;
   color: ${({ theme }) => theme.subText};
-`
-
-export const TextShowMorePools = styled.div<{ disabled: boolean }>`
-  cursor: pointer;
-  font-size: 12px;
-  color: ${({ theme }) => theme.primary};
-  grid-column: 2 / -1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 24px;
-
-  ${({ disabled }) => (disabled ? `opacity: 0.5;` : ``)}
-  &:hover {
-    ${({ disabled }) => (!disabled ? `opacity: 0.7;` : ``)}
-  }
-
-  ${({ theme }) => theme.mediaWidth.upToMedium`
-    padding: 0;
-  `}
-`
-
-export const DashedDivider = styled.div`
-  ${({ theme }) => `
-    border-bottom: 1px dashed ${theme.bg14};
-  `}
 `
 
 export const TokenRatioContainer = styled.div`
@@ -117,7 +94,7 @@ export const TokenRatioPercent = styled.div`
 
 export const TabContainer = styled.div`
   width: 100%;
-  background: ${({ theme }) => theme.tabBackgound};
+  background: ${({ theme }) => theme.tabBackground};
   border-radius: 20px;
   display: flex;
   padding: 2px;
@@ -137,13 +114,4 @@ export const TabItem = styled.div<{ active?: boolean }>`
   flex-grow: 1;
   flex-basis: 0;
   transition: color 300ms;
-`
-
-export const ButtonGroupContainer = styled.div`
-  display: flex;
-  gap: 16px;
-
-  > * {
-    flex: 1;
-  }
 `

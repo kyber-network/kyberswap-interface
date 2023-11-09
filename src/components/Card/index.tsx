@@ -1,3 +1,4 @@
+import { rgba } from 'polished'
 import { CardProps, Text } from 'rebass'
 import { Box } from 'rebass/styled-components'
 import styled from 'styled-components'
@@ -41,9 +42,15 @@ export const YellowCard = styled(Card)`
   font-weight: 500;
 `
 
+export const SubTextCard = styled(Card)`
+  background-color: ${({ theme }) => rgba(theme.subText, 0.2)};
+  color: ${({ theme }) => theme.text};
+  font-weight: 500;
+`
+
 export const WarningCard = styled(Card)`
-  background-color: rgba(255, 153, 1, 0.15);
-  color: ${({ theme }) => theme.warning};
+  background-color: ${({ theme }) => rgba(theme.warning, 0.25)};
+  color: ${({ theme }) => theme.text};
   font-weight: 500;
 `
 

@@ -1,4 +1,6 @@
 import { darken } from 'polished'
+import { useState } from 'react'
+import { isMobile } from 'react-device-detect'
 import { Flex } from 'rebass'
 import styled, { css } from 'styled-components'
 
@@ -51,7 +53,7 @@ const cssDropDown = css`
     color: ${({ theme }) => darken(0.1, theme.primary)};
   }
 `
-const HoverDropdown = styled.div<{ active: boolean; forceShowDropdown?: boolean }>`
+const HoverDropdown = styled.div<{ active: boolean; forceShowDropdown?: boolean; isHovered?: boolean }>`
   position: relative;
   display: inline-block;
   width: fit-content;
@@ -64,9 +66,7 @@ const HoverDropdown = styled.div<{ active: boolean; forceShowDropdown?: boolean 
 
   ${({ forceShowDropdown }) => forceShowDropdown && cssDropDown}
 
-  &:hover {
-    ${cssDropDown}
-  }
+  ${({ isHovered }) => isHovered && cssDropDown}
 `
 
 type Props = {
@@ -76,10 +76,31 @@ type Props = {
   anchor: React.ReactNode
   dropdownContent: React.ReactNode
   dropdownAlign?: DropdownAlign
+  className?: string
 }
-const NavGroup: React.FC<Props> = ({ id, forceOpen, isActive, anchor, dropdownContent, dropdownAlign = 'left' }) => {
+const NavGroup: React.FC<Props> = ({
+  id,
+  forceOpen,
+  isActive,
+  anchor,
+  dropdownContent,
+  dropdownAlign = 'left',
+  className,
+}) => {
+  const [isHovered, setIsHovered] = useState(false)
   return (
-    <HoverDropdown id={id} forceShowDropdown={forceOpen} active={!!isActive}>
+    <HoverDropdown
+      id={id}
+      forceShowDropdown={forceOpen}
+      isHovered={isHovered}
+      active={!!isActive}
+      className={className}
+      onMouseEnter={() => setIsHovered(true)}
+      onClick={() => {
+        setIsHovered(true)
+      }}
+      onMouseLeave={() => setIsHovered(false)}
+    >
       <Flex
         alignItems="center"
         sx={{
@@ -87,9 +108,19 @@ const NavGroup: React.FC<Props> = ({ id, forceOpen, isActive, anchor, dropdownCo
         }}
       >
         {anchor}
-        <DropdownIcon />
+        {dropdownContent && <DropdownIcon />}
       </Flex>
-      <Dropdown $align={dropdownAlign}>{dropdownContent}</Dropdown>
+      {dropdownContent && (
+        <Dropdown
+          onClick={e => {
+            e.stopPropagation()
+            isMobile && setIsHovered(false)
+          }}
+          $align={dropdownAlign}
+        >
+          {dropdownContent}
+        </Dropdown>
+      )}
     </HoverDropdown>
   )
 }

@@ -1,6 +1,8 @@
 import { ChainId, Token, WETH } from '@kyberswap/ks-sdk-core'
 import { Trans, t } from '@lingui/macro'
+import mixpanel from 'mixpanel-browser'
 import { rgba } from 'polished'
+import { useState } from 'react'
 import { BarChart2, Plus, Share2 } from 'react-feather'
 import { Link, useNavigate } from 'react-router-dom'
 import { Flex, Text } from 'rebass'
@@ -10,10 +12,11 @@ import { ReactComponent as ViewPositionIcon } from 'assets/svg/view_positions.sv
 import { ButtonEmpty } from 'components/Button'
 import CopyHelper from 'components/Copy'
 import DoubleCurrencyLogo from 'components/DoubleLogo'
-import { MoneyBag } from 'components/Icons'
+import QuickZap, { QuickZapButton } from 'components/ElasticZap/QuickZap'
+import { FarmTag } from 'components/FarmTag'
 import { MouseoverTooltip } from 'components/Tooltip'
 import { FeeTag } from 'components/YieldPools/ElasticFarmGroup/styleds'
-import FarmingPoolAPRCell, { APRTooltipContent } from 'components/YieldPools/FarmingPoolAPRCell'
+import FarmingPoolAPRCell from 'components/YieldPools/FarmingPoolAPRCell'
 import { APP_PATHS, ELASTIC_BASE_FEE_UNIT, PROMM_ANALYTICS_URL } from 'constants/index'
 import { NativeCurrencies } from 'constants/tokens'
 import { VERSION } from 'constants/v2'
@@ -22,9 +25,8 @@ import { useAllTokens } from 'hooks/Tokens'
 import useMixpanel, { MIXPANEL_TYPE } from 'hooks/useMixpanel'
 import useTheme from 'hooks/useTheme'
 import { ButtonIcon } from 'pages/Pools/styleds'
-import { useToggleEthPowAckModal } from 'state/application/hooks'
 import { useElasticFarms } from 'state/farms/elastic/hooks'
-import { useUrlOnEthPowAck } from 'state/pools/hooks'
+import { useElasticFarmsV2 } from 'state/farms/elasticv2/hooks'
 import { ExternalLink } from 'theme'
 import { ElasticPoolDetail } from 'types/pool'
 import { isAddressString, shortenAddress } from 'utils'
@@ -36,7 +38,7 @@ interface ListItemProps {
   userPositions: { [key: string]: number }
 }
 
-const getPrommAnalyticLink = (chainId: ChainId | undefined, poolAddress: string) => {
+const getPrommAnalyticLink = (chainId: ChainId, poolAddress: string) => {
   if (!chainId) return ''
   return `${PROMM_ANALYTICS_URL[chainId]}/pool/${poolAddress.toLowerCase()}`
 }
@@ -44,7 +46,7 @@ const getPrommAnalyticLink = (chainId: ChainId | undefined, poolAddress: string)
 const TableRow = styled.div`
   display: grid;
   grid-gap: 1rem;
-  grid-template-columns: 2fr 1.25fr 1.25fr 1.25fr 1.25fr 1.25fr 1fr;
+  grid-template-columns: 2fr 1fr 1fr 1fr 1fr 1fr 1fr;
   padding: 12px 16px;
   font-size: 14px;
   align-items: center;
@@ -80,8 +82,7 @@ export default function ProAmmPoolListItem({ pool, onShared, userPositions }: Li
   const { chainId, networkInfo } = useActiveWeb3React()
   const theme = useTheme()
   const navigate = useNavigate()
-  const [, setUrlOnEthPoWAck] = useUrlOnEthPowAck()
-  const toggleEthPowAckModal = useToggleEthPowAckModal()
+  const [showQuickZap, setShowQuickZap] = useState(false)
 
   const allTokens = useAllTokens()
 
@@ -104,6 +105,7 @@ export default function ProAmmPoolListItem({ pool, onShared, userPositions }: Li
   const token1Symbol = isToken1WETH ? nativeToken.symbol : token1.symbol
 
   const { farms } = useElasticFarms()
+  const { farms: elasticFarmV2s } = useElasticFarmsV2()
 
   const { mixpanelHandler } = useMixpanel()
 
@@ -124,48 +126,38 @@ export default function ProAmmPoolListItem({ pool, onShared, userPositions }: Li
     }
   })
 
-  const isFarmingPool = !!fairlaunchAddress && pid !== -1
+  const isFarmV1 = !!fairlaunchAddress && pid !== -1
+  const farmV2 = elasticFarmV2s
+    ?.filter(farm => farm.endTime > Date.now() / 1000 && !farm.isSettled)
+    .find(farm => farm.poolAddress.toLowerCase() === pool.address.toLowerCase())
+  const isFarmV2 = !!farmV2
+
+  const isFarmingPool = isFarmV1 || isFarmV2 || !!pool.farmAPR
+
+  const maxFarmV2Apr = Math.max(...(farmV2?.ranges.map(item => item.apr || 0) || []), 0)
 
   const renderPoolAPR = () => {
-    if (isFarmingPool) {
-      if (pool.farmAPR) {
-        return (
-          <Flex
-            alignItems={'center'}
-            sx={{
-              gap: '4px',
-            }}
-          >
-            <Text as="span">{(pool.apr + pool.farmAPR).toFixed(2)}%</Text>
-            <MouseoverTooltip
-              width="fit-content"
-              placement="top"
-              text={<APRTooltipContent farmAPR={pool.farmAPR} poolAPR={pool.apr} />}
-            >
-              <MoneyBag size={16} color={theme.apr} />
-            </MouseoverTooltip>
-          </Flex>
-        )
-      }
-
-      return <FarmingPoolAPRCell poolAPR={pool.apr} fairlaunchAddress={fairlaunchAddress} pid={pid} />
+    if (isFarmingPool || isFarmV2) {
+      return (
+        <FarmingPoolAPRCell
+          poolAPR={pool.apr}
+          farmV1APR={pool.farmAPR}
+          farmV2APR={maxFarmV2Apr}
+          fairlaunchAddress={fairlaunchAddress}
+          pid={pid}
+        />
+      )
     }
 
-    return (
-      <Flex
-        alignItems="center"
-        paddingRight="20px" // to make all the APR numbers vertically align
-      >
-        {pool.apr.toFixed(2)}%
-      </Flex>
-    )
+    return <Flex alignItems="center">{pool.apr.toFixed(2)}%</Flex>
   }
 
   return (
-    <TableRow key={pool.address}>
+    <TableRow key={pool.address} data-testid={pool.address}>
+      <QuickZap poolAddress={pool.address} isOpen={showQuickZap} onDismiss={() => setShowQuickZap(false)} />
       <div>
         <Link
-          to={`${APP_PATHS.ELASTIC_CREATE_POOL}/${token0Slug}/${token1Slug}/${pool.feeTier}`}
+          to={`/${networkInfo.route}${APP_PATHS.ELASTIC_CREATE_POOL}/${token0Slug}/${token1Slug}/${pool.feeTier}`}
           style={{
             textDecoration: 'none',
           }}
@@ -176,13 +168,30 @@ export default function ProAmmPoolListItem({ pool, onShared, userPositions }: Li
               currency0={isToken0WETH ? nativeToken : token0}
               currency1={isToken1WETH ? nativeToken : token1}
             />
-            <Text fontSize={14} fontWeight="500">
-              {token0Symbol} - {token1Symbol}
+            <Text flex={1} maxWidth="fit-content">
+              <MouseoverTooltip
+                text={`${token0Symbol} - ${token1Symbol}`}
+                width="fit-content"
+                containerStyle={{ maxWidth: '100%' }}
+                placement="top"
+              >
+                <Text
+                  fontSize={14}
+                  fontWeight="500"
+                  flex={1}
+                  sx={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
+                >
+                  {token0Symbol} - {token1Symbol}
+                </Text>
+              </MouseoverTooltip>
             </Text>
             <FeeTag>Fee {(pool.feeTier * 100) / ELASTIC_BASE_FEE_UNIT}%</FeeTag>
+
+            <Flex alignItems="center" marginLeft="4px" sx={{ gap: '4px' }}>
+              {isFarmingPool && <FarmTag address={pool.address} noText />}
+            </Flex>
           </Flex>
         </Link>
-
         <Flex
           marginTop="0.5rem"
           alignItems="center"
@@ -224,6 +233,17 @@ export default function ProAmmPoolListItem({ pool, onShared, userPositions }: Li
       </DataText>
       <DataText alignItems="flex-end">{myLiquidity ? formatDollarAmount(Number(myLiquidity)) : '-'}</DataText>
       <ButtonWrapper>
+        <QuickZapButton
+          onClick={() => {
+            mixpanel.track('Zap - Click Quick Zap', {
+              token0: token0?.symbol || '',
+              token1: token1?.symbol || '',
+              source: 'pool_page',
+            })
+            setShowQuickZap(true)
+          }}
+          size="small"
+        />
         <MouseoverTooltip text={<Trans> Add liquidity </Trans>} placement={'top'} width={'fit-content'}>
           <ButtonEmpty
             padding="0"
@@ -237,19 +257,13 @@ export default function ProAmmPoolListItem({ pool, onShared, userPositions }: Li
             onClick={(e: React.MouseEvent) => {
               e.stopPropagation()
 
-              const url = `${APP_PATHS.ELASTIC_CREATE_POOL}/${token0Slug}/${token1Slug}/${pool.feeTier}`
+              const url = `/${networkInfo.route}${APP_PATHS.ELASTIC_CREATE_POOL}/${token0Slug}/${token1Slug}/${pool.feeTier}`
               mixpanelHandler(MIXPANEL_TYPE.ELASTIC_ADD_LIQUIDITY_IN_LIST_INITIATED, {
                 token_1: token0Symbol,
                 token_2: token1Symbol,
                 fee_tier: pool.feeTier / ELASTIC_BASE_FEE_UNIT,
               })
-
-              if (chainId === ChainId.ETHW) {
-                setUrlOnEthPoWAck(url)
-                toggleEthPowAckModal()
-              } else {
-                navigate(url)
-              }
+              navigate(url)
             }}
           >
             <Plus size={16} color={theme.primary} />

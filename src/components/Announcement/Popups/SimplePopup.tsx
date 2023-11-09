@@ -16,18 +16,23 @@ const RowNoFlex = styled(AutoRow)`
   flex-wrap: nowrap;
 `
 
+export type SimplePopupProps = {
+  title: string
+  type: NotificationType
+  summary?: ReactNode
+  icon?: ReactNode
+  link?: string
+}
+
 export default function SimplePopup({
   title,
   summary,
   type = NotificationType.ERROR,
   icon,
   link,
-}: {
-  title: string
-  type?: NotificationType
-  summary?: ReactNode
-  icon?: ReactNode
-  link?: string
+  onRemove,
+}: SimplePopupProps & {
+  onRemove?: () => void
 }) {
   const theme = useTheme()
   const mapColor = {
@@ -45,6 +50,7 @@ export default function SimplePopup({
   const navigate = useNavigate()
   const onClickLink = () => {
     link && navigate(link)
+    onRemove?.()
   }
   return (
     <RowNoFlex>

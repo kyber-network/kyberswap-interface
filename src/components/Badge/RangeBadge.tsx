@@ -34,18 +34,24 @@ export default function RangeBadge({
     <BadgeWrapper>
       {removed ? (
         <MouseoverTooltip text={<Trans>Your position has 0 liquidity, and is not earning fees</Trans>}>
-          <Badge variant={BadgeVariant.NEGATIVE}>
+          <Badge variant={BadgeVariant.NEGATIVE} style={{ padding: hideText ? '4px' : undefined }}>
             <AlertCircle width={size} height={size} />
-            &nbsp;
-            <BadgeText>
-              <Trans>Closed</Trans>
-            </BadgeText>
+            {!hideText && (
+              <>
+                &nbsp;
+                <BadgeText>
+                  <Trans>Closed</Trans>
+                </BadgeText>
+              </>
+            )}
           </Badge>
         </MouseoverTooltip>
       ) : inRange ? (
         <MouseoverTooltip
           text={
-            <Trans>The price of this pool is within your selected range. Your position is currently earning fees</Trans>
+            <Trans>
+              The price of this pool is within your selected range. Your position is currently earning fees.
+            </Trans>
           }
         >
           <Badge variant={BadgeVariant.PRIMARY} style={{ padding: hideText ? '4px' : undefined }}>
@@ -66,7 +72,7 @@ export default function RangeBadge({
           text={
             <Trans>
               The price of this pool is outside of your selected price range. Currently, your position is not earning
-              any fees or rewards
+              any fees or rewards.
             </Trans>
           }
         >

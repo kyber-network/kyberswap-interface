@@ -1,24 +1,28 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { useMedia } from 'react-use'
-import AnnouncementApi from 'services/announcement'
+import { useMedia, usePrevious } from 'react-use'
+import {
+  ANNOUNCEMENT_TAGS,
+  useAckPrivateAnnouncementsByIdsMutation,
+  useLazyGetAnnouncementsQuery,
+  useLazyGetPrivateAnnouncementsQuery,
+} from 'services/announcement'
 import styled, { css } from 'styled-components'
 
 import AnnouncementView, { Tab } from 'components/Announcement/AnnoucementView'
+import DetailAnnouncementPopup from 'components/Announcement/Popups/DetailAnnouncementPopup'
 import { formatNumberOfUnread } from 'components/Announcement/helper'
 import { Announcement, PrivateAnnouncement } from 'components/Announcement/type'
 import NotificationIcon from 'components/Icons/NotificationIcon'
 import MenuFlyout from 'components/MenuFlyout'
 import Modal from 'components/Modal'
-import { useActiveWeb3React } from 'hooks'
-import usePrevious from 'hooks/usePrevious'
+import { RTK_QUERY_TAGS } from 'constants/index'
+import useInterval from 'hooks/useInterval'
+import { useInvalidateTagAnnouncement } from 'hooks/useInvalidateTags'
+import useMixpanel, { MIXPANEL_TYPE } from 'hooks/useMixpanel'
 import { ApplicationModal } from 'state/application/actions'
-import { useModalOpen, useToggleNotificationCenter } from 'state/application/hooks'
+import { useDetailAnnouncement, useModalOpen, useToggleNotificationCenter } from 'state/application/hooks'
+import { useSessionInfo } from 'state/authen/hooks'
 import { MEDIA_WIDTHS } from 'theme'
-import {
-  subscribeNotificationOrderExpired,
-  subscribeNotificationOrderFilled,
-  subscribePrivateAnnouncement,
-} from 'utils/firebase'
 
 const StyledMenuButton = styled.button<{ active?: boolean }>`
   border: none;
@@ -29,7 +33,7 @@ const StyledMenuButton = styled.button<{ active?: boolean }>`
   display: flex;
   align-items: center;
   justify-content: center;
-  color: ${({ theme }) => theme.text};
+  color: ${({ theme }) => theme.subText};
   border-radius: 999px;
   position: relative;
   outline: none;
@@ -37,20 +41,15 @@ const StyledMenuButton = styled.button<{ active?: boolean }>`
   border: 1px solid transparent;
   :hover {
     cursor: pointer;
-    background-color: ${({ theme }) => theme.buttonBlack};
-    border: 1px solid ${({ theme }) => theme.primary};
   }
-
   ${({ active }) =>
-    active
-      ? css`
-          background-color: ${({ theme }) => theme.buttonBlack};
-        `
-      : ''}
+    active &&
+    css`
+      color: ${({ theme }) => theme.text};
+    `}
 `
 
 const StyledMenu = styled.div`
-  margin-left: 0.5rem;
   display: flex;
   justify-content: center;
   align-items: center;
@@ -83,10 +82,11 @@ const browserCustomStyle = css`
 const responseDefault = { numberOfUnread: 0, pagination: { totalItems: 0 }, notifications: [] }
 
 export default function AnnouncementComponent() {
-  const { account, chainId } = useActiveWeb3React()
   const [activeTab, setActiveTab] = useState(Tab.ANNOUNCEMENT)
+  const { mixpanelHandler } = useMixpanel()
+  const scrollRef = useRef<HTMLDivElement>(null)
 
-  const isOpenNotificationCenter = useModalOpen(ApplicationModal.NOTIFICATION_CENTER)
+  const isOpenInbox = useModalOpen(ApplicationModal.NOTIFICATION_CENTER)
   const toggleNotificationCenter = useToggleNotificationCenter()
   const isMobile = useMedia(`(max-width: ${MEDIA_WIDTHS.upToSmall}px)`)
 
@@ -95,56 +95,43 @@ export default function AnnouncementComponent() {
   const [announcements, setAnnouncements] = useState<Announcement[]>([])
   const [privateAnnouncements, setPrivateAnnouncements] = useState<PrivateAnnouncement[]>([])
 
-  const { useLazyGetAnnouncementsQuery, useLazyGetPrivateAnnouncementsQuery, useAckPrivateAnnouncementsMutation } =
-    AnnouncementApi
   const [fetchGeneralAnnouncement, { data: respAnnouncement = responseDefault }] = useLazyGetAnnouncementsQuery()
   const [fetchPrivateAnnouncement, { data: respPrivateAnnouncement = responseDefault, isError }] =
     useLazyGetPrivateAnnouncementsQuery()
-
-  const [ackAnnouncement] = useAckPrivateAnnouncementsMutation()
 
   const isMyInboxTab = activeTab === Tab.INBOX
   const loadingAnnouncement = useRef(false)
 
   const fetchAnnouncementsByTab = useCallback(
     async (isReset = false, tab: Tab = activeTab) => {
-      if (loadingAnnouncement.current) return
       try {
+        if (loadingAnnouncement.current) return
         const isMyInboxTab = tab === Tab.INBOX
         loadingAnnouncement.current = true
         const page = isReset ? 1 : curPage + 1
-        const promise = isMyInboxTab
-          ? account
-            ? fetchPrivateAnnouncement({ page, account })
-            : null
-          : fetchGeneralAnnouncement({ page })
+        const promise = isMyInboxTab ? fetchPrivateAnnouncement({ page }) : fetchGeneralAnnouncement({ page })
 
         if (!promise) return
         const { data } = await promise
         const notifications = data?.notifications ?? []
+        setPage(page)
+        let newData
         if (isMyInboxTab) {
-          const newData = isReset ? notifications : [...privateAnnouncements, ...notifications]
+          newData = isReset ? notifications : [...privateAnnouncements, ...notifications]
           setPrivateAnnouncements(newData as PrivateAnnouncement[])
         } else {
-          const newData = isReset ? notifications : [...announcements, ...notifications]
+          newData = isReset ? notifications : [...announcements, ...notifications]
           setAnnouncements(newData as Announcement[])
         }
-        setPage(page)
+        return newData
       } catch (error) {
         console.error(error)
       } finally {
         loadingAnnouncement.current = false
       }
+      return
     },
-    [
-      account,
-      announcements,
-      privateAnnouncements,
-      curPage,
-      activeTab,
-      fetchGeneralAnnouncement,
-      fetchPrivateAnnouncement,
-    ],
+    [announcements, privateAnnouncements, curPage, activeTab, fetchGeneralAnnouncement, fetchPrivateAnnouncement],
   )
 
   const {
@@ -155,44 +142,75 @@ export default function AnnouncementComponent() {
     numberOfUnread,
     pagination: { totalItems: totalPrivateAnnouncement },
   } = isError ? responseDefault : respPrivateAnnouncement
-  const refreshAnnouncement = () => {
+  const refreshAnnouncement = useCallback(() => {
     fetchAnnouncementsByTab(true)
-  }
+  }, [fetchAnnouncementsByTab])
 
   const loadMoreAnnouncements = useCallback(() => {
     fetchAnnouncementsByTab()
   }, [fetchAnnouncementsByTab])
 
+  const trackingClickTab = useCallback(
+    (tab: Tab, mode: 'manual' | 'auto') => {
+      if (tab === Tab.INBOX)
+        mixpanelHandler(MIXPANEL_TYPE.ANNOUNCEMENT_CLICK_TAB_INBOX, {
+          mode,
+          total_unread_message_count: numberOfUnread,
+          total_message_count: totalPrivateAnnouncement,
+        })
+      else {
+        mixpanelHandler(MIXPANEL_TYPE.ANNOUNCEMENT_CLICK_TAB_ANNOUNCEMENT, {
+          mode,
+          total_message_count: totalAnnouncement,
+        })
+      }
+    },
+    [mixpanelHandler, numberOfUnread, totalAnnouncement, totalPrivateAnnouncement],
+  )
+  const trackingClickTabRef = useRef(trackingClickTab)
+  trackingClickTabRef.current = trackingClickTab
+
   const onSetTab = (tab: Tab) => {
     setActiveTab(tab)
     setPage(1)
+    trackingClickTab(tab, 'manual')
     tab !== activeTab && fetchAnnouncementsByTab(true, tab)
   }
 
+  const invalidateTag = useInvalidateTagAnnouncement()
+  const { userInfo } = useSessionInfo()
+
   const prefetchPrivateAnnouncements = useCallback(async () => {
     try {
-      if (!account) return []
-      const { data } = await fetchPrivateAnnouncement({ account, page: 1 })
+      if (!userInfo?.identityId) return []
+      const { data } = await fetchPrivateAnnouncement({ page: 1 })
       const notifications = (data?.notifications ?? []) as PrivateAnnouncement[]
-      setPrivateAnnouncements(notifications)
+      const hasNewMsg = data?.numberOfUnread !== numberOfUnread
+      if (hasNewMsg) {
+        invalidateTag(RTK_QUERY_TAGS.GET_PRIVATE_ANN_BY_ID)
+        invalidateTag(RTK_QUERY_TAGS.GET_TOTAL_UNREAD_PRIVATE_ANN)
+        if (scrollRef.current) scrollRef.current.scrollTop = 0
+      }
+      setPrivateAnnouncements(prevData => (hasNewMsg || !prevData.length ? notifications : prevData))
       return notifications
     } catch (error) {
       setPrivateAnnouncements([])
       return []
     }
-  }, [account, fetchPrivateAnnouncement])
+  }, [fetchPrivateAnnouncement, invalidateTag, numberOfUnread, userInfo?.identityId])
 
-  const prevOpen = usePrevious(isOpenNotificationCenter)
+  const prevOpen = usePrevious(isOpenInbox)
   useEffect(() => {
-    if (prevOpen !== isOpenNotificationCenter && !isOpenNotificationCenter) {
-      // close popup
-      return
-    }
+    const justClosedPopup = prevOpen !== isOpenInbox && !isOpenInbox
+    if (justClosedPopup) return
     // prefetch data
     prefetchPrivateAnnouncements().then((data: PrivateAnnouncement[]) => {
-      const newTab = account && data.length ? Tab.INBOX : Tab.ANNOUNCEMENT
+      const newTab = data.length ? Tab.INBOX : Tab.ANNOUNCEMENT
       setActiveTab(newTab)
-      if (isOpenNotificationCenter && newTab === Tab.ANNOUNCEMENT)
+      if (prevOpen !== isOpenInbox && isOpenInbox) {
+        trackingClickTabRef.current(newTab, 'auto')
+      }
+      if (isOpenInbox && newTab === Tab.ANNOUNCEMENT)
         fetchGeneralAnnouncement({ page: 1 })
           .then(({ data }) => {
             setAnnouncements((data?.notifications ?? []) as Announcement[])
@@ -201,29 +219,42 @@ export default function AnnouncementComponent() {
             setAnnouncements([])
           })
     })
-  }, [account, prefetchPrivateAnnouncements, fetchGeneralAnnouncement, prevOpen, isOpenNotificationCenter])
+  }, [prefetchPrivateAnnouncements, fetchGeneralAnnouncement, prevOpen, isOpenInbox])
 
   useEffect(() => {
-    if (!account) {
+    if (userInfo?.identityId) {
       setPrivateAnnouncements([])
-      return
+      invalidateTag(ANNOUNCEMENT_TAGS)
     }
-    const unsubscribePrivate = subscribePrivateAnnouncement(account, prefetchPrivateAnnouncements)
-    // special case: limit order locate at another db
-    const unsubscribeLOExpired = subscribeNotificationOrderExpired(account, chainId, prefetchPrivateAnnouncements)
-    const unsubscribeLOFilled = subscribeNotificationOrderFilled(account, chainId, prefetchPrivateAnnouncements)
-    return () => {
-      unsubscribePrivate?.()
-      unsubscribeLOExpired?.()
-      unsubscribeLOFilled?.()
-    }
-  }, [account, prefetchPrivateAnnouncements, chainId])
+  }, [userInfo?.identityId, invalidateTag])
 
+  useInterval(prefetchPrivateAnnouncements, 10_000)
+
+  const [readAllAnnouncement] = useAckPrivateAnnouncementsByIdsMutation()
   const togglePopupWithAckAllMessage = () => {
     toggleNotificationCenter()
-    if (isOpenNotificationCenter && numberOfUnread && account) {
-      ackAnnouncement({ account, action: 'read-all' })
+    if (isOpenInbox && numberOfUnread) {
+      readAllAnnouncement({})
     }
+  }
+
+  const [, setAnnouncementDetail] = useDetailAnnouncement()
+  const showDetailAnnouncement = (selectedIndex: number) => {
+    setAnnouncementDetail({
+      announcements: announcements.map(e => e.templateBody),
+      selectedIndex,
+      hasMore: totalAnnouncement > announcements.length,
+    })
+  }
+
+  const fetchMoreAnnouncement = async () => {
+    const announcements = (await fetchAnnouncementsByTab(false, Tab.ANNOUNCEMENT)) as Announcement[]
+    return announcements
+      ? {
+          announcements: announcements.map(e => e.templateBody),
+          hasMore: totalAnnouncement > announcements.length,
+        }
+      : undefined
   }
 
   const props = {
@@ -235,15 +266,21 @@ export default function AnnouncementComponent() {
     toggleNotificationCenter: togglePopupWithAckAllMessage,
     isMyInboxTab,
     onSetTab,
+    showDetailAnnouncement,
+    scrollRef,
   }
+
+  const badgeText = numberOfUnread > 0 ? formatNumberOfUnread(numberOfUnread) : null
   const bellIcon = (
-    <StyledMenuButton active={isOpenNotificationCenter || numberOfUnread > 0} onClick={togglePopupWithAckAllMessage}>
+    <StyledMenuButton
+      active={isOpenInbox || numberOfUnread > 0}
+      onClick={() => {
+        togglePopupWithAckAllMessage()
+        if (!isOpenInbox) mixpanelHandler(MIXPANEL_TYPE.ANNOUNCEMENT_CLICK_BELL_ICON_OPEN_POPUP)
+      }}
+    >
       <NotificationIcon />
-      {numberOfUnread > 0 && (
-        <Badge isOverflow={formatNumberOfUnread(numberOfUnread).length >= 3}>
-          {formatNumberOfUnread(numberOfUnread)}
-        </Badge>
-      )}
+      {badgeText && <Badge isOverflow={badgeText.length >= 3}>{badgeText}</Badge>}
     </StyledMenuButton>
   )
   return (
@@ -251,7 +288,7 @@ export default function AnnouncementComponent() {
       {isMobile ? (
         <>
           {bellIcon}
-          <Modal isOpen={isOpenNotificationCenter} onDismiss={togglePopupWithAckAllMessage} minHeight={80}>
+          <Modal isOpen={isOpenInbox} onDismiss={togglePopupWithAckAllMessage} minHeight={80}>
             <AnnouncementView {...props} />
           </Modal>
         </>
@@ -259,12 +296,13 @@ export default function AnnouncementComponent() {
         <MenuFlyout
           trigger={bellIcon}
           customStyle={browserCustomStyle}
-          isOpen={isOpenNotificationCenter}
+          isOpen={isOpenInbox}
           toggle={togglePopupWithAckAllMessage}
         >
           <AnnouncementView {...props} />
         </MenuFlyout>
       )}
+      <DetailAnnouncementPopup fetchMore={fetchMoreAnnouncement} />
     </StyledMenu>
   )
 }

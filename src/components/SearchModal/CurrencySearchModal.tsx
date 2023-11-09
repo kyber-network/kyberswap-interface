@@ -1,10 +1,10 @@
-import { Currency, Token } from '@kyberswap/ks-sdk-core'
+import { ChainId, Currency, Token } from '@kyberswap/ks-sdk-core'
 import { ReactNode, useCallback, useEffect, useState } from 'react'
 import { isMobile } from 'react-device-detect'
+import { usePrevious } from 'react-use'
 
 import Modal from 'components/Modal'
 import useLast from 'hooks/useLast'
-import usePrevious from 'hooks/usePrevious'
 
 import { CurrencySearch } from './CurrencySearch'
 import { ImportToken } from './ImportToken'
@@ -20,6 +20,7 @@ interface CurrencySearchModalProps {
   title?: string
   tooltip?: ReactNode
   onCurrencyImport?: (token: Token) => void
+  customChainId?: ChainId
 }
 
 enum CurrencyModalView {
@@ -38,6 +39,7 @@ export default function CurrencySearchModal({
   title,
   tooltip,
   onCurrencyImport,
+  customChainId,
 }: CurrencySearchModalProps) {
   const [modalView, setModalView] = useState<CurrencyModalView>(CurrencyModalView.search)
   const lastOpen = useLast(isOpen)
@@ -97,6 +99,7 @@ export default function CurrencySearchModal({
           filterWrap={filterWrap}
           title={title}
           tooltip={tooltip}
+          customChainId={customChainId}
         />
       ) : modalView === CurrencyModalView.importToken && importToken ? (
         <ImportToken

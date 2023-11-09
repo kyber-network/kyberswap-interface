@@ -1,8 +1,7 @@
 import { FeeAmount, Position } from '@kyberswap/ks-sdk-elastic'
-import { Trans, t } from '@lingui/macro'
+import { Trans } from '@lingui/macro'
 import { BigNumber } from 'ethers'
 import { useCallback, useState } from 'react'
-import { Link } from 'react-router-dom'
 import { useMedia } from 'react-use'
 import { Flex, Text } from 'rebass'
 
@@ -10,10 +9,9 @@ import RangeBadge from 'components/Badge/RangeBadge'
 import { AutoColumn } from 'components/Column'
 import Copy from 'components/Copy'
 import DoubleCurrencyLogo from 'components/DoubleLogo'
-import { FarmingIcon } from 'components/Icons'
-import { MouseoverTooltip } from 'components/Tooltip'
+import { FarmTag } from 'components/FarmTag'
 import { FeeTag } from 'components/YieldPools/ElasticFarmGroup/styleds'
-import { APP_PATHS, ELASTIC_BASE_FEE_UNIT } from 'constants/index'
+import { ELASTIC_BASE_FEE_UNIT } from 'constants/index'
 import { useActiveWeb3React } from 'hooks'
 import useProAmmPoolInfo from 'hooks/useProAmmPoolInfo'
 import useTheme from 'hooks/useTheme'
@@ -25,22 +23,26 @@ import { RotateSwapIcon } from './styles'
 
 export default function ProAmmPoolInfo({
   isFarmActive,
+  isFarmV2Active,
   position,
   tokenId,
   narrow = false,
   rotatedProp,
   setRotatedProp,
   showRangeInfo = true,
+  showRemoved = true,
 }: {
   isFarmActive?: boolean
+  isFarmV2Active?: boolean
   position: Position
   tokenId?: string
   narrow?: boolean
   rotatedProp?: boolean
   setRotatedProp?: (rotated: boolean) => void
   showRangeInfo?: boolean
+  showRemoved?: boolean
 }) {
-  const { networkInfo, chainId } = useActiveWeb3React()
+  const { chainId } = useActiveWeb3React()
   const upToSmall = useMedia(`(max-width: ${MEDIA_WIDTHS.upToSmall}px)`)
   const upToExtraSmall = useMedia(`(max-width: ${MEDIA_WIDTHS.upToExtraSmall}px)`)
   const theme = useTheme()
@@ -53,38 +55,14 @@ export default function ProAmmPoolInfo({
   const token1Shown = unwrappedToken(position.pool.token1)
 
   const renderFarmIcon = () => {
-    if (!isFarmActive) {
+    if (!isFarmActive && !isFarmV2Active) {
       return null
     }
 
-    if (upToSmall) {
-      return (
-        <MouseoverTooltip
-          noArrow
-          placement="top"
-          text={
-            <Text>
-              <Trans>
-                Available for yield farming. Click{' '}
-                <Link to={`${APP_PATHS.FARMS}/${networkInfo.route}?tab=elastic&type=active&search=${poolAddress}`}>
-                  here
-                </Link>{' '}
-                to go to the farm.
-              </Trans>
-            </Text>
-          }
-        >
-          <FarmingIcon />
-        </MouseoverTooltip>
-      )
-    }
-
     return (
-      <MouseoverTooltip width="fit-content" placement="top" text={t`Available for yield farming`}>
-        <Link to={`${APP_PATHS.FARMS}/${networkInfo.route}?tab=elastic&type=active&search=${poolAddress}`}>
-          <FarmingIcon />
-        </Link>
-      </MouseoverTooltip>
+      <Flex sx={{ gap: '4px' }} alignItems="center">
+        <FarmTag address={poolAddress} />
+      </Flex>
     )
   }
 
@@ -108,15 +86,16 @@ export default function ProAmmPoolInfo({
     <>
       {poolAddress && (
         <AutoColumn>
-          <Flex
-            alignItems={upToSmall ? undefined : 'center'}
-            justifyContent="space-between"
-            flexDirection={upToSmall ? 'column' : undefined}
-            sx={{ gap: '8px' }}
-          >
-            <Flex alignItems="center">
+          <Flex alignItems={upToSmall ? undefined : 'center'} justifyContent="space-between" sx={{ gap: '8px' }}>
+            <Flex alignItems="center" flex={1}>
               <DoubleCurrencyLogo currency0={token0Shown} currency1={token1Shown} size={20} />
-              <Text fontSize="16px" fontWeight="500">
+              <Text
+                fontSize="16px"
+                fontWeight="500"
+                maxWidth="fit-content"
+                flex={1}
+                sx={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
+              >
                 {token0Shown.symbol} - {token1Shown.symbol}
               </Text>
               <FeeTag>FEE {(position?.pool.fee * 100) / ELASTIC_BASE_FEE_UNIT}% </FeeTag>
@@ -124,7 +103,7 @@ export default function ProAmmPoolInfo({
 
             <Flex sx={{ gap: '8px' }}>
               {renderFarmIcon()}
-              {showRangeInfo && <RangeBadge removed={removed} inRange={!outOfRange} hideText />}
+              {showRangeInfo && <RangeBadge removed={showRemoved && removed} inRange={!outOfRange} hideText />}
             </Flex>
           </Flex>
 
@@ -133,7 +112,6 @@ export default function ProAmmPoolInfo({
             alignItems={upToExtraSmall ? 'flex-start' : 'center'}
             marginTop="8px"
             sx={{ gap: '8px' }}
-            flexDirection={upToExtraSmall ? 'column' : 'row'}
           >
             <Flex alignItems="center" color={theme.subText} fontSize={12}>
               <Copy
@@ -156,7 +134,7 @@ export default function ProAmmPoolInfo({
                   <Trans>
                     <Flex>
                       <Text color={theme.subText}>Current Price:</Text>&nbsp;1 {tokenB.currency.symbol} ={' '}
-                      {position.pool.priceOf(tokenB.currency).toSignificant(6)} {tokenA.currency.symbol}
+                      {position.pool.priceOf(tokenB.currency).toSignificant(10)} {tokenA.currency.symbol}
                     </Flex>
                   </Trans>
                 </Text>

@@ -3,7 +3,7 @@ import JSBI from 'jsbi'
 import { useMemo } from 'react'
 
 import { useActiveWeb3React } from 'hooks'
-import { useAllTokenBalances, useETHBalance } from 'state/wallet/hooks'
+import { useAllTokenBalances, useNativeBalance } from 'state/wallet/hooks'
 import { isTokenNative } from 'utils/tokenInfo'
 
 // compare two token amounts with highest one coming first
@@ -33,7 +33,7 @@ function getTokenComparator(
     [tokenAddress: string]: TokenAmount | undefined
   },
   ethBalance: CurrencyAmount<Currency> | undefined,
-  chainId: ChainId | undefined,
+  chainId: ChainId,
 ): (tokenA: Token, tokenB: Token) => number {
   return function sortTokens(tokenA: Token, tokenB: Token): number {
     // -1 = a is first
@@ -55,12 +55,15 @@ function getTokenComparator(
     }
   }
 }
-export function useTokenComparator(inverted: boolean): (tokenA: Token, tokenB: Token) => number {
-  const balances = useAllTokenBalances()
-  const { chainId } = useActiveWeb3React()
-  const ethBalance = useETHBalance()
+
+const EMPTY_OBJECT = {}
+export function useTokenComparator(inverted: boolean, customChain?: ChainId): (tokenA: Token, tokenB: Token) => number {
+  const { chainId: currentChain } = useActiveWeb3React()
+  const chainId = customChain || currentChain
+  const balances = useAllTokenBalances(chainId)
+  const ethBalance = useNativeBalance(chainId)
   return useMemo(() => {
-    const comparator = getTokenComparator(balances ?? {}, ethBalance, chainId)
+    const comparator = getTokenComparator(balances ?? EMPTY_OBJECT, ethBalance, chainId)
     if (inverted) {
       return (tokenA: Token, tokenB: Token) => comparator(tokenA, tokenB) * -1
     }

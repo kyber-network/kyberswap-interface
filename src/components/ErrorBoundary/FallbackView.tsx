@@ -1,12 +1,13 @@
 import { Trans, t } from '@lingui/macro'
 import React from 'react'
 import { Text } from 'rebass'
-import styled from 'styled-components/macro'
+import styled from 'styled-components'
 import UAParser from 'ua-parser-js'
 
 import { ButtonPrimary } from 'components/Button'
 import { AutoColumn } from 'components/Column'
 import { AutoRow } from 'components/Row'
+import { removeAllReduxPersist } from 'state'
 import { ExternalLink } from 'theme'
 
 const parser = new UAParser(window.navigator.userAgent)
@@ -133,11 +134,7 @@ const FallbackView: React.FC<Props> = ({ error }) => {
             margin="auto"
             width="fit-content"
             onClick={() => {
-              try {
-                localStorage.clear()
-              } catch (e) {
-                // empty
-              }
+              removeAllReduxPersist()
               window.location.reload()
             }}
           >

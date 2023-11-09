@@ -1,13 +1,9 @@
 import { ChainId } from '@kyberswap/ks-sdk-core'
 
-import CRONOS_DARK from 'assets/networks/cronos-network-dark.svg'
-import CRONOS from 'assets/networks/cronos-network.svg'
+import cronosIcon from 'assets/networks/cronos.svg'
 import CronosLogo from 'assets/svg/cronos-token-logo.svg'
-import { AGGREGATOR_API, KS_SETTING_API } from 'constants/env'
 import { EVMNetworkInfo } from 'constants/networks/type'
-import { createClient } from 'utils/client'
 
-const EMPTY = ''
 const EMPTY_ARRAY: any[] = []
 const NOT_SUPPORT = null
 
@@ -17,16 +13,14 @@ const cronosInfo: EVMNetworkInfo = {
   ksSettingRoute: 'cronos',
   priceRoute: 'cronos',
   poolFarmRoute: 'cronos',
+  aggregatorRoute: 'cronos',
   name: 'Cronos',
-  icon: CRONOS,
-  iconDark: CRONOS_DARK,
-  iconDarkSelected: CRONOS,
-  iconSelected: CRONOS,
-  blockClient: createClient('https://cronos-graph.kyberengineering.io/subgraphs/name/kybernetwork/cronos-blocks'),
+  icon: cronosIcon,
+  iconSelected: cronosIcon,
+  defaultBlockSubgraph: 'https://cronos-graph.kyberengineering.io/subgraphs/name/kybernetwork/cronos-blocks',
   etherscanUrl: 'https://cronoscan.com',
   etherscanName: 'Cronos explorer',
-  tokenListUrl: `${KS_SETTING_API}/v1/tokens?chainIds=${ChainId.CRONOS}&isWhitelisted=${true}`,
-  bridgeURL: EMPTY,
+  bridgeURL: 'https://cronos.org/bridge/',
   nativeToken: {
     symbol: 'CRO',
     name: 'CRO',
@@ -34,13 +28,10 @@ const cronosInfo: EVMNetworkInfo = {
     decimal: 18,
     minForGas: 10 ** 16,
   },
-  rpcUrl: 'https://evm-cronos.crypto.org',
-  routerUri: `${AGGREGATOR_API}/cronos/route/encode`,
+  defaultRpcUrl: 'https://evm-cronos.crypto.org',
   multicall: '0x63Abb9973506189dC3741f61d25d4ed508151E6d',
   classic: {
-    client: createClient(
-      'https://cronos-graph.kyberengineering.io/subgraphs/name/kybernetwork/kyberswap-exchange-cronos',
-    ),
+    defaultSubgraph: 'https://cronos-graph.kyberengineering.io/subgraphs/name/kybernetwork/kyberswap-exchange-cronos',
     static: {
       zap: '0x2abE8750e4a65584d7452316356128C936273e0D',
       router: '0x5649B4DD00780e99Bab7Abb4A3d581Ea1aEB23D0',
@@ -57,28 +48,23 @@ const cronosInfo: EVMNetworkInfo = {
     fairlaunchV2: EMPTY_ARRAY,
   },
   elastic: {
-    client: createClient(
-      'https://cronos-graph.kyberengineering.io/subgraphs/name/kybernetwork/kyberswap-elastic-cronos',
-    ),
-    startBlock: 3152290,
-    coreFactory: '0x5F1dddbf348aC2fbe22a163e30F99F9ECE3DD50a',
-    nonfungiblePositionManager: '0x2B1c7b41f6A8F2b2bc45C3233a5d5FB3cD6dC9A8',
-    tickReader: '0x165c68077ac06c83800d19200e6E2B08D02dE75D',
-    initCodeHash: '0xc597aba1bb02db42ba24a8878837965718c032f8b46be94a6e46452a9f89ca01',
-    quoter: '0x0D125c15D54cA1F8a813C74A81aEe34ebB508C1f',
-    routers: '0xC1e7dFE73E1598E3910EF4C7845B68A9Ab6F4c83',
+    defaultSubgraph: 'https://cronos-graph.kyberengineering.io/subgraphs/name/kybernetwork/kyberswap-elastic-cronos',
+    startBlock: 8393012,
+    coreFactory: '0xC7a590291e07B9fe9E64b86c58fD8fC764308C4A',
+    nonfungiblePositionManager: '0xe222fBE074A436145b255442D919E4E3A6c6a480',
+    tickReader: '0x8Fd8Cb948965d9305999D767A02bf79833EADbB3',
+    initCodeHash: '0x00e263aaa3a2c06a89b53217a9e7aad7e15613490a72e0f95f303c4de2dc7045',
+    quoter: '0x4d47fd5a29904Dae0Ef51b1c450C9750F15D7856',
+    routers: '0xF9c2b5746c946EF883ab2660BbbB1f10A5bdeAb4',
     farms: [],
   },
-  limitOrder: {
-    production: NOT_SUPPORT,
-    development: NOT_SUPPORT,
-  },
+  limitOrder: NOT_SUPPORT,
   averageBlockTimeInSeconds: 6,
   coingeckoNetworkId: 'cronos',
   coingeckoNativeTokenId: 'crypto-com-chain',
   deBankSlug: 'cro',
-  trueSightId: 'cronos',
   dexToCompare: 'vvs',
+  geckoTermialId: 'cronos',
 }
 
 export default cronosInfo

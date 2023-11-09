@@ -2,6 +2,8 @@ import { ReactNode } from 'react'
 
 import { LimitOrderStatus } from 'components/swapv2/LimitOrder/type'
 import { MultichainTransfer } from 'hooks/bridge/useGetBridgeTransfers'
+import { CrossChainTransfer } from 'pages/CrossChain/useTransferHistory'
+import { HistoricalPriceAlert } from 'pages/NotificationCenter/const'
 
 export type Announcement = {
   isRead: boolean
@@ -11,31 +13,27 @@ export type Announcement = {
 
 export enum PrivateAnnouncementType {
   LIMIT_ORDER = 'LIMIT_ORDER',
-  BRIDGE = 'BRIDGE_ASSET',
-  TRENDING_SOON_TOKEN = 'TRENDING_SOON',
+  BRIDGE_ASSET = 'BRIDGE_ASSET',
+  KYBER_AI = 'KYBER_AI',
+  KYBER_AI_WATCHLIST = 'KYBER_AI_WATCHLIST',
+  ELASTIC_POOLS = 'ELASTIC_POOLS',
+  CROSS_CHAIN = 'CROSS_CHAIN',
+  PRICE_ALERT = 'PRICE_ALERT',
+  DIRECT_MESSAGE = 'DIRECT_MESSAGE', // for some specific addresses
 }
 
-export type PrivateAnnouncement = {
+export type PrivateAnnouncement<T extends AnnouncementTemplate = AnnouncementTemplate> = {
   id: number
   templateType: PrivateAnnouncementType
   templateId: number
-  templateBody: AnnouncementTemplate
+  templateBody: T
   isRead: boolean
   sentAt: number
 }
 
 export type AnnouncementCTA = { name: string; url: string }
 
-export type TrueSightToken = {
-  symbol: string
-  price: string
-  changePercentage: string
-  logo: string
-}
-
-// for private announcement
-
-export type LimitOrderNotification = {
+type LimitOrderAnnouncement = {
   walletAddress: string
   makingAmount: string
   makerAssetSymbol: string
@@ -52,35 +50,88 @@ export type LimitOrderNotification = {
   // for partial fill
   filledPercent: string
   increasedFilledPercent: string
+  chainId: string
 }
+
+type PoolPositionAnnouncement = {
+  token0LogoURL: string
+  token1LogoURL: string
+  token0Symbol: string
+  token1Symbol: string
+  minPrice: string
+  maxPrice: string
+  currentPrice: string
+  poolAddress: string
+  type: 'OUT_OF_RANGE' | 'IN_RANGE'
+  chainId: string
+}
+
 export type AnnouncementTemplateLimitOrder = {
-  order: LimitOrderNotification
+  order: LimitOrderAnnouncement
+  popupType: PopupType
 }
-export type AnnouncementTemplateBridge = { transaction: MultichainTransfer }
-export type AnnouncementTemplateTrendingSoon = { tokens: TrueSightToken[] }
+export type AnnouncementTemplateCrossChain = { transaction: CrossChainTransfer; popupType: PopupType }
+export type AnnouncementTemplateBridge = { transaction: MultichainTransfer; popupType: PopupType }
+export type AnnouncementTemplateKyberAI = {
+  bearishTokenLogoURL: string
+  bearishTokenScore: string
+  bearishTokenSymbol: string
+  bullishTokenLogoURL: string
+  bullishTokenScore: string
+  bullishTokenSymbol: string
+  trendingSoonTokenLogoURL: string
+  trendingSoonTokenScore: string
+  trendingSoonTokenSymbol: string
+  popupType: PopupType
+}
+
+export type TokenInfoWatchlist = {
+  logoURL: string
+  kyberScore: string
+  symbol: string
+  price: string
+  priceChange: string
+}
+export type AnnouncementTemplateKyberAIWatchlist = {
+  assets: Array<TokenInfoWatchlist>
+  popupType: PopupType
+}
+
+export type AnnouncementTemplatePoolPosition = {
+  position: PoolPositionAnnouncement
+  popupType: PopupType
+}
+
+export type AnnouncementTemplatePriceAlert = {
+  alert: HistoricalPriceAlert
+  popupType: PopupType
+}
 
 // for general announcement
 export type AnnouncementTemplatePopup = {
   name: string
   content: string
   thumbnailImageURL: string
+  thumbnailVideoURL?: string
   type: 'NORMAL' | 'CRITICAL'
   startAt: number
   endAt: number
   chainIds: string[]
-
+  popupType: PopupType
   ctas: AnnouncementCTA[] // in popup
-  ctaURL: string // in noti center
+  ctaURL: string // in notification center
+  ctaName: string // in notification center
 }
 
-type AnnouncementTemplate = (
+export type AnnouncementTemplate =
   | AnnouncementTemplateLimitOrder
   | AnnouncementTemplateBridge
-  | AnnouncementTemplateTrendingSoon
+  | AnnouncementTemplateCrossChain
+  | AnnouncementTemplateKyberAI
+  | AnnouncementTemplateKyberAIWatchlist
+  | AnnouncementTemplatePoolPosition
   | AnnouncementTemplatePopup
-) & {
-  popupType: PopupType
-}
+  | AnnouncementTemplatePriceAlert
 
 export enum NotificationType {
   SUCCESS,
@@ -100,13 +151,15 @@ export enum PopupType {
 export type PopupContentTxn = {
   hash: string
   type: NotificationType
+  account: string
 }
 
 export type PopupContentSimple = {
   title: string
+  type: NotificationType
   summary?: ReactNode
   icon?: ReactNode
-  type: NotificationType
+  link?: string
 }
 
 export type PopupContentAnnouncement = {
@@ -116,6 +169,14 @@ export type PopupContentAnnouncement = {
   startAt: number
   endAt: number
   createdAt: number
+}
+
+export type PopupItemType<T extends PopupContent = PopupContent> = {
+  key: string
+  content: T
+  removeAfterMs: number | null
+  popupType: PopupType
+  account?: string
 }
 
 export type PopupContent = PopupContentTxn | PopupContentSimple | PopupContentAnnouncement

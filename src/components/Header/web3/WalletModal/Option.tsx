@@ -7,7 +7,7 @@ import styled, { css } from 'styled-components'
 import { MouseoverTooltip } from 'components/Tooltip'
 import { SUPPORTED_WALLET, SUPPORTED_WALLETS } from 'constants/wallets'
 import { useActiveWeb3React } from 'hooks'
-import { useIsAcceptedTerm, useIsDarkMode } from 'state/user/hooks'
+import { useIsAcceptedTerm } from 'state/user/hooks'
 import { ExternalLink } from 'theme'
 import { isEVMWallet, isSolanaWallet } from 'utils'
 import checkForBraveBrowser from 'utils/checkForBraveBrowser'
@@ -118,7 +118,6 @@ const Option = ({
   isOverridden?: boolean
   onSelected?: (walletKey: SUPPORTED_WALLET) => any
 }) => {
-  const isDarkMode = useIsDarkMode()
   const { walletKey: walletKeyConnected, isEVM, isSolana } = useActiveWeb3React()
   const isBraveBrowser = checkForBraveBrowser()
   const [isAcceptedTerm] = useIsAcceptedTerm()
@@ -126,16 +125,16 @@ const Option = ({
   const wallet = SUPPORTED_WALLETS[walletKey]
   const isConnected = !!walletKeyConnected && walletKey === walletKeyConnected
 
-  const icon = isDarkMode ? wallet.icon : wallet.iconLight
+  const icon = wallet.icon
 
   const content = (
     <OptionCardClickable
       id={`connect-${walletKey}`}
+      data-testid={`connect-${walletKey}`}
       onClick={
         onSelected &&
         !isConnected &&
         (readyState === WalletReadyState.Installed ||
-          (walletKey === 'COINBASE' && isEVM && readyState === WalletReadyState.NotDetected) ||
           (readyState === WalletReadyState.Loadable && isSolanaWallet(wallet))) &&
         isAcceptedTerm &&
         isSupportCurrentChain &&
@@ -166,6 +165,14 @@ const Option = ({
 
   if (readyState === WalletReadyState.Loadable && isEVMWallet(wallet) && wallet.href) {
     return <StyledLink href={wallet.href}>{content}</StyledLink>
+  }
+
+  if (walletKey === 'WALLET_CONNECT') {
+    return (
+      <MouseoverTooltip placement="bottom" text={<Trans>Under development and unsupported by most wallets.</Trans>}>
+        {content}
+      </MouseoverTooltip>
+    )
   }
 
   if (walletKey === 'BRAVE') {
@@ -217,7 +224,7 @@ const Option = ({
     }
   }
 
-  if (readyState === WalletReadyState.NotDetected && (walletKey !== 'COINBASE' || !isEVM)) {
+  if (readyState === WalletReadyState.NotDetected) {
     return (
       <MouseoverTooltip
         placement="bottom"
@@ -236,14 +243,15 @@ const Option = ({
   if (isOverridden) {
     return (
       <MouseoverTooltip
-        width="500px"
+        width="fit-content"
+        maxWidth="500px"
         text={
           walletKey === 'COIN98' ? (
             <Trans>
               You need to enable <b>&quot;Override Wallet&quot;</b> in Coin98 settings.
             </Trans>
           ) : (
-            <C98OverrideGuide walletKey={walletKey} />
+            <C98OverrideGuide walletKey={walletKey} isOpened={false} />
           )
         }
         placement="bottom"

@@ -1,7 +1,6 @@
 import { createReducer } from '@reduxjs/toolkit'
 
 import { APP_PATHS } from 'constants/index'
-import { FeeConfig } from 'hooks/useSwapV2Callback'
 import { Aggregator } from 'utils/aggregator'
 import { queryStringToObject } from 'utils/string'
 
@@ -33,7 +32,6 @@ export interface SwapState {
   // the typed recipient address or ENS name, or null if swap should go to sender
   readonly recipient: string | null
   readonly saveGas: boolean
-  readonly feeConfig: FeeConfig | undefined
   readonly trendingSoonShowed?: boolean
   readonly trade?: Aggregator
   readonly encodeSolana?: SolanaEncode
@@ -43,6 +41,8 @@ export interface SwapState {
   readonly attemptingTxn: boolean
   readonly swapErrorMessage: string | undefined
   readonly txHash: string | undefined
+
+  readonly isSelectTokenManually: boolean
 }
 
 const { search, pathname } = window.location
@@ -61,7 +61,6 @@ const initialState: SwapState = {
   },
   recipient: null,
   saveGas: false,
-  feeConfig: undefined,
   // Flag to only show animation of trending soon banner 1 time
   trendingSoonShowed: false,
   trade: undefined,
@@ -72,13 +71,15 @@ const initialState: SwapState = {
   attemptingTxn: false,
   swapErrorMessage: undefined,
   txHash: undefined,
+
+  isSelectTokenManually: false,
 }
 
 export default createReducer<SwapState>(initialState, builder =>
   builder
     .addCase(
       replaceSwapState,
-      (state, { payload: { typedValue, recipient, field, inputCurrencyId, outputCurrencyId, feeConfig } }) => {
+      (state, { payload: { typedValue, recipient, field, inputCurrencyId, outputCurrencyId } }) => {
         return {
           ...state,
           [Field.INPUT]: {
@@ -90,7 +91,6 @@ export default createReducer<SwapState>(initialState, builder =>
           independentField: field,
           typedValue: typedValue || state.typedValue || '1',
           recipient,
-          feeConfig,
         }
       },
     )
@@ -106,7 +106,7 @@ export default createReducer<SwapState>(initialState, builder =>
         // the case where we have to swap the order
         return {
           ...state,
-          typedValue: '',
+          isSelectTokenManually: true,
           independentField: state.independentField === Field.INPUT ? Field.OUTPUT : Field.INPUT,
           [field]: { currencyId },
           [otherField]: { currencyId: state[field].currencyId },
@@ -115,6 +115,7 @@ export default createReducer<SwapState>(initialState, builder =>
         // the normal case
         return {
           ...state,
+          isSelectTokenManually: true,
           [field]: { currencyId },
         }
       }
@@ -128,6 +129,7 @@ export default createReducer<SwapState>(initialState, builder =>
     .addCase(switchCurrencies, state => {
       return {
         ...state,
+        isSelectTokenManually: true,
         independentField: state.independentField === Field.INPUT ? Field.OUTPUT : Field.INPUT,
         [Field.INPUT]: { currencyId: state[Field.OUTPUT].currencyId },
         [Field.OUTPUT]: { currencyId: state[Field.INPUT].currencyId },
@@ -137,16 +139,14 @@ export default createReducer<SwapState>(initialState, builder =>
       return {
         ...state,
         independentField: Field.INPUT,
+        isSelectTokenManually: true,
         [Field.INPUT]: { currencyId: state[Field.OUTPUT].currencyId },
         [Field.OUTPUT]: { currencyId: state[Field.INPUT].currencyId },
       }
     })
     .addCase(typeInput, (state, { payload: { field, typedValue } }) => {
-      return {
-        ...state,
-        independentField: field,
-        typedValue,
-      }
+      state.independentField = field
+      state.typedValue = typedValue
     })
     .addCase(setRecipient, (state, { payload: { recipient } }) => {
       state.recipient = recipient

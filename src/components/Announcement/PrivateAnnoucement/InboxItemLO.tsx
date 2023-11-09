@@ -1,9 +1,10 @@
-import { Trans, t } from '@lingui/macro'
+import { ChainId } from '@kyberswap/ks-sdk-core'
+import { t } from '@lingui/macro'
 import { Repeat } from 'react-feather'
 import { useNavigate } from 'react-router-dom'
 
-import { ReactComponent as LimitOrderIcon } from 'assets/svg/limit_order.svg'
 import { PrivateAnnouncementProp } from 'components/Announcement/PrivateAnnoucement'
+import InboxIcon from 'components/Announcement/PrivateAnnoucement/Icon'
 import {
   Dot,
   InboxItemRow,
@@ -12,17 +13,22 @@ import {
   RowItem,
   Title,
 } from 'components/Announcement/PrivateAnnoucement/styled'
-import { AnnouncementTemplateLimitOrder, LimitOrderNotification } from 'components/Announcement/type'
+import { AnnouncementTemplateLimitOrder } from 'components/Announcement/type'
 import { CheckCircle } from 'components/Icons'
 import DeltaTokenAmount from 'components/WalletPopup/Transactions/DeltaTokenAmount'
 import { LimitOrderStatus } from 'components/swapv2/LimitOrder/type'
 import { APP_PATHS } from 'constants/index'
 import useTheme from 'hooks/useTheme'
 
-function InboxItemBridge({ announcement, onRead, style, time }: PrivateAnnouncementProp) {
-  const { templateBody, isRead } = announcement
+function InboxItemBridge({
+  announcement,
+  onRead,
+  style,
+  time,
+  title,
+}: PrivateAnnouncementProp<AnnouncementTemplateLimitOrder>) {
+  const { templateBody, isRead, templateType } = announcement
   const theme = useTheme()
-  const order = ((templateBody as AnnouncementTemplateLimitOrder).order ?? {}) as LimitOrderNotification
   const {
     status,
     makerAssetSymbol,
@@ -36,33 +42,33 @@ function InboxItemBridge({ announcement, onRead, style, time }: PrivateAnnouncem
     filledPercent,
     increasedFilledPercent,
     takingAmountRate,
-  } = order
+    chainId: rawChainId,
+  } = templateBody?.order || {}
   const isFilled = status === LimitOrderStatus.FILLED
   const isPartialFilled = status === LimitOrderStatus.PARTIALLY_FILLED
+  const chainId = rawChainId && rawChainId !== '{{.chainId}}' ? (Number(rawChainId) as ChainId) : undefined
+  const statusMessage = isFilled
+    ? t`100% Filled`
+    : isPartialFilled
+    ? t`${filledPercent} Filled ${increasedFilledPercent}`
+    : `${filledPercent}% Filled | Expired`
 
   const navigate = useNavigate()
   const onClick = () => {
     navigate(APP_PATHS.LIMIT)
-    onRead()
+    onRead(announcement, statusMessage)
   }
+
   return (
     <InboxItemWrapper isRead={isRead} onClick={onClick} style={style}>
       <InboxItemRow>
         <RowItem>
-          <LimitOrderIcon />
-          <Title isRead={isRead}>
-            <Trans>Limit Order</Trans>
-          </Title>
+          <InboxIcon type={templateType} chainId={chainId} />
+          <Title isRead={isRead}>{title}</Title>
           {!isRead && <Dot />}
         </RowItem>
         <RowItem>
-          <PrimaryText>
-            {isFilled
-              ? t`100% Filled`
-              : isPartialFilled
-              ? t`${filledPercent} Filled ${increasedFilledPercent}`
-              : `${filledPercent}% Filled | Expired`}
-          </PrimaryText>
+          <PrimaryText>{statusMessage}</PrimaryText>
           {isFilled ? (
             <CheckCircle color={theme.primary} />
           ) : isPartialFilled ? (

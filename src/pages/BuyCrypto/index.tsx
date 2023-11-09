@@ -1,9 +1,8 @@
 import { ChainId } from '@kyberswap/ks-sdk-core'
 import { Trans } from '@lingui/macro'
-import { rgba } from 'polished'
 import { stringify } from 'querystring'
-import React, { useEffect, useRef, useState } from 'react'
-import { ArrowDown, ChevronDown, Repeat, X } from 'react-feather'
+import React, { useEffect, useRef } from 'react'
+import { ArrowDown, ChevronDown, Repeat } from 'react-feather'
 import { Link, useNavigate } from 'react-router-dom'
 import { useMedia } from 'react-use'
 import { Flex, Image, Text } from 'rebass'
@@ -17,7 +16,6 @@ import introImg from 'assets/buy-crypto/intro.png'
 import masterCard from 'assets/buy-crypto/master-card.svg'
 import visa from 'assets/buy-crypto/visa.svg'
 import ForTraderImage from 'assets/svg/for_trader.svg'
-import ForTraderImageLight from 'assets/svg/for_trader_light.svg'
 import SeamlessImg from 'assets/svg/seamless.svg'
 import { ReactComponent as Brave } from 'assets/wallets-connect/brave.svg'
 import c98 from 'assets/wallets-connect/coin98.svg'
@@ -27,20 +25,21 @@ import metamask from 'assets/wallets-connect/metamask.svg'
 import walletConnect from 'assets/wallets-connect/wallet-connect.svg'
 import { ButtonLight, ButtonPrimary } from 'components/Button'
 import CopyHelper from 'components/Copy'
+import DownloadWalletModal from 'components/DownloadWalletModal'
 import Cart from 'components/Icons/Cart'
 import Deposit from 'components/Icons/Deposit'
-import Modal from 'components/Modal'
 import { TRANSAK_API_KEY, TRANSAK_URL } from 'constants/env'
 import { APP_PATHS } from 'constants/index'
-import { SUPPORTED_WALLETS } from 'constants/wallets'
 import { useActiveWeb3React } from 'hooks'
 import useMixpanel, { MIXPANEL_TYPE } from 'hooks/useMixpanel'
 import useParsedQueryString from 'hooks/useParsedQueryString'
 import useTheme from 'hooks/useTheme'
 import { KSStatistic } from 'pages/About/AboutKyberSwap'
-import { useWalletModalToggle } from 'state/application/hooks'
-import { useDarkModeManager } from 'state/user/hooks'
+import { ApplicationModal } from 'state/application/actions'
+import { useToggleModal, useWalletModalToggle } from 'state/application/hooks'
 import { ButtonText, ExternalLink } from 'theme'
+
+import KyberAIWidget from '../TrueSightV2/components/KyberAIWidget'
 
 const LedgerSVG = styled(Ledger)`
   path {
@@ -51,7 +50,7 @@ const LedgerSVG = styled(Ledger)`
 const IntroWrapper = styled.div`
   background: radial-gradient(88.77% 152.19% at 12.8% -49.11%, #237c71 0%, #251c72 31%, #0f054c 100%);
   width: 100%;
-  min-height: 100vh;
+  min-height: calc(100vh - 120px);
   display: flex;
 `
 
@@ -113,6 +112,7 @@ const DownloadWalletWrapper = styled.div`
 
 const DownloadWalletContent = styled(IntroContent)`
   padding: 120px 24px 48px;
+  overflow-x: hidden;
 
   ${({ theme }) => theme.mediaWidth.upToMedium`
     flex-direction: column;
@@ -131,23 +131,6 @@ const Address = styled.div`
   background: ${({ theme }) => theme.buttonBlack};
   margin-top: 16px;
   width: fit-content;
-`
-
-const DownloadWalletRow = styled.a`
-  display: flex;
-  gap: 8px;
-  border-radius: 999px;
-  padding: 12px 16px;
-  color: ${({ theme }) => theme.subText};
-  font-size: 16px;
-  font-weight: 500;
-  background: ${({ theme }) => theme.buttonBlack};
-  line-height: 24px;
-  text-decoration: none;
-
-  :hover {
-    background: ${({ theme }) => rgba(theme.buttonBlack, 0.6)};
-  }
 `
 
 const Step = ({
@@ -187,13 +170,14 @@ function BuyCrypto() {
   const { account, chainId, networkInfo } = useActiveWeb3React()
 
   const toggleWalletModal = useWalletModalToggle()
+  const toggleDownloadWalletModal = useToggleModal(ApplicationModal.DOWNLOAD_WALLET)
 
   const step0Ref = useRef<HTMLDivElement>(null)
   const step1Ref = useRef<HTMLDivElement>(null)
   const step2Ref = useRef<HTMLDivElement>(null)
   const step3Ref = useRef<HTMLDivElement>(null)
 
-  const supportedNetworks: { [chain in ChainId]: string | null } = {
+  const supportedNetworks: { [chain in ChainId]?: string | null } = {
     [ChainId.MAINNET]: 'ethereum',
     [ChainId.MATIC]: 'polygon',
     [ChainId.ARBITRUM]: 'arbitrum',
@@ -201,19 +185,16 @@ function BuyCrypto() {
     [ChainId.BSCMAINNET]: 'bsc',
     [ChainId.AVAXMAINNET]: 'avaxcchain',
     [ChainId.FANTOM]: 'fantom',
-    [ChainId.VELAS]: 'velasevm',
     [ChainId.SOLANA]: 'solana',
 
+    [ChainId.ZKSYNC]: null,
     [ChainId.CRONOS]: null,
     [ChainId.GÖRLI]: null,
     [ChainId.MUMBAI]: null,
     [ChainId.BSCTESTNET]: null,
     [ChainId.AVAXTESTNET]: null,
-    [ChainId.ARBITRUM_TESTNET]: null,
     [ChainId.BTTC]: null,
     [ChainId.AURORA]: null,
-    [ChainId.OASIS]: null,
-    [ChainId.ETHW]: null,
   }
   const supportedCurrencies = [
     'AVAX',
@@ -243,10 +224,7 @@ function BuyCrypto() {
     supportedNetworks[chainId] || supportedNetworks[ChainId.MAINNET]
   }&excludeFiatCurrencies=SGD&redirectURL=${redirectURL}`
 
-  const [isDarkMode] = useDarkModeManager()
   const { mixpanelHandler } = useMixpanel()
-
-  const [showDownloadModal, setShowDownloadModal] = useState(false)
 
   const handleStepClick = (value: number) => {
     switch (value) {
@@ -286,36 +264,7 @@ function BuyCrypto() {
 
   return (
     <>
-      <Modal isOpen={showDownloadModal} onDismiss={() => setShowDownloadModal(false)} maxWidth="512px">
-        <Flex width="100%" padding="30px 24px" flexDirection="column">
-          <Flex justifyContent="space-between" alignItems="center">
-            <Text fontSize="20px" fontWeight="500">
-              <Trans>Download a Wallet</Trans>
-            </Text>
-
-            <ButtonText onClick={() => setShowDownloadModal(false)} style={{ lineHeight: 0 }}>
-              <X size={24} color={theme.text} />
-            </ButtonText>
-          </Flex>
-
-          <Flex sx={{ gap: '20px' }} marginTop="24px" flexDirection="column" justifyContent="center">
-            {Object.values(SUPPORTED_WALLETS)
-              .filter(e => e.installLink)
-              .map(item => (
-                <DownloadWalletRow
-                  key={item.installLink}
-                  href={item.installLink}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  <Image width="24px" src={isDarkMode ? item.icon : item.iconLight} />
-                  {item.name}
-                </DownloadWalletRow>
-              ))}
-          </Flex>
-        </Flex>
-      </Modal>
-
+      <DownloadWalletModal />
       <IntroWrapper ref={step0Ref}>
         <IntroContent>
           {!upToMedium && <Step currentStep={1} direction="vertical" onStepClick={handleStepClick} />}
@@ -415,7 +364,7 @@ function BuyCrypto() {
                     <br />
                     <br />
                     On KyberSwap we support a list of wallets including: MetaMask, Coin98, Wallet Connect, Coinbase
-                    Wallet, Ledger and others
+                    Wallet, Ledger and others.
                   </Trans>
                 </Text>
 
@@ -435,7 +384,7 @@ function BuyCrypto() {
                     padding="10px"
                     onClick={() => {
                       mixpanelHandler(MIXPANEL_TYPE.TRANSAK_DOWNLOAD_WALLET_CLICKED)
-                      setShowDownloadModal(true)
+                      toggleDownloadWalletModal()
                     }}
                   >
                     <Deposit width={24} height={24} />
@@ -504,7 +453,7 @@ function BuyCrypto() {
                   <Trans>Step 2</Trans>
                 </Text>
 
-                <Text color={'white'} fontSize={upToMedium ? '28px' : '44px'} lineHeight={upToMedium ? '32px' : '60px'}>
+                <Text color="white" fontSize={upToMedium ? '28px' : '44px'} lineHeight={upToMedium ? '32px' : '60px'}>
                   <Trans>Buy Crypto</Trans>
                 </Text>
 
@@ -515,7 +464,7 @@ function BuyCrypto() {
                   <br />
                   <br />
                   For support, please contact Transak{' '}
-                  <ExternalLink href="https://support.transak.com/">here</ExternalLink>
+                  <ExternalLink href="https://support.transak.com/">here</ExternalLink>.
                 </Text>
 
                 <Text color={'#A7B6BD'} marginTop="24px">
@@ -524,7 +473,7 @@ function BuyCrypto() {
 
                 {!account ? (
                   <ButtonLight margin={'16px 0 0'} width={upToSmall ? '100%' : '50%'} onClick={toggleWalletModal}>
-                    Connect your wallet
+                    Connect
                   </ButtonLight>
                 ) : (
                   <Address>
@@ -543,6 +492,7 @@ function BuyCrypto() {
                 )}
 
                 <ButtonPrimary
+                  id="buy-crypto-button"
                   margin={upToMedium ? '40px 0 0' : '44px 0 0'}
                   width={upToSmall ? '100%' : '50%'}
                   as="a"
@@ -605,13 +555,7 @@ function BuyCrypto() {
                 <>
                   <Step direction="vertical" currentStep={4} onStepClick={handleStepClick} />
                   <Flex>
-                    <Image
-                      src={isDarkMode ? ForTraderImage : ForTraderImageLight}
-                      marginLeft="68px"
-                      maxWidth="496px"
-                      data-aos="zoom-in-right"
-                      flex={1}
-                    />
+                    <Image src={ForTraderImage} marginLeft="68px" maxWidth="496px" data-aos="zoom-in-right" flex={1} />
                   </Flex>
                 </>
               )}
@@ -625,7 +569,7 @@ function BuyCrypto() {
                 <Text color={theme.subText} lineHeight={1.5} marginTop={upToMedium ? '40px' : '48px'}>
                   <Trans>
                     Now that you have purchased your crypto, you can trade from over 20,000+ tokens on KyberSwap! We
-                    give you the best trading rates in the market!
+                    give you superior rates!
                   </Trans>
                 </Text>
 
@@ -657,6 +601,7 @@ function BuyCrypto() {
           </Flex>
         </DownloadWalletContent>
       </DownloadWalletWrapper>
+      <KyberAIWidget />
     </>
   )
 }
