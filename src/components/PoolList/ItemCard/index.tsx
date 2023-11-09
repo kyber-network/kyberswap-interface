@@ -31,15 +31,16 @@ import { APP_PATHS, DMM_ANALYTICS_URL, ONE_BIPS, SUBGRAPH_AMP_MULTIPLIER } from 
 import { EVMNetworkInfo } from 'constants/networks/type'
 import { NativeCurrencies } from 'constants/tokens'
 import { useActiveWeb3React } from 'hooks'
+import { ClassicPoolData } from 'hooks/pool/classic/type'
 import useTheme from 'hooks/useTheme'
 import { IconWrapper } from 'pages/Pools/styleds'
 import { useActiveAndUniqueFarmsData } from 'state/farms/classic/hooks'
 import { Farm } from 'state/farms/classic/types'
 import { useMultipleContractSingleData } from 'state/multicall/hooks'
-import { SubgraphPoolData, UserLiquidityPosition, useSharedPoolIdManager } from 'state/pools/hooks'
+import { UserLiquidityPosition, useSharedPoolIdManager } from 'state/pools/hooks'
 import { tryParseAmount } from 'state/swap/hooks'
 import { ExternalLink } from 'theme'
-import { formattedNum, shortenAddress } from 'utils'
+import { shortenAddress } from 'utils'
 import { currencyId } from 'utils/currencyId'
 import {
   feeRangeCalc,
@@ -49,6 +50,8 @@ import {
   priceRangeCalcBySubgraphPool,
   useFarmApr,
 } from 'utils/dmm'
+import { formatDisplayNumber, parseFraction } from 'utils/numbers'
+import { getTokenSymbolWithHardcode } from 'utils/tokenInfo'
 
 const StyledLink = styled(ExternalLink)`
   :hover {
@@ -56,7 +59,7 @@ const StyledLink = styled(ExternalLink)`
   }
 `
 interface ListItemProps {
-  poolData: SubgraphPoolData
+  poolData: ClassicPoolData
   myLiquidity?: UserLiquidityPosition
 }
 
@@ -103,7 +106,11 @@ const ItemCard = ({ poolData, myLiquidity }: ListItemProps) => {
 
   const [, setSharedPoolId] = useSharedPoolIdManager()
 
-  const ampLiquidity = formattedNum(`${parseFloat(amp.toSignificant(5)) * parseFloat(poolData.reserveUSD)}`, true)
+  const ampLiquidity = formatDisplayNumber(amp.multiply(parseFraction(poolData.reserveUSD)), {
+    style: 'currency',
+    significantDigits: 7,
+    fractionDigits: 4,
+  })
   const volume = poolData.oneDayVolumeUSD ? poolData.oneDayVolumeUSD : poolData.oneDayVolumeUntracked
   const fee24H = poolData.oneDayFeeUSD ? poolData.oneDayFeeUSD : poolData.oneDayFeeUntracked
   const oneYearFL = getTradingFeeAPR(poolData.reserveUSD, fee24H).toFixed(2)
@@ -115,26 +122,22 @@ const ItemCard = ({ poolData, myLiquidity }: ListItemProps) => {
       ? tryParseAmount(myLiquidity?.liquidityTokenBalance, NativeCurrencies[chainId])
       : undefined
 
-  const pooledToken0 =
-    liquidityTokenBalance && reserve0 && totalSupply
-      ? liquidityTokenBalance.multiply(reserve0).divide(totalSupply)
-      : undefined
-
-  const pooledToken1 =
-    liquidityTokenBalance && reserve1 && totalSupply
-      ? liquidityTokenBalance.multiply(reserve1).divide(totalSupply)
-      : undefined
-
   const yourShareOfPool =
     liquidityTokenBalance && totalSupply ? new Percent(liquidityTokenBalance.quotient, totalSupply.quotient) : undefined
+
+  const pooledToken0 = yourShareOfPool && reserve0 ? reserve0.multiply(yourShareOfPool) : undefined
+  const pooledToken1 = yourShareOfPool && reserve1 ? reserve1.multiply(yourShareOfPool) : undefined
+
+  const currency0Symbol = getTokenSymbolWithHardcode(chainId, currency0.wrapped.address, currency0.symbol)
+  const currency1Symbol = getTokenSymbolWithHardcode(chainId, currency1.wrapped.address, currency1.symbol)
 
   const poolTitle = (
     <Flex alignItems="center">
       <DoubleCurrencyLogo currency0={currency0} currency1={currency1} size={20} />
       <Text fontSize="16px" fontWeight="500">
-        {poolData.token0.symbol} - {poolData.token1.symbol}
+        {currency0Symbol} - {currency1Symbol}
       </Text>
-      <FeeTag style={{ fontSize: '12px' }}>AMP {formattedNum(amp.toSignificant(5))}</FeeTag>
+      <FeeTag style={{ fontSize: '12px' }}>AMP {formatDisplayNumber(amp, { significantDigits: 5 })}</FeeTag>
 
       {isFarmingPool && (
         <MouseoverTooltip
@@ -158,7 +161,7 @@ const ItemCard = ({ poolData, myLiquidity }: ListItemProps) => {
       )}
 
       {isWarning && (
-        <MouseoverTooltip text={`One of the tokens in the pool is close to 0%. Pool might become inactive soon`}>
+        <MouseoverTooltip text={`One of the tokens in the pool is close to 0%. Pool might become inactive soon.`}>
           <IconWrapper
             style={{
               background: theme.warning,
@@ -271,7 +274,7 @@ const ItemCard = ({ poolData, myLiquidity }: ListItemProps) => {
               placement="right"
               text={
                 !isFarmingPool ? (
-                  <Trans>Estimated return from trading fees if you participate in the pool</Trans>
+                  <Trans>Estimated return from trading fees if you participate in the pool.</Trans>
                 ) : (
                   <APRTooltipContent farmAPR={farmAPR || 0} poolAPR={Number(oneYearFL)} />
                 )
@@ -306,8 +309,8 @@ const ItemCard = ({ poolData, myLiquidity }: ListItemProps) => {
           </Flex>
 
           <Flex justifyContent="space-between" fontSize="16px" fontWeight="500" marginTop="0.25rem" marginBottom="1rem">
-            <Text>{formattedNum(volume, true)}</Text>
-            <Text>{formattedNum(fee24H, true)}</Text>
+            <Text>{formatDisplayNumber(volume, { style: 'currency', significantDigits: 5 })}</Text>
+            <Text>{formatDisplayNumber(fee24H, { style: 'currency', significantDigits: 5 })}</Text>
           </Flex>
 
           <Divider />
@@ -330,7 +333,9 @@ const ItemCard = ({ poolData, myLiquidity }: ListItemProps) => {
             fontWeight="500"
             marginTop="0.25rem"
           >
-            <Text>{formattedNum(poolData.reserveUSD, true)}</Text>
+            <Text>
+              {formatDisplayNumber(poolData.reserveUSD, { style: 'currency', significantDigits: 7, fractionDigits: 4 })}
+            </Text>
             <Text textAlign="center">{ampLiquidity}</Text>
             <Text textAlign="end">{myLiquidity ? getMyLiquidity(myLiquidity) : '-'}</Text>
           </Box>
@@ -368,11 +373,11 @@ const ItemCard = ({ poolData, myLiquidity }: ListItemProps) => {
             <TokenRatioGrid>
               <CurrencyLogo currency={currency0} size="32px" />
               <Flex flexDirection="column">
-                <TokenRatioName>{poolData.token0.symbol}</TokenRatioName>
+                <TokenRatioName>{currency0Symbol}</TokenRatioName>
                 <TokenRatioPercent>{percentToken0}%</TokenRatioPercent>
               </Flex>
               <Flex flexDirection="column" alignItems="flex-end">
-                <TokenRatioName>{poolData.token1.symbol}</TokenRatioName>
+                <TokenRatioName>{currency1Symbol}</TokenRatioName>
                 <TokenRatioPercent>{percentToken1}%</TokenRatioPercent>
               </Flex>
               <CurrencyLogo currency={currency1} size="32px" />
@@ -381,19 +386,27 @@ const ItemCard = ({ poolData, myLiquidity }: ListItemProps) => {
 
           <Flex justifyContent="space-between" color={theme.subText} fontSize="12px" fontWeight="500" marginTop="1rem">
             <Text>
-              {poolData.token0.symbol}/{poolData.token1.symbol}
+              {currency0Symbol}/{currency1Symbol}
             </Text>
             <Text>
-              {poolData.token1.symbol}/{poolData.token0.symbol}
+              {currency1Symbol}/{currency0Symbol}
             </Text>
           </Flex>
 
-          <Flex justifyContent="space-between" fontSize="16px" fontWeight="500" marginTop="0.25rem">
+          <Flex
+            justifyContent="space-between"
+            fontSize="16px"
+            fontWeight="500"
+            marginTop="0.25rem"
+            sx={{
+              gap: '16px',
+            }}
+          >
             <Text>
               {formatPriceMin(priceRangeCalcBySubgraphPool(poolData)[0][0])} -{' '}
               {formatPriceMax(priceRangeCalcBySubgraphPool(poolData)[0][1])}
             </Text>
-            <Text>
+            <Text textAlign={'end'}>
               {formatPriceMin(priceRangeCalcBySubgraphPool(poolData)[1][0])} -{' '}
               {formatPriceMax(priceRangeCalcBySubgraphPool(poolData)[1][1])}
             </Text>
@@ -409,7 +422,7 @@ const ItemCard = ({ poolData, myLiquidity }: ListItemProps) => {
               {poolData.fee
                 ? factories?.[0]?.result !== undefined
                   ? poolData.fee / (isNewStaticFeePool ? 1000 : 100) + '%'
-                  : ''
+                  : '-'
                 : feeRangeCalc(+amp.toSignificant(5))}
             </Text>
             <Text>{ampLiquidity}</Text>
@@ -486,10 +499,7 @@ const ItemCard = ({ poolData, myLiquidity }: ListItemProps) => {
 }
 
 const FarmCalculator = ({ farm, onUpdate }: { farm: Farm; onUpdate: (value: number) => void }) => {
-  const lpTokenRatio = new Fraction(
-    farm.totalStake.toString(),
-    JSBI.exponentiate(JSBI.BigInt(10), JSBI.BigInt(18)),
-  ).divide(
+  const lpTokenRatio = farm.totalStake.divide(
     new Fraction(parseUnits(farm.totalSupply, 18).toString(), JSBI.exponentiate(JSBI.BigInt(10), JSBI.BigInt(18))),
   )
   const liquidity = parseFloat(lpTokenRatio.toSignificant(6)) * parseFloat(farm.reserveUSD)

@@ -4,6 +4,7 @@ import axios from 'axios'
 import { arrayify } from 'ethers/lib/utils'
 import { useCallback, useMemo } from 'react'
 import { useSelector } from 'react-redux'
+import { useGetTokenListQuery } from 'services/ksSetting'
 import useSWR from 'swr'
 
 import ERC20_INTERFACE, { ERC20_BYTES32_INTERFACE } from 'constants/abis/erc20'
@@ -11,7 +12,7 @@ import { KS_SETTING_API } from 'constants/env'
 import { ETHER_ADDRESS, ZERO_ADDRESS } from 'constants/index'
 import { NativeCurrencies } from 'constants/tokens'
 import { useActiveWeb3React } from 'hooks/index'
-import { useBytes32TokenContract, useMulticallContract, useTokenContract } from 'hooks/useContract'
+import { useBytes32TokenContract, useMulticallContract, useTokenReadingContract } from 'hooks/useContract'
 import { AppState } from 'state'
 import { TokenAddressMap } from 'state/lists/reducer'
 import { TokenInfo, WrappedTokenInfo } from 'state/lists/wrappedTokenInfo'
@@ -25,7 +26,7 @@ import useDebounce from './useDebounce'
 function useTokensFromMap(tokenMap: TokenAddressMap, lowercaseAddress?: boolean, customChainId?: ChainId): TokenMap {
   const { chainId: currentChainId } = useActiveWeb3React()
   const chainId = customChainId || currentChainId
-  const userAddedTokens = useUserAddedTokens()
+  const userAddedTokens = useUserAddedTokens(chainId)
 
   return useMemo(() => {
     if (!chainId) return {}
@@ -179,10 +180,10 @@ export function useToken(tokenAddress?: string): Token | NativeCurrency | undefi
 
   const address = isAddress(chainId, tokenAddress)
 
-  const tokenContract = useTokenContract(address && tokenAddress !== ZERO_ADDRESS ? address : undefined, false)
-  const tokenContractBytes32 = useBytes32TokenContract(address ? address : undefined, false)
+  const tokenContract = useTokenReadingContract(address && tokenAddress !== ZERO_ADDRESS ? address : undefined)
+  const tokenContractBytes32 = useBytes32TokenContract(address ? address : undefined)
   const token =
-    tokenAddress === ZERO_ADDRESS || tokenAddress?.toLowerCase() === ETHER_ADDRESS.toLowerCase()
+    tokenAddress?.toLowerCase() === ZERO_ADDRESS || tokenAddress?.toLowerCase() === ETHER_ADDRESS.toLowerCase()
       ? NativeCurrencies[chainId]
       : address
       ? tokens[address]
@@ -234,9 +235,10 @@ export function useToken(tokenAddress?: string): Token | NativeCurrency | undefi
 }
 
 // This function is intended to use for EVM chains only
-export function useFetchERC20TokenFromRPC() {
-  const { chainId } = useActiveWeb3React()
-  const multicallContract = useMulticallContract()
+export function useFetchERC20TokenFromRPC(customChainId?: ChainId) {
+  const { chainId: activeChainId } = useActiveWeb3React()
+  const chainId = customChainId || activeChainId
+  const multicallContract = useMulticallContract(chainId)
 
   const fetcher = useCallback(
     async (tokenAddress: string) => {
@@ -302,6 +304,9 @@ export const fetchTokenByAddress = async (address: string, chainId: ChainId, sig
 }
 
 export const fetchListTokenByAddresses = async (address: string[], chainId: ChainId) => {
+  const cached = filterTruthy(address.map(addr => findCacheToken(addr)))
+  if (cached.length === address.length) return cached
+
   const response = await axios.get(`${KS_SETTING_API}/v1/tokens?addresses=${address}&chainIds=${chainId}`)
   const tokens = response?.data?.data?.tokens ?? []
   return filterTruthy(tokens.map(formatAndCacheToken)) as WrappedTokenInfo[]
@@ -381,4 +386,21 @@ export function useCurrencyV2(currencyId: string | undefined, customChainId?: Ch
     if (isETH) return NativeCurrencies[chainId]
     return tokenInWhitelist || token
   }, [chainId, isETH, token, currencyId, tokenInWhitelist])
+}
+
+export const useStableCoins = (chainId: ChainId | undefined) => {
+  const { data } = useGetTokenListQuery({ chainId: chainId as ChainId, isStable: true }, { skip: !chainId })
+
+  const stableCoins = useMemo(() => {
+    return data?.data?.tokens || []
+  }, [data])
+
+  const isStableCoin = useCallback(
+    (address: string | undefined) => {
+      if (!address) return false
+      return stableCoins.some(token => token.address.toLowerCase() === address?.toLowerCase())
+    },
+    [stableCoins],
+  )
+  return { isStableCoin, stableCoins }
 }

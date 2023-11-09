@@ -11,17 +11,19 @@ import styled, { css } from 'styled-components'
 
 import { ReactComponent as ChevronDown } from 'assets/svg/down.svg'
 import { OptionsContainer } from 'components'
+import { NotificationType } from 'components/Announcement/type'
 import { ButtonPrimary } from 'components/Button'
 import { REWARD_SERVICE_API } from 'constants/env'
 import { BIG_INT_ZERO, DEFAULT_SIGNIFICANT } from 'constants/index'
-import { NETWORKS_INFO } from 'constants/networks'
 import { useActiveWeb3React, useWeb3React, useWeb3Solana } from 'hooks'
+import { NETWORKS_INFO } from 'hooks/useChainsConfig'
 import useMixpanel, { MIXPANEL_TYPE } from 'hooks/useMixpanel'
 import { useOnClickOutside } from 'hooks/useOnClickOutside'
 import useTheme from 'hooks/useTheme'
 import { useChangeNetwork } from 'hooks/web3/useChangeNetwork'
-import { Dots } from 'pages/Pool/styleds'
+import { Dots } from 'pages/MyPool/styleds'
 import { AppState } from 'state'
+import { useNotify } from 'state/application/hooks'
 import {
   CampaignData,
   CampaignLeaderboardReward,
@@ -32,7 +34,9 @@ import { useSetClaimingCampaignRewardId, useSwapNowHandler } from 'state/campaig
 import { useTransactionAdder } from 'state/transactions/hooks'
 import { TRANSACTION_TYPE } from 'state/transactions/type'
 import { findTx } from 'utils'
+import { friendlyError } from 'utils/errorMessage'
 import { sendEVMTransaction } from 'utils/sendTransaction'
+import { ErrorName } from 'utils/sentry'
 
 type Size = 'small' | 'large'
 export default function CampaignButtonWithOptions({
@@ -50,16 +54,17 @@ export default function CampaignButtonWithOptions({
 }) {
   const theme = useTheme()
   const [isShowNetworks, setIsShowNetworks] = useState(false)
-  const changeNetwork = useChangeNetwork()
+  const { changeNetwork } = useChangeNetwork()
   const containerRef = useRef<HTMLButtonElement>(null)
   useOnClickOutside(containerRef, () => setIsShowNetworks(false))
   const { mixpanelHandler } = useMixpanel()
+  const notify = useNotify()
 
   const chainIds: ChainId[] = campaign
     ? campaign[type === 'swap_now' ? 'chainIds' : 'rewardChainIds'].split(',').map(Number)
     : []
 
-  const { account, walletSolana } = useActiveWeb3React()
+  const { account, walletSolana, walletKey } = useActiveWeb3React()
   const { library } = useWeb3React()
 
   const rawRewards = campaign?.userInfo?.rewards || []
@@ -78,7 +83,7 @@ export default function CampaignButtonWithOptions({
     selectedCampaignLeaderboard,
   } = useSelector((state: AppState) => state.campaigns)
   const transactions = useMemo(
-    () => (campaign ? transactionsState[parseInt(campaign.rewardChainIds)] ?? {} : {}),
+    () => (campaign ? transactionsState[Number(campaign.rewardChainIds) as ChainId] ?? {} : {}),
     [transactionsState, campaign],
   )
   const [claimingCampaignRewardId, setClaimingCampaignRewardId] = useSetClaimingCampaignRewardId()
@@ -189,29 +194,37 @@ export default function CampaignButtonWithOptions({
           }
           return
         }
-        await sendEVMTransaction(
+        const transactionResponse = await sendEVMTransaction({
           account,
           library,
-          rewardContractAddress,
+          contractAddress: rewardContractAddress,
           encodedData,
-          BigNumber.from(0),
-          async transactionResponse => {
-            addClaimTransactionAndAddClaimRef(
-              transactionResponse.hash,
-              claimChainId,
-              rewardString,
-              rewardContractAddress,
-            )
-            const transactionReceipt = await transactionResponse.wait()
-            if (transactionReceipt.status === 1) {
-              addTemporaryClaimedRefs && addTemporaryClaimedRefs(refs)
-              updateCampaignStore()
-            }
+          value: BigNumber.from(0),
+          sentryInfo: {
+            name: ErrorName.ClaimCampaignError,
+            wallet: walletKey,
           },
-        )
-      } catch (err) {
-        console.error(err)
+        })
+        if (!transactionResponse) throw new Error()
+        addClaimTransactionAndAddClaimRef(transactionResponse.hash, claimChainId, rewardString, rewardContractAddress)
+        const transactionReceipt = await transactionResponse.wait()
+        if (transactionReceipt.status === 1) {
+          addTemporaryClaimedRefs && addTemporaryClaimedRefs(refs)
+          updateCampaignStore()
+        }
+      } catch (error) {
         setClaimingCampaignRewardId(null)
+        const message = friendlyError(error)
+        console.error('Claim error:', { message, error })
+        notify(
+          {
+            title: t`Claim Error`,
+            summary: message,
+            type: NotificationType.ERROR,
+          },
+          8000,
+        )
+        return
       }
     }
   }

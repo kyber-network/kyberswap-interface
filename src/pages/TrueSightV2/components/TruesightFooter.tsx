@@ -1,9 +1,11 @@
 import { Trans } from '@lingui/macro'
+import { useLocation } from 'react-router-dom'
 import { Flex, Text } from 'rebass'
 import styled, { keyframes } from 'styled-components'
 
 import WalletIcon from 'components/Icons/Wallet'
 import Row from 'components/Row'
+import { APP_PATHS } from 'constants/index'
 import { Z_INDEXS } from 'constants/styles'
 import { useActiveWeb3React } from 'hooks'
 import { useWalletModalToggle } from 'state/application/hooks'
@@ -38,7 +40,16 @@ const Wrapper = styled(Row)`
 export default function TruesightFooter() {
   const toggle = useWalletModalToggle()
   const { account } = useActiveWeb3React()
-  if (account) return <></>
+  const location = useLocation()
+  if (
+    account ||
+    [APP_PATHS.MY_EARNINGS, APP_PATHS.IAM_LOGIN, APP_PATHS.IAM_CONSENT, APP_PATHS.IAM_LOGOUT].some(path =>
+      location.pathname.startsWith(path),
+    )
+  ) {
+    return null
+  }
+
   return (
     <Wrapper>
       <Flex onClick={toggle} alignItems={'center'} style={{ gap: '6px', cursor: 'pointer', userSelect: 'none' }}>

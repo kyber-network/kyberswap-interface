@@ -2,6 +2,7 @@ import { Currency, CurrencyAmount, Price, Token } from '@kyberswap/ks-sdk-core'
 import { Position } from '@kyberswap/ks-sdk-elastic'
 import { Trans, t } from '@lingui/macro'
 import { BigNumber } from 'ethers'
+import mixpanel from 'mixpanel-browser'
 import { stringify } from 'querystring'
 import React, { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
@@ -11,6 +12,7 @@ import styled from 'styled-components'
 import { ButtonEmpty, ButtonOutlined, ButtonPrimary } from 'components/Button'
 import { LightCard } from 'components/Card'
 import Divider from 'components/Divider'
+import QuickZap, { QuickZapButton } from 'components/ElasticZap/QuickZap'
 import ProAmmFee from 'components/ProAmm/ProAmmFee'
 import ProAmmPoolInfo from 'components/ProAmm/ProAmmPoolInfo'
 import ProAmmPooledTokens from 'components/ProAmm/ProAmmPooledTokens'
@@ -20,8 +22,7 @@ import { MouseoverTooltip } from 'components/Tooltip'
 import { APP_PATHS, PROMM_ANALYTICS_URL } from 'constants/index'
 import { useActiveWeb3React } from 'hooks'
 import { useToken } from 'hooks/Tokens'
-import { useProMMFarmContract } from 'hooks/useContract'
-// import { useProMMFarmContract } from 'hooks/useContract'
+import { useProMMFarmReadingContract } from 'hooks/useContract'
 import useIsTickAtLimit from 'hooks/useIsTickAtLimit'
 import useMixpanel, { MIXPANEL_TYPE } from 'hooks/useMixpanel'
 import { usePool } from 'hooks/usePools'
@@ -29,6 +30,7 @@ import useTheme from 'hooks/useTheme'
 import { useElasticFarms } from 'state/farms/elastic/hooks'
 import { UserPositionFarm } from 'state/farms/elastic/types'
 import { useElasticFarmsV2 } from 'state/farms/elasticv2/hooks'
+import { NEVER_RELOAD, useSingleCallResult } from 'state/multicall/hooks'
 import { useTokenPrices } from 'state/tokenPrices/hooks'
 import { ExternalLink, StyledInternalLink } from 'theme'
 import { PositionDetails } from 'types/position'
@@ -171,9 +173,9 @@ function PositionListItem({
     farm.pools.forEach(pool => {
       if (pool.poolAddress.toLowerCase() === positionDetails.poolId.toLowerCase()) {
         farmAddress = farm.id
-        pid = pool.pid
         rewardTokens = pool.rewardTokens
         if (pool.endTime > Date.now() / 1000) {
+          pid = pool.pid
           hasActiveFarm = true
         }
       }
@@ -187,27 +189,25 @@ function PositionListItem({
       f.ranges.some(r => positionDetails.tickLower <= r.tickLower && positionDetails.tickUpper >= r.tickUpper),
   ).length
 
-  const farmContract = useProMMFarmContract(farmAddress)
+  const farmContract = useProMMFarmReadingContract(farmAddress)
 
   const tokenId = positionDetails.tokenId.toString()
 
   const [farmReward, setFarmReward] = useState<BigNumber[] | null>(null)
-  useEffect(() => {
-    const getReward = async () => {
-      if (farmContract && farmingTime) {
-        await farmContract
-          .getUserInfo(tokenId, pid)
-          .then((res: any) => {
-            setFarmReward(res.rewardPending)
-          })
-          .catch(() => {
-            setFarmReward(null)
-          })
-      }
-    }
 
-    getReward()
-  }, [farmContract, tokenId, pid, farmingTime])
+  const res = useSingleCallResult(
+    pid !== '' ? farmContract : undefined,
+    'getUserInfo',
+    pid !== '' ? [tokenId, pid] : undefined,
+    NEVER_RELOAD,
+  )
+  useEffect(() => {
+    if (res?.result?.rewardPending) {
+      setFarmReward(res.result.rewardPending)
+    } else {
+      setFarmReward(null)
+    }
+  }, [res])
 
   const token0 = useToken(token0Address)
   const token1 = useToken(token1Address)
@@ -305,10 +305,18 @@ function PositionListItem({
     return ''
   })()
 
+  const [showQuickZap, setShowQuickZap] = useState(false)
+
   if (!position || !priceLower || !priceUpper) return <ContentLoader />
 
   return (
     <StyledPositionCard>
+      <QuickZap
+        poolAddress={positionDetails.poolId}
+        tokenId={positionDetails.tokenId.toString()}
+        isOpen={showQuickZap}
+        onDismiss={() => setShowQuickZap(false)}
+      />
       <>
         <ProAmmPoolInfo
           position={position}
@@ -475,6 +483,17 @@ function PositionListItem({
                   <Trans>Increase Liquidity</Trans>
                 </Text>
               </ButtonPrimary>
+
+              <QuickZapButton
+                onClick={() => {
+                  setShowQuickZap(true)
+                  mixpanel.track('Zap - Click Quick Zap', {
+                    token0: token0?.symbol || '',
+                    token1: token1?.symbol || '',
+                    source: 'my_pool_page',
+                  })
+                }}
+              />
             </ButtonGroup>
           )}
           <Divider sx={{ marginBottom: '20px' }} />

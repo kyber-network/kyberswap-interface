@@ -10,6 +10,7 @@ import { AlertTriangle } from 'react-feather'
 import { useNavigate } from 'react-router-dom'
 import { Flex, Text } from 'rebass'
 
+import { NotificationType } from 'components/Announcement/type'
 import { ButtonError, ButtonLight, ButtonPrimary } from 'components/Button'
 import { AutoColumn } from 'components/Column'
 import { ConfirmAddModalBottom } from 'components/ConfirmAddModalBottom'
@@ -23,6 +24,7 @@ import TransactionConfirmationModal, {
   ConfirmationModalContent,
   TransactionErrorContent,
 } from 'components/TransactionConfirmationModal'
+import { didUserReject } from 'constants/connectors/utils'
 import { AMP_HINT, APP_PATHS } from 'constants/index'
 import { EVMNetworkInfo } from 'constants/networks/type'
 import { NativeCurrencies } from 'constants/tokens'
@@ -31,18 +33,20 @@ import { useActiveWeb3React, useWeb3React } from 'hooks'
 import { useCurrency } from 'hooks/Tokens'
 import { ApprovalState, useApproveCallback } from 'hooks/useApproveCallback'
 import useTheme from 'hooks/useTheme'
-import useTokensMarketPrice from 'hooks/useTokensMarketPrice'
 import useTransactionDeadline from 'hooks/useTransactionDeadline'
-import { Dots, Wrapper } from 'pages/Pool/styleds'
-import { useTokensPrice, useWalletModalToggle } from 'state/application/hooks'
+import DisclaimerERC20 from 'pages/AddLiquidityV2/components/DisclaimerERC20'
+import { Dots, Wrapper } from 'pages/MyPool/styleds'
+import { useNotify, useWalletModalToggle } from 'state/application/hooks'
 import { Field } from 'state/mint/actions'
 import { useDerivedMintInfo, useMintActionHandlers, useMintState } from 'state/mint/hooks'
+import { useTokenPrices } from 'state/tokenPrices/hooks'
 import { useTransactionAdder } from 'state/transactions/hooks'
 import { TRANSACTION_TYPE } from 'state/transactions/type'
 import { useDegenModeManager, usePairAdderByTokens, useUserSlippageTolerance } from 'state/user/hooks'
 import { StyledInternalLink, TYPE, UppercaseText } from 'theme'
 import { calculateGasMargin, calculateSlippageAmount, formattedNum } from 'utils'
 import { feeRangeCalc, useCurrencyConvertedToNative } from 'utils/dmm'
+import { friendlyError } from 'utils/errorMessage'
 import {
   getDynamicFeeRouterContract,
   getOldStaticFeeRouterContract,
@@ -87,6 +91,7 @@ const TokenPair = ({
   const toggleWalletModal = useWalletModalToggle() // toggle wallet when disconnected
 
   const [isDegenMode] = useDegenModeManager()
+  const notify = useNotify()
 
   // mint state
   const { independentField, typedValue, otherTypedValue } = useMintState()
@@ -308,20 +313,31 @@ const TokenPair = ({
           }
         }),
       )
-      .catch(err => {
+      .catch(error => {
         setAttemptingTxn(false)
-        const e = new Error('Classic: Add liquidity Error', { cause: err })
-        e.name = 'AddLiquidityError'
-        captureException(e, { extra: { args } })
-        // we only care if the error is something _other_ than the user rejected the tx
-        if (err?.code !== 4001) {
-          console.error(err)
+
+        const message = error.message.includes('INSUFFICIENT')
+          ? t`Insufficient liquidity available. Please reload page and try again!`
+          : friendlyError(error)
+
+        if (isDegenMode) {
+          notify(
+            {
+              title: t`Add Liquidity Error`,
+              summary: message,
+              type: NotificationType.ERROR,
+            },
+            8000,
+          )
+        } else {
+          setAddLiquidityError(message)
         }
 
-        if (err.message.includes('INSUFFICIENT')) {
-          setAddLiquidityError(t`Insufficient liquidity available. Please reload page and try again!`)
-        } else {
-          setAddLiquidityError(err?.message)
+        if (!didUserReject(error)) {
+          console.error('Add Liquidity error:', { message, error })
+          const e = new Error(message, { cause: error })
+          e.name = 'AddLiquidityError'
+          captureException(e, { extra: { args } })
         }
       })
   }
@@ -360,18 +376,22 @@ const TokenPair = ({
     () => [currencies[Field.CURRENCY_A], currencies[Field.CURRENCY_B]].map(currency => currency?.wrapped),
     [currencies],
   )
+  const tokenAddresses: string[] = useMemo(
+    () => tokens.map(token => token?.address as string).filter(item => !!item),
+    [tokens],
+  )
 
-  const usdPrices = useTokensPrice(tokens)
-  const marketPrices = useTokensMarketPrice(tokens)
+  const marketPriceMap = useTokenPrices(tokenAddresses)
+  const marketPrices = tokens.map(item => marketPriceMap[item?.address || ''] || 0)
 
   const estimatedUsdCurrencyA =
-    parsedAmounts[Field.CURRENCY_A] && usdPrices[0]
-      ? parseFloat((parsedAmounts[Field.CURRENCY_A] as CurrencyAmount<Currency>).toSignificant(6)) * usdPrices[0]
+    parsedAmounts[Field.CURRENCY_A] && marketPrices[0]
+      ? parseFloat((parsedAmounts[Field.CURRENCY_A] as CurrencyAmount<Currency>).toSignificant(6)) * marketPrices[0]
       : 0
 
   const estimatedUsdCurrencyB =
-    parsedAmounts[Field.CURRENCY_B] && usdPrices[1]
-      ? parseFloat((parsedAmounts[Field.CURRENCY_B] as CurrencyAmount<Currency>).toSignificant(6)) * usdPrices[1]
+    parsedAmounts[Field.CURRENCY_B] && marketPrices[1]
+      ? parseFloat((parsedAmounts[Field.CURRENCY_B] as CurrencyAmount<Currency>).toSignificant(6)) * marketPrices[1]
       : 0
 
   const poolPrice = Number(price?.toSignificant(6))
@@ -389,7 +409,11 @@ const TokenPair = ({
           </Text>
         </RowFlat>
         <Row>
-          <Text fontSize="24px">{'DMM ' + nativeA?.symbol + '/' + nativeB?.symbol + ' LP Tokens'}</Text>
+          <Text fontSize="24px">
+            <Trans>
+              DMM {nativeA?.symbol}/{nativeB?.symbol} LP Tokens
+            </Trans>
+          </Text>
         </Row>
         <TYPE.italic fontSize={12} textAlign="left" padding={'8px 0 0 0 '}>
           {t`Output is estimated. If the price changes by more than ${
@@ -492,7 +516,11 @@ const TokenPair = ({
               />
               <Flex justifyContent="space-between" alignItems="center" marginTop="0.5rem">
                 <USDPrice>
-                  {usdPrices[0] ? `1 ${nativeA?.symbol} = ${formattedNum(usdPrices[0].toString(), true)}` : <Loader />}
+                  {marketPrices[0] ? (
+                    `1 ${nativeA?.symbol} = ${formattedNum(marketPrices[0].toString(), true)}`
+                  ) : (
+                    <Loader />
+                  )}
                 </USDPrice>
               </Flex>
             </div>
@@ -515,7 +543,11 @@ const TokenPair = ({
               />
               <Flex justifyContent="space-between" alignItems="center" marginTop="0.5rem">
                 <USDPrice>
-                  {usdPrices[1] ? `1 ${nativeB?.symbol} = ${formattedNum(usdPrices[1].toString(), true)}` : <Loader />}
+                  {marketPrices[1] ? (
+                    `1 ${nativeB?.symbol} = ${formattedNum(marketPrices[1].toString(), true)}`
+                  ) : (
+                    <Loader />
+                  )}
                 </USDPrice>
 
                 {pairAddress && chainId && (currencyBIsWETH || currencyBIsETHER) && (
@@ -658,9 +690,17 @@ const TokenPair = ({
               </Warning>
             )}
 
+            <DisclaimerERC20
+              href="https://docs.kyberswap.com/liquidity-solutions/kyberswap-elastic/user-guides/add-liquidity-to-an-existing-elastic-pool#non-standard-tokens"
+              token0={currencyA?.wrapped.address || ''}
+              token1={currencyB?.wrapped.address || ''}
+            />
+
+            <div style={{ marginBottom: '1.5rem' }} />
+
             {!account ? (
               <ButtonLight onClick={toggleWalletModal}>
-                <Trans>Connect Wallet</Trans>
+                <Trans>Connect</Trans>
               </ButtonLight>
             ) : (
               <AutoColumn gap={'md'}>

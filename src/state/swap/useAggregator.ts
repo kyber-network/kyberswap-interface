@@ -96,7 +96,7 @@ export function useDerivedSwapInfoV2(): {
   if (!to || !formattedTo) {
     inputError = inputError ?? t`Enter a recipient`
   } else {
-    if (BAD_RECIPIENT_ADDRESSES.indexOf(formattedTo) !== -1) {
+    if (BAD_RECIPIENT_ADDRESSES.has(formattedTo)) {
       inputError = inputError ?? t`Invalid recipient`
     }
   }
@@ -110,7 +110,7 @@ export function useDerivedSwapInfoV2(): {
   const [balanceIn, amountIn] = [currencyBalances[Field.INPUT], slippageAdjustedAmounts?.[Field.INPUT]]
 
   if (amountIn && ((balanceIn && balanceIn.lessThan(amountIn)) || !balanceIn)) {
-    inputError = t`Insufficient ${amountIn.currency.symbol} balance`
+    inputError = t`Insufficient ${amountIn.currency.symbol} balance.`
   }
 
   return useMemo(

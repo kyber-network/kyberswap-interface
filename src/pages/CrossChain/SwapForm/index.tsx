@@ -6,7 +6,6 @@ import { Flex, Text } from 'rebass'
 import { useSaveCrossChainTxsMutation } from 'services/crossChain'
 import styled from 'styled-components'
 
-import SquidLogoDark from 'assets/images/squid_dark.png'
 import SquidLogoLight from 'assets/images/squid_light.png'
 import { ReactComponent as ArrowUp } from 'assets/svg/arrow_up.svg'
 import { ButtonLight } from 'components/Button'
@@ -19,6 +18,7 @@ import SwapButtonWithPriceImpact from 'components/SwapForm/SwapActionButton/Swap
 import useCheckStablePairSwap from 'components/SwapForm/hooks/useCheckStablePairSwap'
 import { formatDurationCrossChain } from 'components/swapv2/AdvancedSwapDetails'
 import { AdvancedSwapDetailsDropdownCrossChain } from 'components/swapv2/AdvancedSwapDetailsDropdown'
+import { CROSS_CHAIN_CONFIG } from 'constants/env'
 import { INPUT_DEBOUNCE_TIME, TRANSACTION_STATE_DEFAULT } from 'constants/index'
 import { NETWORKS_INFO } from 'constants/networks'
 import { useActiveWeb3React, useWeb3React } from 'hooks'
@@ -40,12 +40,14 @@ import { WrappedTokenInfo } from 'state/lists/wrappedTokenInfo'
 import { tryParseAmount } from 'state/swap/hooks'
 import { useTransactionAdder } from 'state/transactions/hooks'
 import { TRANSACTION_TYPE } from 'state/transactions/type'
-import { useCrossChainSetting, useDegenModeManager, useIsDarkMode } from 'state/user/hooks'
+import { useCrossChainSetting, useDegenModeManager } from 'state/user/hooks'
 import { useCurrencyBalance } from 'state/wallet/hooks'
 import { ExternalLink } from 'theme'
 import { TransactionFlowState } from 'types/TransactionFlowState'
+import { getFullDisplayBalance } from 'utils/formatBalance'
 import { uint256ToFraction } from 'utils/numbers'
 import { checkPriceImpact } from 'utils/prices'
+import { wait } from 'utils/retry'
 import { getTokenAddress } from 'utils/tokenInfo'
 
 const ArrowWrapper = styled.div`
@@ -57,7 +59,7 @@ const ArrowWrapper = styled.div`
 export default function SwapForm() {
   const { account, chainId } = useActiveWeb3React()
   const { library } = useWeb3React()
-  const changeNetwork = useChangeNetwork()
+  const { changeNetwork } = useChangeNetwork()
   const [isDegenMode] = useDegenModeManager()
 
   const [
@@ -112,13 +114,13 @@ export default function SwapForm() {
     getRoute: refreshRoute,
     error: errorGetRoute,
     loading: gettingRoute,
+    requestId,
   } = useGetRouteCrossChain(routeParams)
   const { outputAmount, amountUsdIn, amountUsdOut, exchangeRate, priceImpact, duration, totalFeeUsd } =
     getRouInfo(route)
   const { selectCurrencyIn, selectCurrencyOut, selectDestChain, setInputAmount } = useCrossChainHandlers()
 
   const toggleWalletModal = useWalletModalToggle()
-  const isDark = useIsDarkMode()
   const theme = useTheme()
 
   // modal and loading
@@ -188,7 +190,7 @@ export default function SwapForm() {
       onTracking(MIXPANEL_TYPE.CROSS_CHAIN_TXS_SUBMITTED)
       setInputAmount('')
       setSwapState(state => ({ ...state, attemptingTxn: false, txHash: tx.hash }))
-      const tokenAmountOut = uint256ToFraction(outputAmount, currencyOut.decimals).toSignificant(6)
+      const tokenAmountOut = getFullDisplayBalance(outputAmount, currencyOut.decimals, 6)
       const tokenAddressIn = getTokenAddress(currencyIn)
       const tokenAddressOut = getTokenAddress(currencyOut)
       addTransaction({
@@ -218,11 +220,28 @@ export default function SwapForm() {
         srcAmount: inputAmount,
         dstAmount: tokenAmountOut,
       }
+
       saveTxsToDb(payload)
         .unwrap()
         .catch(e => {
           captureExceptionCrossChain(payload, e, 'CrossChain')
         })
+
+      // trigger for partner
+      const params = {
+        transactionId: tx.hash,
+        requestId,
+        integratorId: CROSS_CHAIN_CONFIG.INTEGRATOR_ID,
+      }
+      await wait(2000)
+      squidInstance.getStatus(params).catch(() => {
+        setTimeout(() => {
+          // retry
+          squidInstance.getStatus(params).catch(e => {
+            console.error('fire squid err', e)
+          })
+        }, 3000)
+      })
     } catch (error) {
       console.error(error)
       setSwapState(state => ({ ...state, attemptingTxn: false, errorMessage: error?.message || error }))
@@ -243,6 +262,7 @@ export default function SwapForm() {
     saveTxsToDb,
     account,
     onTracking,
+    requestId,
   ])
 
   const maxAmountInput = useCurrencyBalance(currencyIn)?.toExact()
@@ -293,6 +313,7 @@ export default function SwapForm() {
             onMax={handleMaxInput}
             onCurrencySelect={onCurrencySelect}
             id="swap-currency-input"
+            dataTestId="swap-currency-input"
             usdValue={amountUsdIn ?? ''}
           />
         </Flex>
@@ -322,6 +343,7 @@ export default function SwapForm() {
             }
             onCurrencySelect={onCurrencySelectDest}
             id="swap-currency-output"
+            dataTestId="swap-currency-output"
             usdValue={amountUsdOut ?? ''}
           />
         </div>
@@ -337,6 +359,7 @@ export default function SwapForm() {
                 <ExternalLink href={'https://axelar.network/blog/what-is-axlusdc-and-how-do-you-get-it'}>
                   here ↗
                 </ExternalLink>
+                .
               </Trans>
             </Text>
           }
@@ -347,7 +370,7 @@ export default function SwapForm() {
 
         {!!priceImpact && <PriceImpactNote priceImpact={Number(priceImpact)} isDegenMode={isDegenMode} />}
 
-        {inputError?.state && (
+        {inputError?.state && !inputError?.insufficientFund && (
           <ErrorWarningPanel title={inputError?.tip} type={inputError?.state} desc={inputError?.desc} />
         )}
 
@@ -362,12 +385,12 @@ export default function SwapForm() {
             route={route}
             minimal={false}
             showNoteGetRoute={priceImpactResult.isHigh || priceImpactResult.isVeryHigh || priceImpactResult.isInvalid}
-            disabledText={t`Swap`}
+            disabledText={(inputError?.insufficientFund ? inputError?.tip : '') || t`Swap`}
             showTooltipPriceImpact={false}
           />
         ) : (
           <ButtonLight onClick={toggleWalletModal}>
-            <Trans>Connect Wallet</Trans>
+            <Trans>Connect</Trans>
           </ButtonLight>
         )}
 
@@ -384,7 +407,7 @@ export default function SwapForm() {
           >
             Powered by
             <ExternalLink href="https://squidrouter.com/" style={{ width: 'fit-content' }}>
-              <img src={isDark ? SquidLogoLight : SquidLogoDark} alt="kyberswap with squid" height={22} />
+              <img src={SquidLogoLight} alt="kyberswap with squid" height={22} />
             </ExternalLink>
           </Flex>
           <Text color={theme.primary} style={{ cursor: 'pointer', fontSize: 12, fontWeight: '500' }}>

@@ -18,6 +18,7 @@ export interface ElasticFarmV2Range {
 export interface ElasticFarmV2 {
   id: string
   fId: number
+  farmAddress: string
   startTime: number
   endTime: number
   isSettled: boolean
@@ -26,13 +27,12 @@ export interface ElasticFarmV2 {
   token0: Currency
   token1: Currency
   tvl: number
-  tvlToken0: CurrencyAmount<Currency>
-  tvlToken1: CurrencyAmount<Currency>
   totalRewards: Array<CurrencyAmount<Currency>>
   ranges: Array<ElasticFarmV2Range>
 }
 
 export interface UserFarmV2Info {
+  farmAddress: string
   poolAddress: string
   nftId: BigNumber
   position: Position
@@ -60,7 +60,8 @@ export interface SubgraphFarmV2 {
   endTime: string
   isSettled: boolean
   liquidity: string
-  depositedPositions: Array<{
+  stakedTvl?: string
+  depositedPositions?: Array<{
     id: string
     position: {
       id: string

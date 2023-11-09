@@ -9,6 +9,7 @@ import { useCallback, useMemo, useState } from 'react'
 import { AlertTriangle } from 'react-feather'
 import { Flex, Text } from 'rebass'
 
+import { NotificationType } from 'components/Announcement/type'
 import { ButtonError, ButtonLight, ButtonPrimary } from 'components/Button'
 import { AutoColumn } from 'components/Column'
 import { ConfirmAddModalBottom } from 'components/ConfirmAddModalBottom'
@@ -25,6 +26,7 @@ import TransactionConfirmationModal, {
 } from 'components/TransactionConfirmationModal'
 import ZapError from 'components/ZapError'
 import FormattedPriceImpact from 'components/swapv2/FormattedPriceImpact'
+import { didUserReject } from 'constants/connectors/utils'
 import { AMP_HINT, APP_PATHS } from 'constants/index'
 import { EVMNetworkInfo } from 'constants/networks/type'
 import { NativeCurrencies } from 'constants/tokens'
@@ -33,13 +35,13 @@ import { useActiveWeb3React, useWeb3React } from 'hooks'
 import { useCurrency } from 'hooks/Tokens'
 import { ApprovalState, useApproveCallback } from 'hooks/useApproveCallback'
 import useTheme from 'hooks/useTheme'
-import useTokensMarketPrice from 'hooks/useTokensMarketPrice'
 import useTransactionDeadline from 'hooks/useTransactionDeadline'
-import { Dots, Wrapper } from 'pages/Pool/styleds'
-import { useTokensPrice, useWalletModalToggle } from 'state/application/hooks'
+import { Dots, Wrapper } from 'pages/MyPool/styleds'
+import { useNotify, useWalletModalToggle } from 'state/application/hooks'
 import { Field } from 'state/mint/actions'
 import { useDerivedZapInInfo, useMintState, useZapInActionHandlers } from 'state/mint/hooks'
 import { tryParseAmount } from 'state/swap/hooks'
+import { useTokenPrices } from 'state/tokenPrices/hooks'
 import { useTransactionAdder } from 'state/transactions/hooks'
 import { TRANSACTION_TYPE } from 'state/transactions/type'
 import { useDegenModeManager, useUserSlippageTolerance } from 'state/user/hooks'
@@ -47,6 +49,7 @@ import { StyledInternalLink, TYPE, UppercaseText } from 'theme'
 import { calculateGasMargin, formattedNum } from 'utils'
 import { currencyId } from 'utils/currencyId'
 import { feeRangeCalc, useCurrencyConvertedToNative } from 'utils/dmm'
+import { friendlyError } from 'utils/errorMessage'
 import { getZapContract } from 'utils/getContract'
 import isZero from 'utils/isZero'
 import { maxAmountSpend } from 'utils/maxAmountSpend'
@@ -86,6 +89,7 @@ const ZapIn = ({
   const [zapInError, setZapInError] = useState<string>('')
 
   const [isDegenMode] = useDegenModeManager()
+  const notify = useNotify()
 
   // mint state
   const { independentField, typedValue, otherTypedValue } = useMintState()
@@ -176,7 +180,7 @@ const ZapIn = ({
   )
 
   const userInCurrencyAmount: CurrencyAmount<Currency> | undefined = useMemo(() => {
-    return tryParseAmount(typedValue, currencies[independentField]?.wrapped, true)
+    return tryParseAmount(typedValue, currencies[independentField]?.wrapped)
   }, [currencies, independentField, typedValue])
 
   const userIn = useMemo(() => {
@@ -276,21 +280,31 @@ const ZapIn = ({
           }
         }),
       )
-      .catch(err => {
+      .catch(error => {
         setAttemptingTxn(false)
-        const e = new Error('Classic: ZapIn liquidity Error', { cause: err })
-        e.name = 'ZapError'
-        captureException(e, { extra: { args } })
 
-        // we only care if the error is something _other_ than the user rejected the tx
-        if (err?.code !== 4001) {
-          console.error(err)
+        const message = error.message.includes('INSUFFICIENT_MINT_QTY')
+          ? t`Insufficient liquidity available. Please reload page and try again!`
+          : friendlyError(error)
+
+        if (isDegenMode) {
+          notify(
+            {
+              title: t`Add Liquidity Error`,
+              summary: message,
+              type: NotificationType.ERROR,
+            },
+            8000,
+          )
+        } else {
+          setZapInError(message)
         }
 
-        if (err.message.includes('INSUFFICIENT_MINT_QTY')) {
-          setZapInError(t`Insufficient liquidity available. Please reload page and try again!`)
-        } else {
-          setZapInError(err?.message)
+        if (!didUserReject(error)) {
+          console.error('Zap in error:', { message, error })
+          const e = new Error(message, { cause: error })
+          e.name = 'ZapError'
+          captureException(e, { extra: { args } })
         }
       })
   }
@@ -328,8 +342,13 @@ const ZapIn = ({
     [currencies, dependentField, independentField],
   )
 
-  const usdPrices = useTokensPrice(tokens)
-  const marketPrices = useTokensMarketPrice(tokens)
+  const tokenAddresses: string[] = useMemo(
+    () => tokens.map(token => token?.address as string).filter(item => !!item),
+    [tokens],
+  )
+
+  const marketPriceMap = useTokenPrices(tokenAddresses)
+  const marketPrices = tokens.map(item => marketPriceMap[item?.address || ''] || 0)
 
   const poolPrice =
     independentField === Field.CURRENCY_A ? Number(price?.toSignificant(6)) : Number(price?.invert().toSignificant(6))
@@ -342,19 +361,19 @@ const ZapIn = ({
   }, [onSwitchField])
 
   const estimatedUsd =
-    userInCurrencyAmount && usdPrices[0] ? parseFloat(userInCurrencyAmount.toSignificant(6)) * usdPrices[0] : 0
+    userInCurrencyAmount && marketPrices[0] ? parseFloat(userInCurrencyAmount.toSignificant(6)) * marketPrices[0] : 0
 
   const tokenAPoolAllocUsd =
-    usdPrices[0] &&
+    marketPrices[0] &&
     parsedAmounts &&
     parsedAmounts[independentField] &&
-    usdPrices[0] * parseFloat((parsedAmounts[independentField] as CurrencyAmount<Currency>).toSignificant(6))
+    marketPrices[0] * parseFloat((parsedAmounts[independentField] as CurrencyAmount<Currency>).toSignificant(6))
 
   const tokenBPoolAllocUsd =
-    usdPrices[1] &&
+    marketPrices[1] &&
     parsedAmounts &&
     parsedAmounts[dependentField] &&
-    usdPrices[1] * parseFloat((parsedAmounts[dependentField] as CurrencyAmount<Currency>).toSignificant(6))
+    marketPrices[1] * parseFloat((parsedAmounts[dependentField] as CurrencyAmount<Currency>).toSignificant(6))
 
   const estimatedUsdForPair: [number, number] =
     independentField === Field.CURRENCY_A
@@ -388,7 +407,11 @@ const ZapIn = ({
           </Text>
         </RowFlat>
         <Row>
-          <Text fontSize="24px">{'DMM ' + nativeA?.symbol + '/' + nativeB?.symbol + ' LP Tokens'}</Text>
+          <Text fontSize="24px">
+            <Trans>
+              DMM {nativeA?.symbol}/{nativeB?.symbol} LP Tokens
+            </Trans>
+          </Text>
         </Row>
         <TYPE.italic fontSize={12} textAlign="left" padding={'8px 0 0 0 '}>
           {t`Output is estimated. If the price changes by more than ${
@@ -484,8 +507,8 @@ const ZapIn = ({
               />
               <Flex justifyContent="space-between" alignItems="center" marginTop="0.5rem">
                 <USDPrice>
-                  {usdPrices[0] ? (
-                    `1 ${independentToken?.symbol} = ${formattedNum(usdPrices[0].toString(), true)}`
+                  {marketPrices[0] ? (
+                    `1 ${independentToken?.symbol} = ${formattedNum(marketPrices[0].toString(), true)}`
                   ) : (
                     <Loader />
                   )}
@@ -721,7 +744,7 @@ const ZapIn = ({
 
             {!account ? (
               <ButtonLight onClick={toggleWalletModal}>
-                <Trans>Connect Wallet</Trans>
+                <Trans>Connect</Trans>
               </ButtonLight>
             ) : (
               <AutoColumn gap={'md'}>

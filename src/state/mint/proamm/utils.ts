@@ -1,14 +1,20 @@
+import { defaultAbiCoder } from '@ethersproject/abi'
+import { keccak256 } from '@ethersproject/solidity'
 import { Price, Token } from '@kyberswap/ks-sdk-core'
 import {
   FeeAmount,
+  Pool,
   TICK_SPACINGS,
   TickMath,
   encodeSqrtRatioX96,
   nearestUsableTick,
   priceToClosestTick,
 } from '@kyberswap/ks-sdk-elastic'
+import { getCreate2Address } from 'ethers/lib/utils'
 import JSBI from 'jsbi'
 
+import { NETWORKS_INFO } from 'constants/networks'
+import { EVMNetworkInfo } from 'constants/networks/type'
 import { rangeData } from 'pages/AddLiquidityV2/constants'
 import { PairFactor } from 'state/topTokens/type'
 
@@ -71,20 +77,38 @@ export function tryParseTick(
 
 const log10001 = (num: number) => Math.log(num) / Math.log(1.0001)
 
-export const getRangeTicks = (
+export const getRecommendedRangeTicks = (
   range: RANGE,
   tokenA: Token,
   tokenB: Token,
   currentTick: number,
   pairFactor: PairFactor,
-) => {
+): [number, number] => {
   const rangeFactor = rangeData[range].factor
   const leftRange = 1 - (pairFactor * rangeFactor) / 10000
   const rightRange = 1 + (pairFactor * rangeFactor) / 10000
 
-  const result1 = [currentTick + Math.floor(log10001(leftRange)), currentTick + Math.ceil(log10001(rightRange))]
-  const result2 = [currentTick + Math.floor(log10001(1 / leftRange)), currentTick + Math.ceil(log10001(1 / rightRange))]
+  const result1: [number, number] = [
+    currentTick + Math.floor(log10001(leftRange)),
+    currentTick + Math.ceil(log10001(rightRange)),
+  ]
+  const result2: [number, number] = [
+    currentTick + Math.floor(log10001(1 / leftRange)),
+    currentTick + Math.ceil(log10001(1 / rightRange)),
+  ]
   const result = tokenA.sortsBefore(tokenB) ? result1 : result2
 
   return result
+}
+
+export function getPoolAddress(pool: Pool): string {
+  const networkInfo = NETWORKS_INFO[pool.token0.chainId] as EVMNetworkInfo
+  return getCreate2Address(
+    networkInfo.elastic.coreFactory,
+    keccak256(
+      ['bytes'],
+      [defaultAbiCoder.encode(['address', 'address', 'uint24'], [pool.token0.address, pool.token1.address, pool.fee])],
+    ),
+    networkInfo.elastic.initCodeHash,
+  )
 }

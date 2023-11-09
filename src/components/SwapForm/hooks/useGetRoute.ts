@@ -1,16 +1,25 @@
 import { ChainId, Currency, CurrencyAmount, Price, WETH } from '@kyberswap/ks-sdk-core'
-import { debounce } from 'lodash'
+import debounce from 'lodash/debounce'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import routeApi from 'services/route'
 import { GetRouteParams } from 'services/route/types/getRoute'
 
 import useGetSwapFeeConfig, { SwapFeeConfig } from 'components/SwapForm/hooks/useGetSwapFeeConfig'
 import useSelectedDexes from 'components/SwapForm/hooks/useSelectedDexes'
-import { ETHER_ADDRESS, INPUT_DEBOUNCE_TIME, SWAP_FEE_RECEIVER_ADDRESS, ZERO_ADDRESS_SOLANA } from 'constants/index'
+import { AGGREGATOR_API } from 'constants/env'
+import {
+  AGGREGATOR_API_PATHS,
+  ETHER_ADDRESS,
+  INPUT_DEBOUNCE_TIME,
+  SWAP_FEE_RECEIVER_ADDRESS,
+  ZERO_ADDRESS_SOLANA,
+} from 'constants/index'
 import { NETWORKS_INFO, isEVM } from 'constants/networks'
 import { useActiveWeb3React } from 'hooks'
 import useDebounce from 'hooks/useDebounce'
 import { useKyberswapGlobalConfig } from 'hooks/useKyberSwapConfig'
+import { useSessionInfo } from 'state/authen/hooks'
 import { useAppDispatch } from 'state/hooks'
 import { ChargeFeeBy } from 'types/route'
 import { Aggregator } from 'utils/aggregator'
@@ -70,13 +79,39 @@ const getFeeConfigParams = (
   }
 }
 
+// default use aggregator, utils the first time sign-in successfully (guest/sign in eth) => use meta
+export const useRouteApiDomain = () => {
+  const { aggregatorDomain } = useKyberswapGlobalConfig()
+  const { authenticationSuccess } = useSessionInfo()
+  return authenticationSuccess ? aggregatorDomain : AGGREGATOR_API
+}
+
 const useGetRoute = (args: ArgsGetRoute) => {
-  const { aggregatorDomain, isEnableAuthenAggregator } = useKyberswapGlobalConfig()
+  const { isEnableAuthenAggregator } = useKyberswapGlobalConfig()
   const { isSaveGas, parsedAmount, currencyIn, currencyOut, customChain, isProcessingSwap } = args
   const { chainId: currentChain } = useActiveWeb3React()
   const chainId = customChain || currentChain
 
+  const [searchParams] = useSearchParams()
+
+  const feeAmount = searchParams.get('feeAmount') || ''
+  const chargeFeeBy = (searchParams.get('chargeFeeBy') as ChargeFeeBy) || ChargeFeeBy.NONE
+  const isInBps = searchParams.get('isInBps') || ''
+  const feeReceiver = searchParams.get('feeReceiver') || ''
+
+  const feeConfigFromUrl = useMemo(() => {
+    if (feeAmount && chargeFeeBy && isInBps && feeReceiver)
+      return {
+        feeAmount,
+        chargeFeeBy,
+        isInBps,
+        feeReceiver,
+      }
+    return null
+  }, [feeAmount, chargeFeeBy, isInBps, feeReceiver])
+
   const [trigger, _result] = routeApi.useLazyGetRouteQuery()
+  const aggregatorDomain = useRouteApiDomain()
 
   const getSwapFeeConfig = useGetSwapFeeConfig()
 
@@ -140,8 +175,7 @@ const useGetRoute = (args: ArgsGetRoute) => {
     const tokenOutAddress = getRouteTokenAddressParam(currencyOut)
 
     const swapFeeConfig = await getSwapFeeConfig(chainId, tokenInAddress, tokenOutAddress)
-
-    const feeConfigParams = getFeeConfigParams(swapFeeConfig, tokenInAddress, tokenOutAddress)
+    const feeConfigParams = feeConfigFromUrl || getFeeConfigParams(swapFeeConfig, tokenInAddress, tokenOutAddress)
 
     const params: GetRouteParams = {
       tokenIn: tokenInAddress,
@@ -159,8 +193,7 @@ const useGetRoute = (args: ArgsGetRoute) => {
         delete params[key]
       }
     })
-
-    const url = `${aggregatorDomain}/${NETWORKS_INFO[chainId].aggregatorRoute}/api/v1/routes`
+    const url = `${aggregatorDomain}/${NETWORKS_INFO[chainId].aggregatorRoute}${AGGREGATOR_API_PATHS.GET_ROUTE}`
 
     triggerDebounced({
       url,
@@ -181,6 +214,7 @@ const useGetRoute = (args: ArgsGetRoute) => {
     parsedAmount?.currency,
     parsedAmount?.quotient,
     triggerDebounced,
+    feeConfigFromUrl,
   ])
 
   return { fetcher, result }

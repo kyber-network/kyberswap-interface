@@ -5,9 +5,7 @@ import { isMobile } from 'react-device-detect'
 import { Repeat } from 'react-feather'
 import { Flex, Text } from 'rebass'
 import styled from 'styled-components'
-
-import DextoolsWidget, { checkPairHasDextoolsData } from 'components/DextoolsWidget'
-import DextoolSVG from 'components/DextoolsWidget/DextoolSVG'
+import { ReactComponent as GeckoTerminalSVG } from 'assets/svg/geckoterminal.svg'
 import DoubleCurrencyLogo from 'components/DoubleLogo'
 import ErrorBoundary from 'components/ErrorBoundary'
 import Loader from 'components/LocalLoader'
@@ -111,7 +109,7 @@ function LiveChart({
   currencies: { [field in Field]?: Currency }
   enableProChart?: boolean
 }) {
-  const { isSolana, chainId } = useActiveWeb3React()
+  const { isSolana, networkInfo } = useActiveWeb3React()
   const theme = useTheme()
   const [currenciesState, setCurrenciesState] = useState(currencies)
   const [pairAddress, setPairAddress] = useState('')
@@ -281,8 +279,8 @@ function LiveChart({
                 <Text color={theme.subText} fontSize="10px">
                   Powered by
                 </Text>
-                {theme.darkMode ? <DextoolSVG /> : <DextoolSVG />}
-              </Row>
+                <GeckoTerminalSVG style={{ width: '75px' }} />
+              </Flex>
             </div>
 
             {!isShowProChart && (

@@ -4,54 +4,15 @@ import { AnnouncementTemplatePopup, PopupContent, PopupType } from 'components/A
 import { Topic } from 'hooks/useNotification'
 import { ConfirmModalState } from 'state/application/reducer'
 
-export enum ApplicationModal {
-  NETWORK,
-  WALLET,
-  SETTINGS,
-  TRANSACTION_SETTINGS,
-  SELF_CLAIM,
-  ADDRESS_CLAIM,
-  CLAIM_POPUP,
-  MENU,
-  DELEGATE,
-  VOTE,
-  PRICE_RANGE,
-  POOL_DETAIL,
+import { ApplicationModal, ModalParams } from './types'
 
-  MOBILE_LIVE_CHART,
-  MOBILE_TRADE_ROUTES,
-  MOBILE_TOKEN_INFO,
-
-  SHARE,
-  TRENDING_SOON_SORTING,
-  TRENDING_SOON_TOKEN_DETAIL,
-  COMMUNITY,
-  CONTRACT_ADDRESS,
-  FAUCET_POPUP,
-  SELECT_CAMPAIGN,
-  REGISTER_CAMPAIGN_CAPTCHA,
-  REGISTER_CAMPAIGN_SUCCESS,
-  NOTIFICATION_SUBSCRIPTION,
-  NOTIFICATION_CENTER,
-  YOUR_CAMPAIGN_TRANSACTIONS,
-
-  // KyberDAO
-  SWITCH_TO_ETHEREUM,
-  DELEGATE_CONFIRM,
-  YOUR_TRANSACTIONS_STAKE_KNC,
-  MIGRATE_KNC,
-  KYBER_DAO_CLAIM,
-
-  SWAP_APPROVAL,
-  TIME_DROPDOWN,
-
-  TRUESIGHT_POOLS,
-
-  KYBERAI_TUTORIAL,
-}
+export { ApplicationModal }
 
 export const updateBlockNumber = createAction<{ chainId: number; blockNumber: number }>('application/updateBlockNumber')
-export const setOpenModal = createAction<ApplicationModal | null>('application/setOpenModal')
+export const setOpenModal = createAction<{
+  modal: ApplicationModal | null
+  params: ModalParams[ApplicationModal] | undefined
+}>('application/setOpenModal')
 export const closeModal = createAction<ApplicationModal | null>('application/closeModal')
 export const addPopup = createAction<{
   key?: string
@@ -78,7 +39,6 @@ export const updateServiceWorker = createAction<ServiceWorkerRegistration>('appl
 
 export const setSubscribedNotificationTopic = createAction<{
   topicGroups: Topic[]
-  userInfo: { email: string; telegram: string }
 }>('application/setSubscribedNotificationTopic')
 
 export const setLoadingNotification = createAction<boolean>('application/setLoadingNotification')

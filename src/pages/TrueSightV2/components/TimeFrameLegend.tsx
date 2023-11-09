@@ -1,9 +1,9 @@
 import React, { useLayoutEffect, useRef, useState } from 'react'
 import styled, { css } from 'styled-components'
 
-import useMixpanel, { MIXPANEL_TYPE } from 'hooks/useMixpanel'
+import { MIXPANEL_TYPE, useMixpanelKyberAI } from 'hooks/useMixpanel'
 
-import useKyberAITokenOverview from '../hooks/useKyberAITokenOverview'
+import useKyberAIAssetOverview from '../hooks/useKyberAIAssetOverview'
 import { KyberAITimeframe } from '../types'
 
 const TimeFrameWrapper = styled.div`
@@ -13,15 +13,15 @@ const TimeFrameWrapper = styled.div`
   display: flex;
   align-items: center;
   position: relative;
-  background-color: ${({ theme }) => (theme.darkMode ? theme.buttonBlack : theme.subText + '80')};
+  background-color: ${({ theme }) => theme.buttonBlack};
   border: 2px solid ${({ theme }) => theme.buttonBlack};
-  color: ${({ theme }) => (theme.darkMode ? theme.subText : theme.textReverse)};
+  color: ${({ theme }) => theme.subText};
   cursor: pointer;
   overflow: hidden;
   ${({ theme }) => theme.mediaWidth.upToSmall`
     font-size: 10px;
     justify-content: center;
-    background-color: ${({ theme }) => (theme.darkMode ? theme.background : theme.subText + '80')};
+    background-color: ${({ theme }) => theme.background};
   `}
 `
 const Element = styled.div<{ active?: boolean; count?: number }>`
@@ -31,6 +31,7 @@ const Element = styled.div<{ active?: boolean; count?: number }>`
   display: flex;
   justify-content: center;
   text-transform: uppercase;
+  font-style: normal;
   ${({ active, theme }) => active && `color: ${theme.text};`}
   :hover {
     filter: brightness(1.2);
@@ -66,12 +67,12 @@ const TimeFrameLegend = ({
   timeframes: KyberAITimeframe[]
   onSelect: (timeframe: KyberAITimeframe) => void
 }) => {
-  const { mixpanelHandler } = useMixpanel()
+  const mixpanelHandler = useMixpanelKyberAI()
   const refs = useRef<any>({})
   const ref = useRef<HTMLDivElement>(null)
   const [left, setLeft] = useState(0)
   const [width, setWidth] = useState(0)
-  const { data: token } = useKyberAITokenOverview()
+  const { data: token } = useKyberAIAssetOverview()
   const handleSelect = (t: KyberAITimeframe) => {
     const wrapperEl = ref.current?.closest('section-wrapper')
 

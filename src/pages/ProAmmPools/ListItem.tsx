@@ -1,6 +1,8 @@
 import { ChainId, Token, WETH } from '@kyberswap/ks-sdk-core'
 import { Trans, t } from '@lingui/macro'
+import mixpanel from 'mixpanel-browser'
 import { rgba } from 'polished'
+import { useState } from 'react'
 import { BarChart2, Plus, Share2 } from 'react-feather'
 import { Link, useNavigate } from 'react-router-dom'
 import { Flex, Text } from 'rebass'
@@ -10,6 +12,7 @@ import { ReactComponent as ViewPositionIcon } from 'assets/svg/view_positions.sv
 import { ButtonEmpty } from 'components/Button'
 import CopyHelper from 'components/Copy'
 import DoubleCurrencyLogo from 'components/DoubleLogo'
+import QuickZap, { QuickZapButton } from 'components/ElasticZap/QuickZap'
 import { FarmTag } from 'components/FarmTag'
 import { MouseoverTooltip } from 'components/Tooltip'
 import { FeeTag } from 'components/YieldPools/ElasticFarmGroup/styleds'
@@ -79,6 +82,7 @@ export default function ProAmmPoolListItem({ pool, onShared, userPositions }: Li
   const { chainId, networkInfo } = useActiveWeb3React()
   const theme = useTheme()
   const navigate = useNavigate()
+  const [showQuickZap, setShowQuickZap] = useState(false)
 
   const allTokens = useAllTokens()
 
@@ -128,7 +132,7 @@ export default function ProAmmPoolListItem({ pool, onShared, userPositions }: Li
     .find(farm => farm.poolAddress.toLowerCase() === pool.address.toLowerCase())
   const isFarmV2 = !!farmV2
 
-  const isFarmingPool = isFarmV1 || isFarmV2
+  const isFarmingPool = isFarmV1 || isFarmV2 || !!pool.farmAPR
 
   const maxFarmV2Apr = Math.max(...(farmV2?.ranges.map(item => item.apr || 0) || []), 0)
 
@@ -145,18 +149,12 @@ export default function ProAmmPoolListItem({ pool, onShared, userPositions }: Li
       )
     }
 
-    return (
-      <Flex
-        alignItems="center"
-        paddingRight="20px" // to make all the APR numbers vertically align
-      >
-        {pool.apr.toFixed(2)}%
-      </Flex>
-    )
+    return <Flex alignItems="center">{pool.apr.toFixed(2)}%</Flex>
   }
 
   return (
     <TableRow key={pool.address} data-testid={pool.address}>
+      <QuickZap poolAddress={pool.address} isOpen={showQuickZap} onDismiss={() => setShowQuickZap(false)} />
       <div>
         <Link
           to={`/${networkInfo.route}${APP_PATHS.ELASTIC_CREATE_POOL}/${token0Slug}/${token1Slug}/${pool.feeTier}`}
@@ -170,13 +168,27 @@ export default function ProAmmPoolListItem({ pool, onShared, userPositions }: Li
               currency0={isToken0WETH ? nativeToken : token0}
               currency1={isToken1WETH ? nativeToken : token1}
             />
-            <Text fontSize={14} fontWeight="500">
-              {token0Symbol} - {token1Symbol}
+            <Text flex={1} maxWidth="fit-content">
+              <MouseoverTooltip
+                text={`${token0Symbol} - ${token1Symbol}`}
+                width="fit-content"
+                containerStyle={{ maxWidth: '100%' }}
+                placement="top"
+              >
+                <Text
+                  fontSize={14}
+                  fontWeight="500"
+                  flex={1}
+                  sx={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
+                >
+                  {token0Symbol} - {token1Symbol}
+                </Text>
+              </MouseoverTooltip>
             </Text>
             <FeeTag>Fee {(pool.feeTier * 100) / ELASTIC_BASE_FEE_UNIT}%</FeeTag>
 
             <Flex alignItems="center" marginLeft="4px" sx={{ gap: '4px' }}>
-              {isFarmingPool && <FarmTag address={pool.address} />}
+              {isFarmingPool && <FarmTag address={pool.address} noText />}
             </Flex>
           </Flex>
         </Link>
@@ -221,6 +233,17 @@ export default function ProAmmPoolListItem({ pool, onShared, userPositions }: Li
       </DataText>
       <DataText alignItems="flex-end">{myLiquidity ? formatDollarAmount(Number(myLiquidity)) : '-'}</DataText>
       <ButtonWrapper>
+        <QuickZapButton
+          onClick={() => {
+            mixpanel.track('Zap - Click Quick Zap', {
+              token0: token0?.symbol || '',
+              token1: token1?.symbol || '',
+              source: 'pool_page',
+            })
+            setShowQuickZap(true)
+          }}
+          size="small"
+        />
         <MouseoverTooltip text={<Trans> Add liquidity </Trans>} placement={'top'} width={'fit-content'}>
           <ButtonEmpty
             padding="0"

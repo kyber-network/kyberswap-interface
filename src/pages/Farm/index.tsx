@@ -47,6 +47,7 @@ import { AppState } from 'state'
 import { ApplicationModal } from 'state/application/actions'
 import { useBlockNumber, useOpenModal } from 'state/application/hooks'
 import { useFarmsData } from 'state/farms/classic/hooks'
+import { FairLaunchVersion } from 'state/farms/classic/types'
 import ClassicFarmUpdater from 'state/farms/classic/updater'
 import { FarmUpdater, useElasticFarms } from 'state/farms/elastic/hooks'
 import { useElasticFarmsV2 } from 'state/farms/elasticv2/hooks'
@@ -130,8 +131,9 @@ const Farm = () => {
       .flat()
       .filter(
         item =>
-          (item.endTime && item.endTime > currentTimestamp) ||
-          (blockNumber && item.endBlock && item.endBlock > blockNumber),
+          ((item.version === FairLaunchVersion.V2 || item.version === FairLaunchVersion.V3) &&
+            item.endTime > currentTimestamp) ||
+          (blockNumber && item.version === FairLaunchVersion.V1 && item.endBlock > blockNumber),
       )
       .forEach(current => {
         current.rewardTokens?.forEach(token => {
@@ -404,7 +406,7 @@ const Farm = () => {
                         text={
                           <Text>
                             <Trans>
-                              Static farms incentivize farmers that provide liquidityto a pool in a pre-configured
+                              Static farms incentivize farmers that provide liquidity to a pool in a pre-configured
                               farming price range that is set by the farm administrator. Learn more{' '}
                               <ExternalLink href="https://docs.kyberswap.com/liquidity-solutions/kyberswap-elastic/user-guides/yield-farming-on-static-farms">
                                 here ↗

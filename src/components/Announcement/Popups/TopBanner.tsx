@@ -5,13 +5,13 @@ import { useMedia } from 'react-use'
 import styled, { css, keyframes } from 'styled-components'
 
 import CtaButton from 'components/Announcement/Popups/CtaButton'
-import { useNavigateToUrl } from 'components/Announcement/helper'
 import { AnnouncementTemplatePopup, PopupType } from 'components/Announcement/type'
 import Announcement from 'components/Icons/Announcement'
 import useMixpanel, { MIXPANEL_TYPE } from 'hooks/useMixpanel'
 import useTheme from 'hooks/useTheme'
 import { useActivePopups, useRemoveAllPopupByType } from 'state/application/hooks'
 import { MEDIA_WIDTHS } from 'theme'
+import { useNavigateToUrl } from 'utils/redirect'
 import { escapeScriptHtml } from 'utils/string'
 
 const BannerWrapper = styled.div<{ color?: string }>`
@@ -86,6 +86,8 @@ const TextContent = styled.div<{ isOverflow: boolean; animationDuration: number 
      };
     white-space: nowrap;
     position: absolute;
+    display: flex;
+    gap: 4px;
   `}
   > * {
     margin: 0;

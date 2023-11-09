@@ -1,7 +1,6 @@
 /* eslint-disable @typescript-eslint/no-non-null-assertion */
 import { ChainId } from '@kyberswap/ks-sdk-core'
 import { Connection } from '@solana/web3.js'
-import { ethers } from 'ethers'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSelector } from 'react-redux'
 import {
@@ -12,14 +11,16 @@ import {
   useLazyGetKyberswapConfigurationQuery,
 } from 'services/ksSetting'
 
-import { DEFAULT_AGGREGATOR_API } from 'constants/env'
+import { AGGREGATOR_API } from 'constants/env'
 import { NETWORKS_INFO, SUPPORTED_NETWORKS, isEVM, isSolana } from 'constants/networks'
 import ethereumInfo from 'constants/networks/ethereum'
 import solanaInfo from 'constants/networks/solana'
+import { AppJsonRpcProvider } from 'constants/providers'
+import { ChainStateMap } from 'hooks/useChainsConfig'
 import { AppState } from 'state'
 import { createClient } from 'utils/client'
 
-const cacheRPC: { [chainId in ChainId]?: { [rpc: string]: ethers.providers.JsonRpcProvider } } = {}
+const cacheRPC: { [chainId in ChainId]?: { [rpc: string]: AppJsonRpcProvider } } = {}
 
 const parseResponse = (
   responseData: KyberswapConfigurationResponse | undefined,
@@ -30,14 +31,14 @@ const parseResponse = (
 
   if (!cacheRPC[defaultChainId]?.[rpc]) {
     if (!cacheRPC[defaultChainId]) cacheRPC[defaultChainId] = {}
-    cacheRPC[defaultChainId]![rpc] = new ethers.providers.JsonRpcProvider(rpc)
+    cacheRPC[defaultChainId]![rpc] = new AppJsonRpcProvider(rpc, defaultChainId)
   }
   const provider = cacheRPC[defaultChainId]![rpc]
 
   return {
     rpc,
-    prochart: data?.prochart || false,
     isEnableBlockService: data?.isEnableBlockService || false,
+    isEnableKNProtocol: data?.isEnableKNProtocol || false,
     blockClient: isEVM(defaultChainId)
       ? createClient(data?.blockSubgraph || NETWORKS_INFO[defaultChainId].defaultBlockSubgraph)
       : createClient(ethereumInfo.defaultBlockSubgraph),
@@ -58,6 +59,7 @@ type KyberswapGlobalConfig = {
   aggregatorDomain: string
   aggregatorAPI: string
   isEnableAuthenAggregator: boolean
+  chainStates: ChainStateMap
 }
 
 const parseGlobalResponse = (
@@ -65,9 +67,10 @@ const parseGlobalResponse = (
   chainId: ChainId,
 ): KyberswapGlobalConfig => {
   const data = responseData?.data?.config
-  const aggregatorDomain = data?.aggregator ?? DEFAULT_AGGREGATOR_API
-  const isEnableAuthenAggregator = !data ? true : !!data?.isEnableAuthenAggregator
+  const aggregatorDomain = data?.aggregator ?? AGGREGATOR_API
+  const isEnableAuthenAggregator = !!data?.isEnableAuthenAggregator
   return {
+    chainStates: data?.chainStates || ({} as ChainStateMap),
     aggregatorDomain,
     aggregatorAPI: `${aggregatorDomain}/${NETWORKS_INFO[chainId].aggregatorRoute}/route/encode`,
     isEnableAuthenAggregator,
@@ -80,7 +83,7 @@ export const useLazyKyberswapConfig = (): ((customChainId?: ChainId) => Promise<
     async (customChainId?: ChainId) => {
       const chainId = customChainId ?? storeChainId
       try {
-        const { data } = await getKyberswapConfiguration({ chainId: chainId })
+        const { data } = await getKyberswapConfiguration(chainId)
         return parseResponse(data, chainId)
       } catch {
         return parseResponse(undefined, chainId)
@@ -113,7 +116,7 @@ export const useAllKyberswapConfig = (): {
     const run = async () => {
       const fetches = SUPPORTED_NETWORKS.map(async chainId => {
         try {
-          const { data } = await getKyberswapConfiguration({ chainId })
+          const { data } = await getKyberswapConfiguration(chainId)
           return {
             chainId,
             result: parseResponse(data, chainId),

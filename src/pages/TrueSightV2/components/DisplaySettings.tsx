@@ -12,14 +12,14 @@ import Icon from 'components/Icons/Icon'
 import Popover from 'components/Popover'
 import { RowBetween, RowFit } from 'components/Row'
 import Toggle from 'components/Toggle'
-import useMixpanel, { MIXPANEL_TYPE } from 'hooks/useMixpanel'
+import { MIXPANEL_TYPE, useMixpanelKyberAI } from 'hooks/useMixpanel'
 import { useOnClickOutside } from 'hooks/useOnClickOutside'
 import useTheme from 'hooks/useTheme'
 import { ApplicationModal } from 'state/application/actions'
 import { useToggleModal } from 'state/application/hooks'
 import { useTokenAnalysisSettings, useUpdateTokenAnalysisSettings } from 'state/user/hooks'
 
-import useKyberAITokenOverview from '../hooks/useKyberAITokenOverview'
+import useKyberAIAssetOverview from '../hooks/useKyberAIAssetOverview'
 import { HeaderButton } from '../pages/SingleToken'
 import { DiscoverTokenTab } from '../types'
 
@@ -105,14 +105,14 @@ const technicalAnalysisSettings = [
 
 export default function DisplaySettings({ currentTab }: { currentTab: DiscoverTokenTab }) {
   const theme = useTheme()
-  const { mixpanelHandler } = useMixpanel()
+  const mixpanelHandler = useMixpanelKyberAI()
   const [showSettings, setShowSettings] = useState(false)
   const [showOnchainSetting, setShowOnchainSetting] = useState(currentTab === DiscoverTokenTab.OnChainAnalysis)
   const [showTechnicalSetting, setShowTechnicalSetting] = useState(currentTab === DiscoverTokenTab.TechnicalAnalysis)
   const storedTokenAnalysisSettings = useTokenAnalysisSettings()
   const updateTokenAnalysisSettings = useUpdateTokenAnalysisSettings()
   const toggleTutorial = useToggleModal(ApplicationModal.KYBERAI_TUTORIAL)
-  const { data: token } = useKyberAITokenOverview()
+  const { data: token } = useKyberAIAssetOverview()
   const { chain } = useParams()
   const ref = useRef<HTMLDivElement>(null)
   useOnClickOutside(ref, () => {

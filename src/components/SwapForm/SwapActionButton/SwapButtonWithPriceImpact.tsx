@@ -1,4 +1,5 @@
 import { Trans, t } from '@lingui/macro'
+import { ReactNode } from 'react'
 import { Info } from 'react-feather'
 import { Text } from 'rebass'
 import styled from 'styled-components'
@@ -6,7 +7,6 @@ import styled from 'styled-components'
 import { ButtonPrimary } from 'components/Button'
 import { MouseoverTooltip } from 'components/Tooltip'
 import { Dots } from 'components/swapv2/styleds'
-import { useActiveWeb3React } from 'hooks'
 import useTheme from 'hooks/useTheme'
 import { useDegenModeManager } from 'state/user/hooks'
 import { checkShouldDisableByPriceImpact } from 'utils/priceImpact'
@@ -45,12 +45,11 @@ export const SwapButtonWithPriceImpact = ({
   route: any
   disabled?: boolean
   showNoteGetRoute?: boolean
-  disabledText?: string
-  text?: string
+  disabledText?: ReactNode
+  text?: ReactNode
   showTooltipPriceImpact?: boolean
 }) => {
   const theme = useTheme()
-  const { chainId } = useActiveWeb3React()
   const [isDegenMode] = useDegenModeManager()
   const priceImpactResult = checkPriceImpact(priceImpact)
 
@@ -74,7 +73,7 @@ export const SwapButtonWithPriceImpact = ({
     )
   }
 
-  const shouldDisableByPriceImpact = checkShouldDisableByPriceImpact(chainId, isDegenMode, priceImpact)
+  const shouldDisableByPriceImpact = checkShouldDisableByPriceImpact(isDegenMode, priceImpact)
   const shouldDisable = !route || !isApproved || shouldDisableByPriceImpact || disabled
 
   if ((priceImpactResult.isVeryHigh || priceImpactResult.isInvalid) && isDegenMode) {
@@ -83,7 +82,7 @@ export const SwapButtonWithPriceImpact = ({
         onClick={onClick}
         disabled={shouldDisable}
         $minimal={minimal}
-        style={shouldDisable ? undefined : { background: theme.red }}
+        style={shouldDisable ? undefined : { background: theme.red, color: theme.text }}
       >
         <Trans>Swap Anyway</Trans>
       </CustomPrimaryButton>
@@ -102,7 +101,7 @@ export const SwapButtonWithPriceImpact = ({
           text={
             <Trans>
               To ensure you dont lose funds due to very high price impact (≥10%), swap has been disabled for this trade.
-              If you still wish to continue, you can turn on Degen Mode from Settings
+              If you still wish to continue, you can turn on Degen Mode from Settings.
             </Trans>
           }
         >
@@ -113,7 +112,7 @@ export const SwapButtonWithPriceImpact = ({
           text={
             <Trans>
               There was an issue while trying to find a price for these tokens. Please try again. Otherwise, you may
-              select some other tokens to swap
+              select some other tokens to swap.
             </Trans>
           }
         >

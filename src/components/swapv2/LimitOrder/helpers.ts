@@ -6,6 +6,7 @@ import JSBI from 'jsbi'
 import { RESERVE_USD_DECIMALS } from 'constants/index'
 import { tryParseAmount } from 'state/swap/hooks'
 import { formatNumberWithPrecisionRange, formattedNum } from 'utils'
+import { friendlyError } from 'utils/errorMessage'
 import { uint256ToFraction } from 'utils/numbers'
 
 import { CreateOrderParam, LimitOrder, LimitOrderStatus } from './type'
@@ -116,7 +117,8 @@ export const formatRateLimitOrder = (order: LimitOrder, invert: boolean) => {
   } catch (error) {
     console.log(error)
   }
-  return formatNumberWithPrecisionRange(parseFloat(rateValue.toFixed(16)), 0, 8)
+  const float = parseFloat(rateValue.toFixed(16))
+  return formatNumberWithPrecisionRange(float, 0, float < 1e-8 ? 16 : 8)
 }
 
 export const calcPercentFilledOrder = (value: string, total: string, decimals: number) => {
@@ -138,10 +140,9 @@ export const getErrorMessage = (error: any) => {
     4001: t`User denied message signature`,
     4002: t`You don't have sufficient fund for this transaction.`,
     4004: t`Invalid signature`,
-    '-32603': t`Error occurred. Please check your device.`,
   }
   const msg = mapErrorMessageByErrCode[errorCode]
-  return msg?.toString?.() || error?.message || 'Error occur. Please try again.'
+  return msg?.toString?.() || friendlyError(error)
 }
 
 export const getPayloadCreateOrder = (params: CreateOrderParam) => {
@@ -155,5 +156,17 @@ export const getPayloadCreateOrder = (params: CreateOrderParam) => {
     makingAmount: parseInputAmount?.quotient?.toString(),
     takingAmount: tryParseAmount(outputAmount, currencyOut)?.quotient?.toString(),
     expiredAt: Math.floor(expiredAt / 1000),
+  }
+}
+
+export const getPayloadTracking = (order: LimitOrder, networkName: string, payload = {}) => {
+  const { makerAssetSymbol, takerAssetSymbol, makingAmount, makerAssetDecimals, id } = order
+  return {
+    ...payload,
+    from_token: makerAssetSymbol,
+    to_token: takerAssetSymbol,
+    from_network: networkName,
+    trade_qty: formatAmountOrder(makingAmount, makerAssetDecimals),
+    order_id: id,
   }
 }

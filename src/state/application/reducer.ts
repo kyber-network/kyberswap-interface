@@ -22,6 +22,7 @@ import {
   updatePrommETHPrice,
   updateServiceWorker,
 } from './actions'
+import { ModalParams } from './types'
 
 type ETHPrice = {
   currentPrice?: string
@@ -34,7 +35,7 @@ export type ConfirmModalState = {
   cancelText?: string
   confirmText: string
   title?: string
-  content: string
+  content: string | React.ReactNode
   onConfirm?: () => void
   onCancel?: () => void
 }
@@ -43,6 +44,7 @@ interface ApplicationState {
   readonly blockNumber: { readonly [chainId: number]: number }
   readonly popupList: PopupItemType[]
   readonly openModal: ApplicationModal | null
+  readonly openModalParams: { [key in ApplicationModal]?: ModalParams[key] }
   readonly ethPrice: ETHPrice
   readonly prommEthPrice: ETHPrice
   readonly serviceWorkerRegistration: ServiceWorkerRegistration | null
@@ -50,10 +52,6 @@ interface ApplicationState {
   readonly notification: {
     isLoading: boolean
     topicGroups: Topic[]
-    userInfo: {
-      email: string
-      telegram: string
-    }
     announcementDetail: {
       selectedIndex: number | null // current announcement
       announcements: AnnouncementTemplatePopup[]
@@ -68,7 +66,6 @@ interface ApplicationState {
 const initialStateNotification = {
   isLoading: false,
   topicGroups: [],
-  userInfo: { email: '', telegram: '' },
   announcementDetail: {
     selectedIndex: null,
     announcements: [],
@@ -85,10 +82,12 @@ export const initialStateConfirmModal = {
   onConfirm: undefined,
   onCancel: undefined,
 }
+
 const initialState: ApplicationState = {
   blockNumber: {},
   popupList: [],
   openModal: null,
+  openModalParams: {},
   ethPrice: {},
   prommEthPrice: {},
   serviceWorkerRegistration: null,
@@ -108,7 +107,8 @@ export default createReducer(initialState, builder =>
       }
     })
     .addCase(setOpenModal, (state, action) => {
-      state.openModal = action.payload
+      state.openModal = action.payload.modal
+      if (action.payload.modal) state.openModalParams[action.payload.modal] = action.payload.params as any
     })
     .addCase(closeModal, (state, action) => {
       if (state.openModal === action.payload) {
@@ -148,17 +148,17 @@ export default createReducer(initialState, builder =>
     .addCase(setConfirmData, (state, { payload }) => {
       state.confirmModal = payload
     })
+
     // ------ notification subscription ------
     .addCase(setLoadingNotification, (state, { payload: isLoading }) => {
       const notification = state.notification ?? initialStateNotification
       state.notification = { ...notification, isLoading }
     })
-    .addCase(setSubscribedNotificationTopic, (state, { payload: { topicGroups, userInfo } }) => {
+    .addCase(setSubscribedNotificationTopic, (state, { payload: { topicGroups } }) => {
       const notification = state.notification ?? initialStateNotification
       state.notification = {
         ...notification,
         topicGroups: topicGroups ?? notification.topicGroups,
-        userInfo: userInfo ?? notification.userInfo,
       }
     })
     .addCase(setAnnouncementDetail, (state, { payload }) => {
@@ -171,11 +171,12 @@ export default createReducer(initialState, builder =>
     })
 
     .addMatcher(ksSettingApi.endpoints.getKyberswapConfiguration.matchFulfilled, (state, action) => {
-      const { chainId } = action.meta.arg.originalArgs
+      const chainId = action.meta.arg.originalArgs
       const evm = isEVM(chainId)
       const data = action.payload.data.config
       const rpc = data?.rpc || NETWORKS_INFO[chainId].defaultRpcUrl
       const isEnableBlockService = data?.isEnableBlockService ?? false
+      const isEnableKNProtocol = data?.isEnableKNProtocol ?? false
 
       const blockSubgraph = evm
         ? data?.blockSubgraph || NETWORKS_INFO[chainId].defaultBlockSubgraph
@@ -195,10 +196,11 @@ export default createReducer(initialState, builder =>
         [chainId]: {
           rpc,
           isEnableBlockService,
-          prochart: data?.prochart || false,
+          isEnableKNProtocol,
           blockSubgraph,
           elasticSubgraph,
           classicSubgraph,
+          commonTokens: data.commonTokens,
         },
       }
     }),

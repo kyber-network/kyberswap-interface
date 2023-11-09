@@ -1,10 +1,8 @@
 import { ChainId } from '@kyberswap/ks-sdk-core'
 
-import AVAX from 'assets/networks/avax-network.png'
-import { KS_SETTING_API } from 'constants/env'
+import avalancheIcon from 'assets/networks/avalanche.svg'
 import { EVMNetworkInfo } from 'constants/networks/type'
 
-const EMPTY = ''
 const NOT_SUPPORT = null
 
 const avaxInfo: EVMNetworkInfo = {
@@ -15,19 +13,17 @@ const avaxInfo: EVMNetworkInfo = {
   poolFarmRoute: 'avalanche',
   aggregatorRoute: 'avalanche',
   name: 'Avalanche',
-  icon: AVAX,
-  iconDark: NOT_SUPPORT,
+  icon: avalancheIcon,
   iconSelected: NOT_SUPPORT,
-  iconDarkSelected: NOT_SUPPORT,
+
   defaultBlockSubgraph: 'https://api.thegraph.com/subgraphs/name/ducquangkstn/avalache-blocks',
   etherscanUrl: 'https://snowtrace.io',
   etherscanName: 'Snowtrace',
-  tokenListUrl: `${KS_SETTING_API}/v1/tokens?chainIds=${ChainId.AVAXMAINNET}&isWhitelisted=${true}`,
-  bridgeURL: EMPTY,
+  bridgeURL: 'https://core.app/bridge',
   nativeToken: {
     symbol: 'AVAX',
     name: 'AVAX',
-    logo: AVAX,
+    logo: 'https://storage.googleapis.com/ks-setting-1d682dca/e72081b5-cb5f-4fb6-b771-ac189bdfd7c81699420213175.png',
     decimal: 18,
     minForGas: 10 ** 16,
   },
@@ -72,11 +68,20 @@ const avaxInfo: EVMNetworkInfo = {
     quoter: '0x4d47fd5a29904Dae0Ef51b1c450C9750F15D7856',
     routers: '0xF9c2b5746c946EF883ab2660BbbB1f10A5bdeAb4',
     farms: ['0x7D5ba536ab244aAA1EA42aB88428847F25E3E676'],
+    farmv2Quoter: '0x6AFeb9EDd6Cf44fA8E89b1eee28284e6dD7705C8',
+    farmV2S: [
+      '0xA70a1Ad0F91c52c79e177c5A18a7C9E1C4360e0e',
+      '0x3d6afe2fb73ffed2e3dd00c501a174554e147a43',
+      '0xf2BcDf38baA52F6b0C1Db5B025DfFf01Ae1d6dBd',
+    ],
+    zap: {
+      router: '0x30C5322E4e08AD500c348007f92f120ab4E2b79e',
+      validator: '0xf0096e5B4AAfeEA1DF557264091569ba125c1172',
+      executor: '0x4f097F7074D52952006a0763312724929Ff95Cf0',
+      helper: '0x4E8419EFa0b0A149Dad77b689D37AF17f762f20A',
+    },
   },
-  limitOrder: {
-    development: '0x1877Ec0770901cc6886FDA7E7525a78c2Ed4e975',
-    production: '0x227B0c196eA8db17A665EA6824D972A64202E936',
-  },
+  limitOrder: '*',
   averageBlockTimeInSeconds: 1.85,
   coingeckoNetworkId: 'avalanche',
   coingeckoNativeTokenId: 'avalanche-2',

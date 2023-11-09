@@ -20,7 +20,6 @@ import InfoHelper from 'components/InfoHelper'
 import Loader from 'components/Loader'
 import ProgressSteps from 'components/ProgressSteps'
 import Row, { AutoRow, RowBetween } from 'components/Row'
-import { SEOSwap } from 'components/SEO'
 import SlippageWarningNote from 'components/SlippageWarningNote'
 import { Label } from 'components/SwapForm/OutputCurrencyPanel'
 import PriceImpactNote from 'components/SwapForm/PriceImpactNote'
@@ -36,8 +35,7 @@ import GasPriceTrackerPanel from 'components/swapv2/GasPriceTrackerPanel'
 import LiquiditySourcesPanel from 'components/swapv2/LiquiditySourcesPanel'
 import RefreshButton from 'components/swapv2/RefreshButton'
 import SettingsPanel from 'components/swapv2/SwapSettingsPanel'
-import TokenInfoTab from 'components/swapv2/TokenInfoTab'
-import TokenInfoV2 from 'components/swapv2/TokenInfoV2'
+import TokenInfoTab from 'components/swapv2/TokenInfo'
 import TradePrice from 'components/swapv2/TradePrice'
 import TradeTypeSelection from 'components/swapv2/TradeTypeSelection'
 import {
@@ -52,9 +50,8 @@ import {
   Wrapper,
 } from 'components/swapv2/styleds'
 import { AGGREGATOR_WAITING_TIME, APP_PATHS, TIME_TO_REFRESH_SWAP_RATE } from 'constants/index'
-import { STABLE_COINS_ADDRESS } from 'constants/tokens'
 import { useActiveWeb3React } from 'hooks'
-import { useAllTokens, useIsLoadedTokenDefault } from 'hooks/Tokens'
+import { useAllTokens, useIsLoadedTokenDefault, useStableCoins } from 'hooks/Tokens'
 import { ApprovalState, useApproveCallbackFromTradeV2 } from 'hooks/useApproveCallback'
 import useMixpanel, { MIXPANEL_TYPE } from 'hooks/useMixpanel'
 import useParsedQueryString from 'hooks/useParsedQueryString'
@@ -76,7 +73,6 @@ import {
   useDegenModeManager,
   useHolidayMode,
   useShowLiveChart,
-  useShowTokenInfo,
   useShowTradeRoutes,
   useUserSlippageTolerance,
 } from 'state/user/hooks'
@@ -86,8 +82,6 @@ import { Aggregator } from 'utils/aggregator'
 import { halfAmountSpend, maxAmountSpend } from 'utils/maxAmountSpend'
 import { checkPriceImpact } from 'utils/prices'
 import { captureSwapError } from 'utils/sentry'
-import { getSymbolSlug } from 'utils/string'
-import { checkPairInWhiteList } from 'utils/tokenInfo'
 
 const LiveChart = lazy(() => import('components/LiveChart'))
 const Routing = lazy(() => import('components/TradeRouting'))
@@ -111,7 +105,6 @@ export default function Swap() {
   const isShowLiveChart = useShowLiveChart()
   const [holidayMode] = useHolidayMode()
   const isShowTradeRoutes = useShowTradeRoutes()
-  const isShowTokenInfoSetting = useShowTokenInfo()
   const qs = useParsedQueryString<{ highlightBox: string }>()
   const [{ show: isShowTutorial = false }] = useTutorialSwapGuide()
   const { pathname } = useLocation()
@@ -312,7 +305,7 @@ export default function Swap() {
         setSwapState({ attemptingTxn: false, tradeToConfirm, showConfirm, swapErrorMessage: undefined, txHash: hash })
       })
       .catch(error => {
-        if (error?.code !== 4001 && error?.code !== 'ACTION_REJECTED') captureSwapError(error)
+        captureSwapError(error)
         setSwapState({
           attemptingTxn: false,
           tradeToConfirm,
@@ -408,38 +401,25 @@ export default function Swap() {
 
   useSyncTokenSymbolToUrl(currencyIn, currencyOut, onSelectSuggestedPair, isSelectCurrencyManually)
   const isLoadedTokenDefault = useIsLoadedTokenDefault()
+  const { isStableCoin } = useStableCoins(chainId)
 
   const [rawSlippage] = useUserSlippageTolerance()
 
-  const isStableCoinSwap = Boolean(
-    INPUT?.currencyId &&
-      OUTPUT?.currencyId &&
-      chainId &&
-      STABLE_COINS_ADDRESS[chainId].includes(INPUT?.currencyId) &&
-      STABLE_COINS_ADDRESS[chainId].includes(OUTPUT?.currencyId),
-  )
+  const isStableCoinSwap = isStableCoin(INPUT?.currencyId) && isStableCoin(OUTPUT?.currencyId)
 
   useUpdateSlippageInStableCoinSwap()
 
-  const { isInWhiteList: isPairInWhiteList, canonicalUrl } = checkPairInWhiteList(
-    chainId,
-    getSymbolSlug(currencyIn),
-    getSymbolSlug(currencyOut),
-  )
-
   const onBackToSwapTab = () => setActiveTab(TAB.SWAP)
-
-  const shouldRenderTokenInfo = isShowTokenInfoSetting && currencyIn && currencyOut && isPairInWhiteList && isSwapPage
 
   const isShowModalImportToken = isLoadedTokenDefault && importTokensNotInDefault.length > 0 && !dismissTokenWarning
 
   const tradeRouteComposition = useMemo(() => {
     return getTradeComposition(chainId, trade?.inputAmount, trade?.tokens, trade?.swaps, defaultTokens)
   }, [chainId, defaultTokens, trade])
+  const swapActionsRef = useRef(null)
 
   return (
     <>
-      <SEOSwap canonicalUrl={canonicalUrl} />
       <TutorialSwap />
       <TokenWarningModal
         isOpen={isShowModalImportToken}
@@ -450,7 +430,7 @@ export default function Swap() {
         <Banner />
         <Container>
           <SwapFormWrapper isShowTutorial={isShowTutorial}>
-            <Header activeTab={activeTab} setActiveTab={setActiveTab} />
+            <Header activeTab={activeTab} setActiveTab={setActiveTab} swapActionsRef={swapActionsRef} />
 
             <AppBodyWrapped data-highlight={shouldHighlightSwapBox} id={TutorialIds.SWAP_FORM}>
               {activeTab === TAB.SWAP && (
@@ -561,7 +541,7 @@ export default function Swap() {
                     <BottomGrouping>
                       {!account ? (
                         <ButtonLight onClick={toggleWalletModal}>
-                          <Trans>Connect Wallet</Trans>
+                          <Trans>Connect</Trans>
                         </ButtonLight>
                       ) : showWrap ? (
                         <ButtonPrimary disabled={Boolean(wrapInputError)} onClick={onWrap}>
@@ -578,7 +558,7 @@ export default function Swap() {
                             text={
                               <Trans>
                                 There was an issue while trying to find a price for these tokens. Please try again.
-                                Otherwise, you may select some other tokens to swap
+                                Otherwise, you may select some other tokens to swap.
                               </Trans>
                             }
                           >
@@ -722,7 +702,7 @@ export default function Swap() {
                                     ) : (
                                       <Trans>
                                         There was an issue while trying to find a price for these tokens. Please try
-                                        again. Otherwise, you may select some other tokens to swap
+                                        again. Otherwise, you may select some other tokens to swap.
                                       </Trans>
                                     )
                                   }
@@ -756,6 +736,7 @@ export default function Swap() {
               {activeTab === TAB.INFO && <TokenInfoTab currencies={currencies} onBack={onBackToSwapTab} />}
               {activeTab === TAB.SETTINGS && (
                 <SettingsPanel
+                  swapActionsRef={swapActionsRef}
                   isSwapPage
                   onBack={onBackToSwapTab}
                   onClickLiquiditySources={() => setActiveTab(TAB.LIQUIDITY_SOURCES)}
@@ -819,7 +800,6 @@ export default function Swap() {
                 </Flex>
               </RoutesWrapper>
             )}
-            {shouldRenderTokenInfo && <TokenInfoV2 currencyIn={currencyIn} currencyOut={currencyOut} />}
           </InfoComponents>
         </Container>
         <Flex justifyContent="center">
