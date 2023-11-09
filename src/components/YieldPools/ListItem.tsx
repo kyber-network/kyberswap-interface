@@ -27,6 +27,7 @@ import { APP_PATHS, DMM_ANALYTICS_URL, MAX_ALLOW_APY } from 'constants/index'
 import { useActiveWeb3React } from 'hooks'
 import { ApprovalState, useApproveCallback } from 'hooks/useApproveCallback'
 import useFairLaunch from 'hooks/useFairLaunch'
+import { BACK_URL_PARAM_KEY } from 'hooks/useGetBackUrl'
 import useMixpanel, { MIXPANEL_TYPE } from 'hooks/useMixpanel'
 import useParsedQueryString from 'hooks/useParsedQueryString'
 import useStakedBalance from 'hooks/useStakedBalance'
@@ -317,7 +318,9 @@ const ListItem = ({ farm }: ListItemProps) => {
                   to={`/${networkInfo.route}${APP_PATHS.CLASSIC_ADD_LIQ}/${currencyIdFromAddress(
                     farm.token0?.address,
                     chainId,
+
                   )}/${currencyIdFromAddress(farm.token1?.address, chainId)}/${farm.id}`}
+
                   style={{ textDecoration: 'none', marginRight: '6px' }}
                 >
                   {symbol0} - {symbol1}
@@ -476,7 +479,9 @@ const ListItem = ({ farm }: ListItemProps) => {
               to={`/${networkInfo.route}${APP_PATHS.CLASSIC_ADD_LIQ}/${currencyIdFromAddress(
                 farm.token0?.address,
                 chainId,
+
               )}/${currencyIdFromAddress(farm.token1?.address, chainId)}/${farm.id}`}
+
               style={{ textDecoration: 'none', marginRight: '6px' }}
             >
               <Text fontSize="16px" fontWeight="500" marginRight="4px" color={theme.green}>
@@ -812,7 +817,9 @@ const ListItem = ({ farm }: ListItemProps) => {
                   to={`/${networkInfo.route}${APP_PATHS.CLASSIC_ADD_LIQ}/${currencyIdFromAddress(
                     farm.token0?.address,
                     chainId,
+
                   )}/${currencyIdFromAddress(farm.token1?.address, chainId)}/${farm.id}`}
+
                   style={{ textDecoration: 'none' }}
                 >
                   <GetLP style={{ textAlign: 'right' }}>
