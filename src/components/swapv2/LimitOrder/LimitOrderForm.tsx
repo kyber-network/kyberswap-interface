@@ -825,6 +825,36 @@ const LimitOrderForm = forwardRef<LimitOrderFormHandle, Props>(function LimitOrd
           />
         </RowBetween>
 
+        <Tooltip text={outPutError} show={!!outPutError} placement="top" style={styleTooltip} width="fit-content">
+          <CurrencyInputPanel
+            maxLength={16}
+            value={outputAmount}
+            error={!!outPutError}
+            currency={currencyOut}
+            onUserInput={onSetOutput}
+            otherCurrency={currencyIn}
+            onMax={null}
+            onHalf={null}
+            estimatedUsd={estimateUSD.output}
+            onFocus={trackingTouchInput}
+            id="create-limit-order-input-tokenb"
+            onCurrencySelect={handleOutputSelect}
+            positionMax="top"
+            showCommonBases
+            maxCurrencySymbolLength={6}
+            filterWrap
+            onClickSelect={trackingTouchSelectToken}
+            disableCurrencySelect={isEdit}
+            label={
+              <Label>
+                <Trans>You Buy</Trans>
+              </Label>
+            }
+            positionLabel="in"
+          />
+        </Tooltip>
+
+
         {warningMessage.map((mess, i) => (
           <ErrorWarningPanel type="warn" key={i} title={mess} />
         ))}
